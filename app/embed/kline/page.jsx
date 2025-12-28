@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 
 export const dynamic = "force-dynamic";
 
@@ -190,17 +190,22 @@ function LineChart({ candles }){
 function OrderBookPoly({ ob, defaultSide="yes" }){
   const [side, setSide] = useState(defaultSide); // YES/NO selector
 
+  const asksRef = useRef(null);
+  const bidsRef = useRef(null);
+
   const asks = useMemo(()=> [...ob.asks].sort((a,b)=>Number(b.price)-Number(a.price)), [ob]);
   const bids = useMemo(()=> [...ob.bids].sort((a,b)=>Number(b.price)-Number(a.price)), [ob]);
 
   let cumA = 0;
-  const asksCum = asks.map(r => (cumA += Number(r.total)));
+  const asksCum = asks.map(r => (cumA += Number(r.shares)));
   let cumB = 0;
-  const bidsCum = bids.map(r => (cumB += Number(r.total)));
-  const maxCum = Math.max(asksCum.at(-1) || 1, bidsCum.at(-1) || 1);
+  const bidsCum = bids.map(r => (cumB += Number(r.shares)));
+
+  const maxAsk = asksCum.at(-1) || 1;
+  const maxBid = bidsCum.at(-1) || 1;
 
   const Row = ({ r, cum, isAsk }) => {
-    const pct = Math.max(0, Math.min(100, (cum / maxCum) * 100));
+    const pct = Math.max(0, Math.min(100, (cum / (isAsk ? maxAsk : maxBid)) * 100));
     return (
       <div style={{position:"relative", marginTop:"8px"}}>
         <div style={{
@@ -231,10 +236,21 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
     );
   };
 
-  const listStyle = { maxHeight: 5*56, overflowY:"auto", paddingRight:"6px" };
+  const listStyle = { maxHeight: 5*56, overflowY:"auto", paddingRight:"6px", scrollbarGutter:"stable" };
 
   const lastC = Math.round(ob.mid * 100);
   const spreadC = 1;
+
+  useEffect(() => {
+    // Asks: scroll to bottom so the best prices near mid are visible
+    if (asksRef.current) {
+      asksRef.current.scrollTop = asksRef.current.scrollHeight;
+    }
+    // Bids: keep at top to show best bid
+    if (bidsRef.current) {
+      bidsRef.current.scrollTop = 0;
+    }
+  }, [side, ob]);
 
   return (
     <div>
@@ -266,7 +282,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
         <div style={{display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px"}}>
           <span className="pill" style={{color:"#fff", background:"rgba(239,68,68,0.18)"}}>Asks ({side.toUpperCase()})</span>
         </div>
-        <div style={listStyle}>
+        <div ref={asksRef} style={listStyle}>
           {asks.map((r,i)=>(
             <Row key={"a"+i} r={r} cum={asksCum[i]} isAsk />
           ))}
@@ -292,7 +308,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
         <div style={{display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px"}}>
           <span className="pill" style={{color:"#fff", background:"rgba(34,197,94,0.18)"}}>Bids ({side.toUpperCase()})</span>
         </div>
-        <div style={listStyle}>
+        <div ref={bidsRef} style={listStyle}>
           {bids.map((r,i)=>(
             <Row key={"b"+i} r={r} cum={bidsCum[i]} isAsk={false} />
           ))}
@@ -437,11 +453,7 @@ export default function Page({ searchParams }) {
 
         <div className="panel" style={{padding:"10px", height:"fit-content"}}>
           <OrderBookPoly ob={ob} defaultSide={outcomeId === "no" ? "no" : "yes"} />
-          <div className="divider" style={{margin:"10px 0"}} />
-          <div className="muted" style={{fontSize:"11px"}}>
-            Tip: orderbook chỉ hiện 5 mức giá; cuộn để xem thêm.
-          </div>
-        </div>
+</div>
       </div>
     </div>
   );
