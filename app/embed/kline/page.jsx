@@ -336,9 +336,59 @@ export default function Page({ searchParams }) {
 
       <div style={{display:"grid", gridTemplateColumns:"1fr 340px", gap:"12px", marginTop:"10px"}}>
         <div className="panel" style={{padding:"10px"}}>
-          <div style={{height:"340px"}}>
-            <LineChart candles={candles} />
-          </div>
+{(() => {
+  const [range, setRange] = useState("1d"); // default
+
+  const ranges = [
+    ["1h","1h"],
+    ["6h","6h"],
+    ["1d","1d"],
+    ["1w","1w"],
+    ["All","all"],
+  ];
+
+  const rangeMs = (key) => {
+    if(key==="1h") return 1*60*60*1000;
+    if(key==="6h") return 6*60*60*1000;
+    if(key==="1d") return 24*60*60*1000;
+    if(key==="1w") return 7*24*60*60*1000;
+    return null; // all
+  };
+
+  const filtered = useMemo(()=>{
+    const ms = rangeMs(range);
+    if(!ms) return candles;
+    const end = candles.at(-1)?.t ?? Date.now();
+    const start = end - ms;
+    const arr = candles.filter(c => c.t >= start);
+    // đảm bảo không bị quá ít điểm (đỡ chart “gãy”)
+    return arr.length >= 5 ? arr : candles.slice(-20);
+  }, [candles, range]);
+
+  return (
+    <>
+      <div style={{height:"340px"}}>
+        <LineChart candles={filtered} />
+      </div>
+
+      {/* range buttons nằm dưới trục ngang */}
+      <div style={{display:"flex", gap:"8px", marginTop:"8px", alignItems:"center"}}>
+        {ranges.map(([label, key]) => (
+          <button
+            key={key}
+            className="btn"
+            onClick={()=>setRange(key)}
+            style={{opacity: range===key ? 1 : 0.65}}
+          >
+            {label}
+          </button>
+        ))}
+        <div className="spacer" />
+        <div className="muted" style={{fontSize:"12px"}}>UTC tooltip on hover</div>
+      </div>
+    </>
+  );
+})()}
 
           <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:"8px"}}>
             <div style={{display:"flex", gap:"12px", color:"rgba(148,163,184,0.95)", fontSize:"12px"}}>
