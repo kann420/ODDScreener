@@ -61,8 +61,10 @@ function makeMockTrades(){
 }
 
 function LineChart({ candles }){
+  const [hoverIdx, setHoverIdx] = useState(null);
+
   const w = 980, h = 320;
-  const padL = 36, padR = 46, padT = 16, padB = 22;
+  const padL = 36, padR = 46, padT = 16, padB = 30;
 
   const closes = candles.map(c => c.close);
   const min = Math.min(...closes);
@@ -74,8 +76,11 @@ function LineChart({ candles }){
     return (h - padB) - t * (h - padT - padB);
   };
 
-  const path = closes.map((p,i)=>`${i===0?'M':'L'} ${x(i).toFixed(2)} ${y(p).toFixed(2)}`).join(' ');
+  const path = closes
+    .map((p,i)=>`${i===0?'M':'L'} ${x(i).toFixed(2)} ${y(p).toFixed(2)}`)
+    .join(" ");
 
+  // grid y levels
   const levels = 4;
   const grid = Array.from({length:levels+1}).map((_,i)=>{
     const yy = padT + (i/levels)*(h-padT-padB);
@@ -83,23 +88,101 @@ function LineChart({ candles }){
     return { yy, val };
   });
 
-  const last = closes[closes.length-1]*100;
+  const lastPct = closes[closes.length-1] * 100;
+
+  const utcLabel = (ms) => {
+    // "YYYY-MM-DD HH:mm UTC"
+    const iso = new Date(ms).toISOString(); // always UTC
+    return iso.slice(0,16).replace("T"," ") + " UTC";
+  };
+
+  const onMove = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const innerW = (w - padL - padR);
+    const t = Math.max(0, Math.min(1, (px - (padL / w) * rect.width) / (innerW / w * rect.width)));
+    const idx = Math.round(t * (candles.length - 1));
+    setHoverIdx(idx);
+  };
+
+  const onLeave = () => setHoverIdx(null);
+
+  const hi = hoverIdx !== null ? hoverIdx : (candles.length - 1);
+  const hv = candles[hi];
+  const hx = x(hi);
+  const hy = y(hv.close);
+
+  // tooltip position
+  const tipW = 210;
+  const tipH = 54;
+  const tipX = Math.min(w - padR - tipW, Math.max(padL, hx - tipW/2));
+  const tipY = Math.max(padT, hy - tipH - 10);
 
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%", height:"100%"}}>
+    <svg
+      viewBox={`0 0 ${w} ${h}`}
+      style={{width:"100%", height:"100%", cursor:"crosshair"}}
+      onMouseMove={onMove}
+      onMouseLeave={onLeave}
+    >
+      {/* grid */}
       {grid.map((g,i)=>(
         <g key={i}>
           <line x1={padL} x2={w-padR} y1={g.yy} y2={g.yy} stroke="rgba(255,255,255,0.07)" />
-          <text x={w-padR+6} y={g.yy+4} fill="rgba(148,163,184,0.95)" fontSize="11" fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New">
+          <text
+            x={w-padR+6}
+            y={g.yy+4}
+            fill="rgba(148,163,184,0.95)"
+            fontSize="11"
+            fontFamily='ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+          >
             {g.val.toFixed(0)}%
           </text>
         </g>
       ))}
+
+      {/* line */}
       <path d={path} fill="none" stroke="rgba(34,211,238,0.95)" strokeWidth="2.2" />
-      <circle cx={x(closes.length-1)} cy={y(closes[closes.length-1])} r="4.2" fill="rgba(34,211,238,0.95)" />
-      <text x={padL} y={padT+2} fill="rgba(34,211,238,0.95)" fontSize="22" fontWeight="900">
-        {last.toFixed(0)}% chance
+
+      {/* hover vertical line */}
+      {hoverIdx !== null && (
+        <line x1={hx} x2={hx} y1={padT} y2={h-padB} stroke="rgba(255,255,255,0.16)" />
+      )}
+
+      {/* last/hover dot */}
+      <circle cx={hx} cy={hy} r="4.2" fill="rgba(34,211,238,0.95)" />
+
+      {/* top-left label */}
+      <text x={padL} y={padT+6} fill="rgba(34,211,238,0.95)" fontSize="22" fontWeight="900">
+        {lastPct.toFixed(0)}% chance
       </text>
+
+      {/* tooltip */}
+      {hoverIdx !== null && (
+        <g>
+          <rect
+            x={tipX}
+            y={tipY}
+            width={tipW}
+            height={tipH}
+            rx="10"
+            fill="rgba(10,12,14,0.92)"
+            stroke="rgba(255,255,255,0.10)"
+          />
+          <text x={tipX+10} y={tipY+20} fill="rgba(233,238,245,0.95)" fontSize="12" fontWeight="800">
+            {(hv.close*100).toFixed(0)}%
+          </text>
+          <text
+            x={tipX+10}
+            y={tipY+40}
+            fill="rgba(148,163,184,0.95)"
+            fontSize="11"
+            fontFamily='ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+          >
+            {utcLabel(hv.t)}
+          </text>
+        </g>
+      )}
     </svg>
   );
 }
