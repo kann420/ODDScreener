@@ -18,7 +18,7 @@ function makeMockCandles(count=140){
   const rnd = () => (seed = (seed * 48271) % 0x7fffffff) / 0x7fffffff;
   let price = 0.10;
   const candles = [];
-  const now = Date.now();
+  const now = Date. now();
   const step = 60*60*1000; // 1h
   for(let i=count-1;i>=0;i--){
     const t = now - i*step;
@@ -41,20 +41,20 @@ function makeMockOrderbook(mid=0.22){
     const pA = (mid + (i+1)*0.01).toFixed(2);
     const pB = (mid - (i+1)*0.01).toFixed(2);
     asks.push({ price: pA, shares: Math.round(40 + i*i*18), total: Math.round((40 + i*i*18) * Number(pA) * 100)/100 });
-    bids.push({ price: pB, shares: Math.round(55 + i*i*20), total: Math.round((55 + i*i*20) * Number(pB) * 100)/100 });
+    bids.push({ price: pB, shares: Math. round(55 + i*i*20), total: Math.round((55 + i*i*20) * Number(pB) * 100)/100 });
   }
   return { mid, asks, bids };
 }
 
 function makeMockTrades(){
   const rows = [];
-  const wallets = ["wolfofshelbyyy","nniu","0x38d...d34","0x968...21e","0x593...e97","0xa65...a67","0xa33...950","0xe5f...39b"];
+  const wallets = ["wolfofshelbyyy","nniu","0x38d...d34","0x968...21e","0x593... e97","0xa65...a67","0xa33...950","0xe5f...39b"];
   for(let i=0;i<14;i++){
     const side = i%4===0 ? "BUY" : "SELL";
-    const price = side==="BUY" ? 0.22 : 0.99;
+    const price = side==="BUY" ? 0.22 :  0.99;
     const amount = i===0 ? 1700 : (i%3===0? 267 : (i%2===0? 259: 75));
     const total = Math.round(amount * price * 100)/100;
-    const ageMin = i<6 ? 1 : (i<10 ? 8 : 13);
+    const ageMin = i<6 ? 1 : (i<10 ? 8 :  13);
     rows.push({ outcome: "NO", side, price, amount, total, age: ageMin+"m", trader: wallets[i%wallets.length] });
   }
   return rows;
@@ -68,7 +68,7 @@ function LineChart({ candles }){
 
   const closes = candles.map(c => c.close);
   const min = Math.min(...closes);
-  const max = Math.max(...closes);
+  const max = Math.max(... closes);
 
   const x = (i) => padL + (i/(candles.length-1))*(w-padL-padR);
   const y = (p) => {
@@ -77,12 +77,12 @@ function LineChart({ candles }){
   };
 
   const path = closes
-    .map((p,i)=>`${i===0?'M':'L'} ${x(i).toFixed(2)} ${y(p).toFixed(2)}`)
+    .map((p,i)=>`${i===0? 'M':'L'} ${x(i).toFixed(2)} ${y(p).toFixed(2)}`)
     .join(" ");
 
   // grid y levels
   const levels = 4;
-  const grid = Array.from({length:levels+1}).map((_,i)=>{
+  const grid = Array. from({length:levels+1}).map((_,i)=>{
     const yy = padT + (i/levels)*(h-padT-padB);
     const val = (max - (i/levels)*(max-min)) * 100;
     return { yy, val };
@@ -91,14 +91,14 @@ function LineChart({ candles }){
   const lastPct = closes[closes.length-1] * 100;
 
   const utcLabel = (ms) => {
-    // "YYYY-MM-DD HH:mm UTC"
+    // "YYYY-MM-DD HH: mm UTC"
     const iso = new Date(ms).toISOString(); // always UTC
     return iso.slice(0,16).replace("T"," ") + " UTC";
   };
 
   const onMove = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const px = e.clientX - rect.left;
+    const rect = e.currentTarget. getBoundingClientRect();
+    const px = e.clientX - rect. left;
     const innerW = (w - padL - padR);
     const t = Math.max(0, Math.min(1, (px - (padL / w) * rect.width) / (innerW / w * rect.width)));
     const idx = Math.round(t * (candles.length - 1));
@@ -110,7 +110,7 @@ function LineChart({ candles }){
   const hi = hoverIdx !== null ? hoverIdx : (candles.length - 1);
   const hv = candles[hi];
   const hx = x(hi);
-  const hy = y(hv.close);
+  const hy = y(hv. close);
 
   // tooltip position
   const tipW = 210;
@@ -150,7 +150,7 @@ function LineChart({ candles }){
       )}
 
       {/* last/hover dot */}
-      <circle cx={hx} cy={hy} r="4.2" fill="rgba(34,211,238,0.95)" />
+      <circle cx={hx} cy={hy} r="4. 2" fill="rgba(34,211,238,0.95)" />
 
       {/* top-left label */}
       <text x={padL} y={padT+6} fill="rgba(34,211,238,0.95)" fontSize="22" fontWeight="900">
@@ -193,7 +193,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
   const asksRef = useRef(null);
   const bidsRef = useRef(null);
 
-  const asks = useMemo(()=> [...ob.asks].sort((a,b)=>Number(b.price)-Number(a.price)), [ob]);
+  const asks = useMemo(()=> [... ob.asks]. sort((a,b)=>Number(b. price)-Number(a.price)), [ob]);
   const bids = useMemo(()=> [...ob.bids].sort((a,b)=>Number(b.price)-Number(a.price)), [ob]);
 
   let cumA = 0;
@@ -201,7 +201,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
   let cumB = 0;
   const bidsCum = bids.map(r => (cumB += Number(r.shares)));
 
-  const maxAsk = asksCum.at(-1) || 1;
+  const maxAsk = asksCum. at(-1) || 1;
   const maxBid = bidsCum.at(-1) || 1;
 
   const Row = ({ r, cum, isAsk }) => {
@@ -213,7 +213,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
           left:0, top:0, bottom:0,
           width:`${pct}%`,
           borderRadius:"10px",
-          background: isAsk ? "rgba(239,68,68,0.16)" : "rgba(34,197,94,0.14)"
+          background:  isAsk ? "rgba(239,68,68,0.16)" : "rgba(34,197,94,0.14)"
         }} />
         <div style={{
           position:"relative",
@@ -226,7 +226,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
           border:"1px solid rgba(255,255,255,0.06)",
           background:"rgba(255,255,255,0.02)"
         }}>
-          <div className={isAsk ? "red" : "green"} style={{fontWeight:900}}>
+          <div className={isAsk ? "red" : "green"} style={{fontWeight: 900}}>
             {(Number(r.price)*100).toFixed(0)}¢
           </div>
           <div className="mono muted">{fmt(r.shares)}</div>
@@ -236,13 +236,13 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
     );
   };
 
-  const listStyle = { maxHeight: 5*56, overflowY:"auto", paddingRight:"6px", scrollbarGutter:"stable" };
+  const listStyle = { maxHeight:  5*56, overflowY:"auto", paddingRight:"6px", scrollbarGutter:"stable" };
 
   const lastC = Math.round(ob.mid * 100);
   const spreadC = 1;
 
   useEffect(() => {
-    // Asks: scroll to bottom so the best prices near mid are visible
+    // Asks:  scroll to bottom so the best prices near mid are visible
     if (asksRef.current) {
       asksRef.current.scrollTop = asksRef.current.scrollHeight;
     }
@@ -257,7 +257,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
       <div style={{display:"flex", alignItems:"center", justifyContent:"space-between"}}>
         <div style={{fontWeight:900, fontSize:"13px"}}>Order Book</div>
         <div className="select-wrap">
-          <select className="select" value={side} onChange={(e)=>setSide(e.target.value)}>
+          <select className="select" value={side} onChange={(e)=>setSide(e.target. value)}>
             <option value="yes">YES</option>
             <option value="no">NO</option>
           </select>
@@ -280,10 +280,10 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
 
       <div style={{marginTop:"10px"}}>
         <div style={{display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px"}}>
-          <span className="pill" style={{color:"#fff", background:"rgba(239,68,68,0.18)"}}>Asks ({side.toUpperCase()})</span>
+          <span className="pill" style={{color:"#fff", background:"rgba(239,68,68,0.18)"}}>Asks ({side. toUpperCase()})</span>
         </div>
         <div ref={asksRef} style={listStyle}>
-          {asks.map((r,i)=>(
+          {asks. map((r,i)=>(
             <Row key={"a"+i} r={r} cum={asksCum[i]} isAsk />
           ))}
         </div>
@@ -300,7 +300,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
         fontSize:"12px",
         fontWeight:800
       }}>
-        <div>Last: <span className="mono" style={{color:"#e9eef5"}}>{lastC}¢</span></div>
+        <div>Last:  <span className="mono" style={{color:"#e9eef5"}}>{lastC}¢</span></div>
         <div>Spread: <span className="mono" style={{color:"#e9eef5"}}>{spreadC}¢</span></div>
       </div>
 
@@ -309,7 +309,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
           <span className="pill" style={{color:"#fff", background:"rgba(34,197,94,0.18)"}}>Bids ({side.toUpperCase()})</span>
         </div>
         <div ref={bidsRef} style={listStyle}>
-          {bids.map((r,i)=>(
+          {bids. map((r,i)=>(
             <Row key={"b"+i} r={r} cum={bidsCum[i]} isAsk={false} />
           ))}
         </div>
@@ -319,7 +319,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
 }
 
 export default function Page({ searchParams }) {
-  const marketId = searchParams?.marketId ?? "test";
+  const marketId = searchParams?. marketId ??  "test";
   const outcomeId = searchParams?.outcomeId ?? "yes";
   const interval = searchParams?.interval ?? "1h";
   const theme = searchParams?.theme ?? "dark";
@@ -335,6 +335,33 @@ export default function Page({ searchParams }) {
   const title = "Will Bitcoin reach $250,000 by December 31, 2025?";
 
   const ob = outcomeId === "no" ? obNo : obYes;
+
+  const [range, setRange] = useState("1d");
+
+  const ranges = [
+    ["1h","1h"],
+    ["6h","6h"],
+    ["1d","1d"],
+    ["1w","1w"],
+    ["All","all"],
+  ];
+
+  const rangeMs = (key) => {
+    if(key==="1h") return 1*60*60*1000;
+    if(key==="6h") return 6*60*60*1000;
+    if(key==="1d") return 24*60*60*1000;
+    if(key==="1w") return 7*24*60*60*1000;
+    return null; // all
+  };
+
+  const filtered = useMemo(()=>{
+    const ms = rangeMs(range);
+    if(! ms) return chartCandles;
+    const end = chartCandles.at(-1)?.t ??  Date.now();
+    const start = end - ms;
+    const arr = chartCandles.filter(c => c.t >= start);
+    return arr. length >= 5 ? arr : chartCandles. slice(-20);
+  }, [chartCandles, range]);
 
   return (
     <div style={{padding:"10px"}}>
@@ -355,74 +382,43 @@ export default function Page({ searchParams }) {
 
       <div style={{display:"grid", gridTemplateColumns:"1fr 340px", gap:"12px", marginTop:"10px"}}>
         <div className="panel" style={{padding:"10px"}}>
-{(() => {
-  const [range, setRange] = useState("1d"); // default
+          <div style={{display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+            <div className="select-wrap" style={{marginRight:"6px"}}>
+              <select
+                className="select"
+                value={chartOutcome}
+                onChange={(e)=>setChartOutcome(e.target.value)}
+              >
+                <option value="yes">YES</option>
+                <option value="no">NO</option>
+              </select>
+            </div>
+          </div>
 
-  const ranges = [
-    ["1h","1h"],
-    ["6h","6h"],
-    ["1d","1d"],
-    ["1w","1w"],
-    ["All","all"],
-  ];
+          <div style={{height:"340px", marginTop:"8px"}}>
+            <LineChart candles={filtered} />
+          </div>
 
-  const rangeMs = (key) => {
-    if(key==="1h") return 1*60*60*1000;
-    if(key==="6h") return 6*60*60*1000;
-    if(key==="1d") return 24*60*60*1000;
-    if(key==="1w") return 7*24*60*60*1000;
-    return null; // all
-  };
-
-  <div className="select-wrap" style={{marginRight:"6px"}}>
-  <select
-    className="select"
-    value={chartOutcome}
-    onChange={(e)=>setChartOutcome(e.target.value)}
-  >
-    <option value="yes">YES</option>
-    <option value="no">NO</option>
-  </select>
-</div>
-
-  const filtered = useMemo(()=>{
-  const ms = rangeMs(range);
-  if(!ms) return chartCandles;
-  const end = chartCandles.at(-1)?.t ?? Date.now();
-  const start = end - ms;
-  const arr = chartCandles.filter(c => c.t >= start);
-  return arr.length >= 5 ? arr : chartCandles.slice(-20);
-}, [chartCandles, range]);
-
-  return (
-    <>
-      <div style={{height:"340px"}}>
-        <LineChart candles={filtered} />
-      </div>
-
-      {/* range buttons nằm dưới trục ngang */}
-      <div style={{display:"flex", gap:"8px", marginTop:"8px", alignItems:"center"}}>
-        {ranges.map(([label, key]) => (
-          <button
-            key={key}
-            className="btn"
-            onClick={()=>setRange(key)}
-            style={{opacity: range===key ? 1 : 0.65}}
-          >
-            {label}
-          </button>
-        ))}
-        <div className="spacer" />
-        <div className="muted" style={{fontSize:"12px"}}>UTC tooltip on hover</div>
-      </div>
-    </>
-  );
-})()}
+          {/* range buttons */}
+          <div style={{display:"flex", gap:"8px", marginTop:"8px", alignItems:"center"}}>
+            {ranges.map(([label, key]) => (
+              <button
+                key={key}
+                className="btn"
+                onClick={()=>setRange(key)}
+                style={{opacity:  range===key ? 1 : 0.65}}
+              >
+                {label}
+              </button>
+            ))}
+            <div className="spacer" />
+            <div className="muted" style={{fontSize:"12px"}}>UTC tooltip on hover</div>
+          </div>
 
           <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:"8px"}}>
             <div style={{display:"flex", gap:"12px", color:"rgba(148,163,184,0.95)", fontSize:"12px"}}>
-              <div>Volume: <span style={{color:"rgba(34,197,94,0.95)", fontWeight:900}}>{fmt(candles.at(-1)?.volume)}</span></div>
-              <div>Last: <span style={{color:"rgba(34,211,238,0.95)", fontWeight:900}}>{(candles.at(-1)?.close ?? 0).toFixed(2)}</span></div>
+              <div>Volume:  <span style={{color:"rgba(34,197,94,0.95)", fontWeight:900}}>{fmt(chartCandles.at(-1)?.volume)}</span></div>
+              <div>Last: <span style={{color:"rgba(34,211,238,0.95)", fontWeight:900}}>{(chartCandles.at(-1)?.close ??  0).toFixed(2)}</span></div>
             </div>
             <div className="muted" style={{fontSize:"12px"}}>Demo chart (mock)</div>
           </div>
@@ -466,7 +462,7 @@ export default function Page({ searchParams }) {
 
         <div className="panel" style={{padding:"10px", height:"fit-content"}}>
           <OrderBookPoly ob={ob} defaultSide={outcomeId === "no" ? "no" : "yes"} />
-</div>
+        </div>
       </div>
     </div>
   );
