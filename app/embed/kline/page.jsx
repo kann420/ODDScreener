@@ -178,61 +178,126 @@ export default function Page({ searchParams }) {
           </div>
         </div>
 
-        <div className="panel" style={{padding:"10px", height:"fit-content"}}>
-          <div style={{display:"flex", alignItems:"center", justifyContent:"space-between"}}>
-            <div style={{fontWeight:900, fontSize:"13px"}}>Order Book ({outcomeId.toUpperCase()})</div>
-            <div className="select-wrap">
-              <select className="select" defaultValue="0.01">
-                <option value="0.01">tick 0.01</option>
-                <option value="0.005">tick 0.005</option>
-                <option value="0.001">tick 0.001</option>
-              </select>
-            </div>
-          </div>
+        {/* ===== Orderbook (Polymarket-style) ===== */}
+<div className="panel" style={{padding:"10px", height:"fit-content"}}>
+  <div style={{display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+    <div style={{fontWeight:900, fontSize:"13px"}}>Order Book ({outcomeId.toUpperCase()})</div>
+    <div className="select-wrap">
+      <select className="select" defaultValue="0.01">
+        <option value="0.01">tick 0.01</option>
+        <option value="0.005">tick 0.005</option>
+        <option value="0.001">tick 0.001</option>
+      </select>
+    </div>
+  </div>
 
-          <div style={{display:"flex", justifyContent:"space-between", marginTop:"10px", fontSize:"12px", color:"rgba(148,163,184,0.95)"}}>
-            <span>Bid</span><span className="mono">mid {ob.mid.toFixed(2)}</span><span>Ask</span>
-          </div>
+  {/* Header columns */}
+  <div style={{
+    display:"grid",
+    gridTemplateColumns:"88px 1fr 1fr",
+    gap:"10px",
+    marginTop:"10px",
+    fontSize:"11px",
+    color:"rgba(148,163,184,0.95)",
+    fontWeight:800
+  }}>
+    <div>PRICE</div>
+    <div>SHARES</div>
+    <div style={{textAlign:"right"}}>TOTAL</div>
+  </div>
 
-          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginTop:"8px"}}>
-            <div>
-              <div className="muted" style={{fontSize:"11px", marginBottom:"6px"}}>Bids</div>
-              {ob.bids.map((r, i)=>(
-                <div key={i} style={{
-                  display:"grid", gridTemplateColumns:"58px 1fr 72px",
-                  gap:"8px", alignItems:"center", padding:"6px 6px",
-                  borderRadius:"10px", border:"1px solid rgba(255,255,255,0.06)",
-                  background:`linear-gradient(90deg, rgba(34,197,94,0.18) ${Math.min(100,(r.shares/450)*100)}%, rgba(255,255,255,0.02) 0)`
-                }}>
-                  <div className="green" style={{fontWeight:900}}>{r.price}</div>
-                  <div className="mono muted">{fmt(r.shares)} sh</div>
-                  <div className="mono">${fmt(r.total)}</div>
-                </div>
-              ))}
-            </div>
-            <div>
-              <div className="muted" style={{fontSize:"11px", marginBottom:"6px"}}>Asks</div>
-              {ob.asks.map((r, i)=>(
-                <div key={i} style={{
-                  display:"grid", gridTemplateColumns:"58px 1fr 72px",
-                  gap:"8px", alignItems:"center", padding:"6px 6px",
-                  borderRadius:"10px", border:"1px solid rgba(255,255,255,0.06)",
-                  background:`linear-gradient(90deg, rgba(239,68,68,0.18) ${Math.min(100,(r.shares/450)*100)}%, rgba(255,255,255,0.02) 0)`
-                }}>
-                  <div className="red" style={{fontWeight:900}}>{r.price}</div>
-                  <div className="mono muted">{fmt(r.shares)} sh</div>
-                  <div className="mono">${fmt(r.total)}</div>
-                </div>
-              ))}
-            </div>
-          </div>
+  {(() => {
+    // ---- Fix “heatmap lỗi”: dùng max cumulative để scale % chuẩn ----
+    const asks = [...ob.asks].sort((a,b)=>Number(b.price)-Number(a.price)); // asks từ cao -> thấp (giống polymarket)
+    const bids = [...ob.bids].sort((a,b)=>Number(b.price)-Number(a.price)); // bids từ cao -> thấp
 
-          <div className="divider" style={{margin:"10px 0"}} />
-          <div className="muted" style={{fontSize:"11px"}}>
-            Tip: trang này là iframe demo. Sau này cắm Opinion API, bạn chỉ cần giữ UI y hệt.
+    let cumA = 0;
+    const asksCum = asks.map(r => (cumA += Number(r.total)));
+    let cumB = 0;
+    const bidsCum = bids.map(r => (cumB += Number(r.total)));
+
+    const maxCum = Math.max(asksCum.at(-1) || 1, bidsCum.at(-1) || 1);
+
+    const Row = ({ side, r, cum }) => {
+      const isAsk = side === "ask";
+      const pct = Math.max(0, Math.min(100, (cum / maxCum) * 100));
+
+      return (
+        <div style={{position:"relative", marginTop:"8px"}}>
+          {/* depth bar bên trái */}
+          <div style={{
+            position:"absolute",
+            left:0,
+            top:0,
+            bottom:0,
+            width:`${pct}%`,
+            borderRadius:"10px",
+            background: isAsk ? "rgba(239,68,68,0.15)" : "rgba(34,197,94,0.14)"
+          }} />
+
+          <div style={{
+            position:"relative",
+            display:"grid",
+            gridTemplateColumns:"88px 1fr 1fr",
+            gap:"10px",
+            alignItems:"center",
+            padding:"10px 10px",
+            borderRadius:"10px",
+            border:"1px solid rgba(255,255,255,0.06)",
+            background:"rgba(255,255,255,0.02)"
+          }}>
+            <div className={isAsk ? "red" : "green"} style={{fontWeight:900}}>
+              {(Number(r.price)*100).toFixed(0)}¢
+            </div>
+            <div className="mono muted">{fmt(r.shares)}</div>
+            <div className="mono" style={{textAlign:"right"}}>${fmt(r.total)}</div>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
+      );
+    };
+
+    // last + spread (demo)
+    const lastC = Math.round((candles.at(-1)?.close ?? 0.2) * 100);
+    const spreadC = 1; // demo: 1¢
+
+    return (
+      <>
+        {/* Asks block */}
+        <div style={{marginTop:"10px"}}>
+          <div style={{display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px"}}>
+            <span className="pill" style={{color:"#fff", background:"rgba(239,68,68,0.18)"}}>Asks</span>
+          </div>
+          {asks.map((r,i)=>(
+            <Row key={"a"+i} side="ask" r={r} cum={asksCum[i]} />
+          ))}
+        </div>
+
+        {/* Middle: last + spread */}
+        <div style={{
+          marginTop:"12px",
+          padding:"10px 10px",
+          borderTop:"1px solid rgba(255,255,255,0.06)",
+          borderBottom:"1px solid rgba(255,255,255,0.06)",
+          display:"flex",
+          justifyContent:"space-between",
+          color:"rgba(148,163,184,0.95)",
+          fontSize:"12px",
+          fontWeight:800
+        }}>
+          <div>Last: <span className="mono" style={{color:"#e9eef5"}}>{lastC}¢</span></div>
+          <div>Spread: <span className="mono" style={{color:"#e9eef5"}}>{spreadC}¢</span></div>
+        </div>
+
+        {/* Bids block */}
+        <div style={{marginTop:"12px"}}>
+          <div style={{display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px"}}>
+            <span className="pill" style={{color:"#fff", background:"rgba(34,197,94,0.18)"}}>Bids</span>
+          </div>
+          {bids.map((r,i)=>(
+            <Row key={"b"+i} side="bid" r={r} cum={bidsCum[i]} />
+          ))}
+        </div>
+      </>
+    );
+  })()}
+</div>
