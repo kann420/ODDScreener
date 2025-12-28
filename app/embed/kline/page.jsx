@@ -60,7 +60,7 @@ function makeMockTrades(){
   return rows;
 }
 
-function LineChart({ candles }){
+function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
   const [hoverIdx, setHoverIdx] = useState(null);
 
   const w = 980, h = 320;
@@ -142,7 +142,7 @@ function LineChart({ candles }){
       ))}
 
       {/* line */}
-      <path d={path} fill="none" stroke="rgba(34,211,238,0.95)" strokeWidth="2.2" />
+      <path d={path} fill="none" stroke={color} strokeWidth="2.2" />
 
       {/* hover vertical line */}
       {hoverIdx !== null && (
@@ -150,10 +150,10 @@ function LineChart({ candles }){
       )}
 
       {/* last/hover dot */}
-      <circle cx={hx} cy={hy} r="4. 2" fill="rgba(34,211,238,0.95)" />
+      <circle cx={hx} cy={hy} r="4. 2" fill={color} />
 
       {/* top-left label */}
-      <text x={padL} y={padT+6} fill="rgba(34,211,238,0.95)" fontSize="22" fontWeight="900">
+      <text x={padL} y={padT+6} fill={color} fontSize="22" fontWeight="900">
         {lastPct.toFixed(0)}% chance
       </text>
 
@@ -325,7 +325,17 @@ export default function Page({ searchParams }) {
   const theme = searchParams?.theme ?? "dark";
 
   const candlesYes = useMemo(()=>makeMockCandles(160), []);
-  const candlesNo  = useMemo(()=>makeMockCandles(160), []);
+const candlesNo = useMemo(()=>{
+  // NO is roughly the inverse of YES (1 - price), like prediction markets
+  return candlesYes.map(c => {
+    const invClose = Math.max(0.01, Math.min(0.99, 1 - c.close));
+    const invOpen  = Math.max(0.01, Math.min(0.99, 1 - c.open));
+    // swap high/low when inverting
+    const invHigh  = Math.max(0.01, Math.min(0.99, 1 - c.low));
+    const invLow   = Math.max(0.01, Math.min(0.99, 1 - c.high));
+    return { ...c, open: invOpen, high: invHigh, low: invLow, close: invClose };
+  });
+}, [candlesYes]);
   const [chartOutcome, setChartOutcome] = useState(outcomeId === "no" ? "no" : "yes");
   const chartCandles = chartOutcome === "no" ? candlesNo : candlesYes;
   const obYes = useMemo(()=>makeMockOrderbook(0.22), []);
@@ -383,20 +393,45 @@ export default function Page({ searchParams }) {
       <div style={{display:"grid", gridTemplateColumns:"1fr 340px", gap:"12px", marginTop:"10px"}}>
         <div className="panel" style={{padding:"10px"}}>
           <div style={{display:"flex", alignItems:"center", justifyContent:"space-between"}}>
-            <div className="select-wrap" style={{marginRight:"6px"}}>
-              <select
-                className="select"
-                value={chartOutcome}
-                onChange={(e)=>setChartOutcome(e.target.value)}
-              >
-                <option value="yes">YES</option>
-                <option value="no">NO</option>
-              </select>
-            </div>
-          </div>
+  <div style={{
+    display:"inline-flex",
+    border:"1px solid rgba(255,255,255,0.10)",
+    background:"rgba(255,255,255,0.03)",
+    borderRadius:"12px",
+    padding:"2px",
+    gap:"2px"
+  }}>
+    <button
+      className="btn"
+      onClick={()=>setChartOutcome("yes")}
+      style={{
+        padding:"6px 10px",
+        borderRadius:"10px",
+        opacity: chartOutcome==="yes" ? 1 : 0.65,
+        background: chartOutcome==="yes" ? "rgba(34,211,238,0.18)" : "transparent",
+        border: chartOutcome==="yes" ? "1px solid rgba(34,211,238,0.30)" : "1px solid transparent"
+      }}
+    >
+      YES
+    </button>
+    <button
+      className="btn"
+      onClick={()=>setChartOutcome("no")}
+      style={{
+        padding:"6px 10px",
+        borderRadius:"10px",
+        opacity: chartOutcome==="no" ? 1 : 0.65,
+        background: chartOutcome==="no" ? "rgba(168,85,247,0.16)" : "transparent",
+        border: chartOutcome==="no" ? "1px solid rgba(168,85,247,0.28)" : "1px solid transparent"
+      }}
+    >
+      NO
+    </button>
+  </div>
+</div>
 
           <div style={{height:"340px", marginTop:"8px"}}>
-            <LineChart candles={filtered} />
+            <LineChart key={chartOutcome} candles={filtered} color={chartOutcome==="yes" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)"} />
           </div>
 
           {/* range buttons */}
@@ -418,7 +453,7 @@ export default function Page({ searchParams }) {
           <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:"8px"}}>
             <div style={{display:"flex", gap:"12px", color:"rgba(148,163,184,0.95)", fontSize:"12px"}}>
               <div>Volume:  <span style={{color:"rgba(34,197,94,0.95)", fontWeight:900}}>{fmt(chartCandles.at(-1)?.volume)}</span></div>
-              <div>Last: <span style={{color:"rgba(34,211,238,0.95)", fontWeight:900}}>{(chartCandles.at(-1)?.close ??  0).toFixed(2)}</span></div>
+              <div>Last: <span style={{color: chartOutcome==="yes" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)", fontWeight:900}}>{(chartCandles.at(-1)?.close ??  0).toFixed(2)}</span></div>
             </div>
             <div className="muted" style={{fontSize:"12px"}}>Demo chart (mock)</div>
           </div>
