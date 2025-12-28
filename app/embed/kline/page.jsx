@@ -324,7 +324,10 @@ export default function Page({ searchParams }) {
   const interval = searchParams?.interval ?? "1h";
   const theme = searchParams?.theme ?? "dark";
 
-  const candles = useMemo(()=>makeMockCandles(160), []);
+  const candlesYes = useMemo(()=>makeMockCandles(160), []);
+  const candlesNo  = useMemo(()=>makeMockCandles(160), []);
+  const [chartOutcome, setChartOutcome] = useState(outcomeId === "no" ? "no" : "yes");
+  const chartCandles = chartOutcome === "no" ? candlesNo : candlesYes;
   const obYes = useMemo(()=>makeMockOrderbook(0.22), []);
   const obNo  = useMemo(()=>makeMockOrderbook(0.78), []);
   const trades = useMemo(()=>makeMockTrades(), []);
@@ -371,15 +374,25 @@ export default function Page({ searchParams }) {
     return null; // all
   };
 
+  <div className="select-wrap" style={{marginRight:"6px"}}>
+  <select
+    className="select"
+    value={chartOutcome}
+    onChange={(e)=>setChartOutcome(e.target.value)}
+  >
+    <option value="yes">YES</option>
+    <option value="no">NO</option>
+  </select>
+</div>
+
   const filtered = useMemo(()=>{
-    const ms = rangeMs(range);
-    if(!ms) return candles;
-    const end = candles.at(-1)?.t ?? Date.now();
-    const start = end - ms;
-    const arr = candles.filter(c => c.t >= start);
-    // đảm bảo không bị quá ít điểm (đỡ chart “gãy”)
-    return arr.length >= 5 ? arr : candles.slice(-20);
-  }, [candles, range]);
+  const ms = rangeMs(range);
+  if(!ms) return chartCandles;
+  const end = chartCandles.at(-1)?.t ?? Date.now();
+  const start = end - ms;
+  const arr = chartCandles.filter(c => c.t >= start);
+  return arr.length >= 5 ? arr : chartCandles.slice(-20);
+}, [chartCandles, range]);
 
   return (
     <>
