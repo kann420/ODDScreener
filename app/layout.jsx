@@ -20,7 +20,6 @@ export default function RootLayout({ children }) {
                 <a href="/">Discover</a>
                 <a href="/portfolio">Portfolio</a>
                 <a href="/watchlist">Watchlist</a>
-                <a href="/referrals">Referrals</a>
               </div>
               <div className="spacer" />
               <div className="search">
@@ -28,7 +27,6 @@ export default function RootLayout({ children }) {
                 <span className="pill mono">Ctrl</span>
                 <span className="pill mono">K</span>
               </div>
-              <button className="btn">Sign in</button>
             </div>
           </div>
         </div>
