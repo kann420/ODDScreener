@@ -63,15 +63,10 @@ function makeMockTrades(){
 function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
   const [hoverIdx, setHoverIdx] = useState(null);
 
-  // Morph animation state
-  const [animPts, setAnimPts] = useState(null);
-  const prevPtsRef = useRef(null);
-  const rafRef = useRef(null);
-
   const w = 980, h = 320;
   const padL = 36, padR = 46, padT = 16, padB = 30;
 
-  // Keep point count consistent so morph looks smooth across ranges
+  // Render with a consistent point count so transitions (YES<->NO, range) look smooth
   const N = 160;
 
   const utcLabel = (ms) => {
@@ -100,56 +95,19 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
     return (h - padB) - t * (h - padT - padB);
   };
 
-  const nextPts = useMemo(() => {
-    if (!sampled.length) return null;
+  const pts = useMemo(() => {
     return sampled.map((c,i)=>({ x: x(i), y: y(c.close), t: c.t, v: c.close }));
   }, [sampled, min, max]);
 
-  useEffect(() => {
-    if (!nextPts) return;
-
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-
-    const prev = (prevPtsRef.current && prevPtsRef.current.length === nextPts.length)
-      ? prevPtsRef.current
-      : nextPts.map(p => ({...p}));
-
-    const start = performance.now();
-    const dur = 420; // ms
-
-    const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
-
-    const tick = (now) => {
-      const t = Math.min(1, (now - start) / dur);
-      const e = easeOutCubic(t);
-
-      const cur = nextPts.map((p,i)=>({
-        x: prev[i].x + (p.x - prev[i].x)*e,
-        y: prev[i].y + (p.y - prev[i].y)*e,
-        t: p.t,
-        v: p.v
-      }));
-
-      setAnimPts(cur);
-
-      if (t < 1) rafRef.current = requestAnimationFrame(tick);
-      else {
-        prevPtsRef.current = nextPts.map(p => ({...p}));
-        rafRef.current = null;
-      }
-    };
-
-    rafRef.current = requestAnimationFrame(tick);
-
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, [nextPts]);
-
-  const pts = animPts || nextPts || [];
-  const path = pts.length
+  const linePath = pts.length
     ? pts.map((p,i)=>`${i===0?'M':'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" ")
     : "";
+
+  const areaPath = pts.length ? (
+    linePath +
+    ` L ${(w-padR).toFixed(2)} ${(h-padB).toFixed(2)}` +
+    ` L ${padL.toFixed(2)} ${(h-padB).toFixed(2)} Z`
+  ) : "";
 
   // grid y levels
   const levels = 4;
@@ -160,6 +118,11 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
   });
 
   const lastPct = closes.length ? closes[closes.length-1] * 100 : 0;
+
+  const fmtPct = (p) => {
+    // Opinion-like: show one decimal (e.g. 0.2%, 99.8%)
+    return `${p.toFixed(1)}%`;
+  };
 
   const onMove = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -191,6 +154,21 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
       onMouseMove={onMove}
       onMouseLeave={onLeave}
     >
+      <defs>
+        <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.22" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.00" />
+        </linearGradient>
+
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="2.2" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+
       {/* grid */}
       {grid.map((g,i)=>(
         <g key={i}>
@@ -202,13 +180,16 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
             fontSize="11"
             fontFamily='ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
           >
-            {g.val.toFixed(0)}%
+            {fmtPct(g.val)}
           </text>
         </g>
       ))}
 
-      {/* line */}
-      <path d={path} fill="none" stroke={color} strokeWidth="2.2" />
+      {/* area */}
+      {areaPath && <path d={areaPath} fill="url(#areaGrad)" />}
+
+      {/* line + glow */}
+      <path d={linePath} fill="none" stroke={color} strokeWidth="2.4" filter="url(#glow)" />
 
       {/* hover vertical line */}
       {hoverIdx !== null && (
@@ -220,7 +201,7 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
 
       {/* top-left label */}
       <text x={padL} y={padT+6} fill={color} fontSize="22" fontWeight="900">
-        {lastPct.toFixed(0)}% chance
+        {fmtPct(lastPct)} chance
       </text>
 
       {/* tooltip */}
@@ -236,7 +217,7 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
             stroke="rgba(255,255,255,0.10)"
           />
           <text x={tipX+10} y={tipY+20} fill="rgba(233,238,245,0.95)" fontSize="12" fontWeight="800">
-            {(hv.v*100).toFixed(0)}%
+            {fmtPct(hv.v*100)}
           </text>
           <text
             x={tipX+10}
@@ -391,19 +372,43 @@ export default function Page({ searchParams }) {
   const theme = searchParams?.theme ?? "dark";
 
   const candlesYes = useMemo(()=>makeMockCandles(160), []);
-const candlesNo = useMemo(()=>{
-  // NO is roughly the inverse of YES (1 - price), like prediction markets
-  return candlesYes.map(c => {
-    const invClose = Math.max(0.01, Math.min(0.99, 1 - c.close));
-    const invOpen  = Math.max(0.01, Math.min(0.99, 1 - c.open));
-    // swap high/low when inverting
-    const invHigh  = Math.max(0.01, Math.min(0.99, 1 - c.low));
-    const invLow   = Math.max(0.01, Math.min(0.99, 1 - c.high));
-    return { ...c, open: invOpen, high: invHigh, low: invLow, close: invClose };
-  });
-}, [candlesYes]);
   const [chartOutcome, setChartOutcome] = useState(outcomeId === "no" ? "no" : "yes");
-  const chartCandles = chartOutcome === "no" ? candlesNo : candlesYes;
+
+const [flipT, setFlipT] = useState(chartOutcome === "no" ? 1 : 0);
+const flipRef = useRef(flipT);
+
+useEffect(() => { flipRef.current = flipT; }, [flipT]);
+
+// "Mirror flip" animation like the video: YES <-> NO reflects around 50%
+useEffect(() => {
+  const target = chartOutcome === "no" ? 1 : 0;
+  const from = flipRef.current;
+  const dur = 260; // ms (snappy like Opinion)
+  const start = performance.now();
+  let raf = null;
+
+  const easeInOut = (t) => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3)/2;
+
+  const tick = (now) => {
+    const t = Math.min(1, (now - start) / dur);
+    const e = easeInOut(t);
+    setFlipT(from + (target - from) * e);
+    if (t < 1) raf = requestAnimationFrame(tick);
+  };
+
+  raf = requestAnimationFrame(tick);
+  return () => raf && cancelAnimationFrame(raf);
+}, [chartOutcome]);
+  const chartCandlesBase = candlesYes;
+  const chartCandles = useMemo(() => {
+    // Display series morphs from YES to NO via flipT: v = lerp(v, 1-v)
+    if (!chartCandlesBase?.length) return [];
+    return chartCandlesBase.map(c => {
+      const v = c.close;
+      const v2 = v*(1 - flipT) + (1 - v)*flipT;
+      return { ...c, close: v2 };
+    });
+  }, [chartCandlesBase, flipT]);
   const obYes = useMemo(()=>makeMockOrderbook(0.22), []);
   const obNo  = useMemo(()=>makeMockOrderbook(0.78), []);
   const trades = useMemo(()=>makeMockTrades(), []);
