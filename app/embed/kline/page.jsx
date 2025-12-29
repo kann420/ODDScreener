@@ -10,7 +10,7 @@ function fmt(n){
   if(Number.isNaN(num)) return String(n);
   if(num >= 1_000_000) return (num/1_000_000).toFixed(1) + "M";
   if(num >= 1_000) return (num/1_000).toFixed(1) + "K";
-  return num.toFixed(0);
+  return num. toFixed(0);
 }
 
 function makeMockCandles(count=140){
@@ -48,13 +48,13 @@ function makeMockOrderbook(mid=0.22){
 
 function makeMockTrades(){
   const rows = [];
-  const wallets = ["wolfofshelbyyy","nniu","0x38d...d34","0x968...21e","0x593... e97","0xa65...a67","0xa33...950","0xe5f...39b"];
+  const wallets = ["wolfofshelbyyy","nniu","0x38d... d34","0x968...21e","0x593...  e97","0xa65... a67","0xa33... 950","0xe5f...39b"];
   for(let i=0;i<14;i++){
     const side = i%4===0 ? "BUY" : "SELL";
-    const price = side==="BUY" ? 0.22 :  0.99;
-    const amount = i===0 ? 1700 : (i%3===0? 267 : (i%2===0? 259: 75));
+    const price = side==="BUY" ? 0.22 :   0.99;
+    const amount = i===0 ? 1700 : (i%3===0?  267 : (i%2===0?  259:  75));
     const total = Math.round(amount * price * 100)/100;
-    const ageMin = i<6 ? 1 : (i<10 ? 8 :  13);
+    const ageMin = i<6 ? 1 : (i<10 ? 8 :   13);
     rows.push({ outcome: "NO", side, price, amount, total, age: ageMin+"m", trader: wallets[i%wallets.length] });
   }
   return rows;
@@ -75,7 +75,7 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
   };
 
   const sampled = useMemo(() => {
-    if (!candles || candles.length === 0) return [];
+    if (! candles || candles.length === 0) return [];
     const out = [];
     const L = candles.length;
     for (let i = 0; i < N; i++) {
@@ -85,8 +85,8 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
     return out;
   }, [candles]);
 
-  const closes = useMemo(() => sampled.map(c => c.close), [sampled]);
-  const min = useMemo(() => closes.length ? Math.min(...closes) : 0, [closes]);
+  const closes = useMemo(() => sampled.map(c => c. close), [sampled]);
+  const min = useMemo(() => closes.length ?  Math.min(...closes) : 0, [closes]);
   const max = useMemo(() => closes.length ? Math.max(...closes) : 1, [closes]);
 
   const x = (i) => padL + (i/(N-1))*(w-padL-padR);
@@ -100,18 +100,18 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
   }, [sampled, min, max]);
 
   const linePath = pts.length
-    ? pts.map((p,i)=>`${i===0?'M':'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" ")
+    ? pts.map((p,i)=>`${i===0? 'M':'L'} ${p.x. toFixed(2)} ${p.y.toFixed(2)}`).join(" ")
     : "";
 
-  const areaPath = pts.length ? (
+  const areaPath = pts.length ?  (
     linePath +
     ` L ${(w-padR).toFixed(2)} ${(h-padB).toFixed(2)}` +
-    ` L ${padL.toFixed(2)} ${(h-padB).toFixed(2)} Z`
+    ` L ${padL. toFixed(2)} ${(h-padB).toFixed(2)} Z`
   ) : "";
 
   // grid y levels
   const levels = 4;
-  const grid = Array.from({length:levels+1}).map((_,i)=>{
+  const grid = Array. from({length:levels+1}).map((_,i)=>{
     const yy = padT + (i/levels)*(h-padT-padB);
     const val = (max - (i/levels)*(max-min)) * 100;
     return { yy, val };
@@ -120,13 +120,13 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
   const lastPct = closes.length ? closes[closes.length-1] * 100 : 0;
 
   const fmtPct = (p) => {
-    // Opinion-like: show one decimal (e.g. 0.2%, 99.8%)
+    // Opinion-like:  show one decimal (e.g.  0.2%, 99.8%)
     return `${p.toFixed(1)}%`;
   };
 
   const onMove = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    const px = e.clientX - rect.left;
+    const px = e.clientX - rect. left;
     const innerW = (w - padL - padR);
     const t = Math.max(0, Math.min(1, (px - (padL / w) * rect.width) / (innerW / w * rect.width)));
     const idx = Math.round(t * (N - 1));
@@ -138,8 +138,8 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
   const hi = hoverIdx !== null ? hoverIdx : (N - 1);
   const hv = pts[hi] || pts[pts.length-1];
 
-  const hx = hv?.x ?? x(N-1);
-  const hy = hv?.y ?? y(closes[closes.length-1] ?? 0);
+  const hx = hv?. x ??  x(N-1);
+  const hy = hv?.y ?? y(closes[closes.length-1] ??  0);
 
   // tooltip position
   const tipW = 210;
@@ -161,7 +161,7 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
         </linearGradient>
 
         <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="2.2" result="blur" />
+          <feGaussianBlur stdDeviation="2. 2" result="blur" />
           <feMerge>
             <feMergeNode in="blur" />
             <feMergeNode in="SourceGraphic" />
@@ -189,7 +189,7 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
       {areaPath && <path d={areaPath} fill="url(#areaGrad)" />}
 
       {/* line + glow */}
-      <path d={linePath} fill="none" stroke={color} strokeWidth="2.4" filter="url(#glow)" />
+      <path d={linePath} fill="none" stroke={color} strokeWidth="2. 4" filter="url(#glow)" />
 
       {/* hover vertical line */}
       {hoverIdx !== null && (
@@ -197,7 +197,7 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
       )}
 
       {/* last/hover dot */}
-      <circle cx={hx} cy={hy} r="4.2" fill={color} />
+      <circle cx={hx} cy={hy} r="4. 2" fill={color} />
 
       {/* top-left label */}
       <text x={padL} y={padT+6} fill={color} fontSize="22" fontWeight="900">
@@ -217,7 +217,7 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
             stroke="rgba(255,255,255,0.10)"
           />
           <text x={tipX+10} y={tipY+20} fill="rgba(233,238,245,0.95)" fontSize="12" fontWeight="800">
-            {fmtPct(hv.v*100)}
+            {fmtPct(hv. v*100)}
           </text>
           <text
             x={tipX+10}
@@ -240,7 +240,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
   const asksRef = useRef(null);
   const bidsRef = useRef(null);
 
-  const asks = useMemo(()=> [... ob.asks].sort((a,b)=>Number(b.price)-Number(a.price)), [ob]);
+  const asks = useMemo(()=> [...  ob.asks]. sort((a,b)=>Number(b. price)-Number(a.price)), [ob]);
   const bids = useMemo(()=> [...ob.bids].sort((a,b)=>Number(b.price)-Number(a.price)), [ob]);
 
   let cumA = 0;
@@ -248,7 +248,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
   let cumB = 0;
   const bidsCum = bids.map(r => (cumB += Number(r.shares)));
 
-  const maxAsk = asksCum. at(-1) || 1;
+  const maxAsk = asksCum.  at(-1) || 1;
   const maxBid = bidsCum.at(-1) || 1;
 
   const Row = ({ r, cum, isAsk }) => {
@@ -260,7 +260,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
           left:0, top:0, bottom:0,
           width:`${pct}%`,
           borderRadius:"10px",
-          background:  isAsk ? "rgba(239,68,68,0.16)" : "rgba(34,197,94,0.14)"
+          background:   isAsk ? "rgba(239,68,68,0.16)" : "rgba(34,197,94,0.14)"
         }} />
         <div style={{
           position:"relative",
@@ -273,7 +273,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
           border:"1px solid rgba(255,255,255,0.06)",
           background:"rgba(255,255,255,0.02)"
         }}>
-          <div className={isAsk ? "red" : "green"} style={{fontWeight: 900}}>
+          <div className={isAsk ? "red" : "green"} style={{fontWeight:  900}}>
             {(Number(r.price)*100).toFixed(0)}¢
           </div>
           <div className="mono muted">{fmt(r.shares)}</div>
@@ -283,13 +283,13 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
     );
   };
 
-  const listStyle = { maxHeight:  5*56, overflowY:"auto", paddingRight:"6px", scrollbarGutter:"stable" };
+  const listStyle = { maxHeight:   5*56, overflowY:"auto", paddingRight:"6px", scrollbarGutter:"stable" };
 
   const lastC = Math.round(ob.mid * 100);
   const spreadC = 1;
 
   useEffect(() => {
-    // Asks:  scroll to bottom so the best prices near mid are visible
+    // Asks:   scroll to bottom so the best prices near mid are visible
     if (asksRef.current) {
       asksRef.current.scrollTop = asksRef.current.scrollHeight;
     }
@@ -302,9 +302,9 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
   return (
     <div>
       <div style={{display:"flex", alignItems:"center", justifyContent:"space-between"}}>
-        <div style={{fontWeight:900, fontSize:"13px"}}>Order Book</div>
+        <div style={{fontWeight: 900, fontSize:"13px"}}>Order Book</div>
         <div className="select-wrap">
-          <select className="select" value={side} onChange={(e)=>setSide(e.target. value)}>
+          <select className="select" value={side} onChange={(e)=>setSide(e.target.value)}>
             <option value="yes">YES</option>
             <option value="no">NO</option>
           </select>
@@ -318,7 +318,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
         marginTop:"10px",
         fontSize:"11px",
         color:"rgba(148,163,184,0.95)",
-        fontWeight:800
+        fontWeight: 800
       }}>
         <div>PRICE</div>
         <div>SHARES</div>
@@ -330,7 +330,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
           <span className="pill" style={{color:"#fff", background:"rgba(239,68,68,0.18)"}}>Asks ({side. toUpperCase()})</span>
         </div>
         <div ref={asksRef} style={listStyle}>
-          {asks.map((r,i)=>(
+          {asks. map((r,i)=>(
             <Row key={"a"+i} r={r} cum={asksCum[i]} isAsk />
           ))}
         </div>
@@ -347,7 +347,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
         fontSize:"12px",
         fontWeight:800
       }}>
-        <div>Last:  <span className="mono" style={{color:"#e9eef5"}}>{lastC}¢</span></div>
+        <div>Last:   <span className="mono" style={{color:"#e9eef5"}}>{lastC}¢</span></div>
         <div>Spread: <span className="mono" style={{color:"#e9eef5"}}>{spreadC}¢</span></div>
       </div>
 
@@ -366,8 +366,8 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
 }
 
 export default function Page({ searchParams }) {
-  const marketId = searchParams?.marketId ??  "test";
-  const outcomeId = searchParams?.outcomeId ?? "yes";
+  const marketId = searchParams?. marketId ??  "test";
+  const outcomeId = searchParams?.outcomeId ??  "yes";
   const interval = searchParams?.interval ?? "1h";
   const theme = searchParams?.theme ?? "dark";
 
@@ -379,7 +379,7 @@ const flipRef = useRef(flipT);
 
 useEffect(() => { flipRef.current = flipT; }, [flipT]);
 
-// "Mirror flip" animation like the video: YES <-> NO reflects around 50%
+// "Mirror flip" animation like the video:  YES <-> NO reflects around 50%
 useEffect(() => {
   const target = chartOutcome === "no" ? 1 : 0;
   const from = flipRef.current;
@@ -401,12 +401,12 @@ useEffect(() => {
 }, [chartOutcome]);
   const chartCandlesBase = candlesYes;
   const chartCandles = useMemo(() => {
-    // Display series morphs from YES to NO via flipT: v = lerp(v, 1-v)
-    if (!chartCandlesBase?.length) return [];
+    // Display series morphs from YES to NO via flipT:  v = lerp(v, 1-v)
+    if (! chartCandlesBase?. length) return [];
     return chartCandlesBase.map(c => {
       const v = c.close;
       const v2 = v*(1 - flipT) + (1 - v)*flipT;
-      return { ...c, close: v2 };
+      return { ... c, close: v2 };
     });
   }, [chartCandlesBase, flipT]);
   const obYes = useMemo(()=>makeMockOrderbook(0.22), []);
@@ -437,11 +437,11 @@ useEffect(() => {
 
   const filtered = useMemo(()=>{
     const ms = rangeMs(range);
-    if(! ms) return chartCandles;
-    const end = chartCandles.at(-1)?.t ??  Date.now();
+    if(!  ms) return chartCandles;
+    const end = chartCandles.at(-1)?.t ??   Date.now();
     const start = end - ms;
     const arr = chartCandles.filter(c => c.t >= start);
-    return arr.length >= 5 ? arr : chartCandles.slice(-20);
+    return arr. length >= 5 ? arr : chartCandles. slice(-20);
   }, [chartCandles, range]);
 
   return (
@@ -478,8 +478,8 @@ useEffect(() => {
       style={{
         padding:"6px 10px",
         borderRadius:"10px",
-        opacity: chartOutcome==="yes" ? 1 : 0.65,
-        background: chartOutcome==="yes" ? "rgba(34,211,238,0.18)" : "transparent",
+        opacity:  chartOutcome==="yes" ? 1 :  0.65,
+        background:  chartOutcome==="yes" ?  "rgba(34,211,238,0.18)" : "transparent",
         border: chartOutcome==="yes" ? "1px solid rgba(34,211,238,0.30)" : "1px solid transparent"
       }}
     >
@@ -491,7 +491,7 @@ useEffect(() => {
       style={{
         padding:"6px 10px",
         borderRadius:"10px",
-        opacity: chartOutcome==="no" ? 1 : 0.65,
+        opacity:  chartOutcome==="no" ?  1 : 0.65,
         background: chartOutcome==="no" ? "rgba(168,85,247,0.16)" : "transparent",
         border: chartOutcome==="no" ? "1px solid rgba(168,85,247,0.28)" : "1px solid transparent"
       }}
@@ -512,7 +512,7 @@ useEffect(() => {
                 key={key}
                 className="btn"
                 onClick={()=>setRange(key)}
-                style={{opacity:  range===key ? 1 : 0.65}}
+                style={{opacity:   range===key ? 1 : 0.65}}
               >
                 {label}
               </button>
@@ -523,8 +523,8 @@ useEffect(() => {
 
           <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:"8px"}}>
             <div style={{display:"flex", gap:"12px", color:"rgba(148,163,184,0.95)", fontSize:"12px"}}>
-              <div>Volume:  <span style={{color:"rgba(34,197,94,0.95)", fontWeight:900}}>{fmt(chartCandles.at(-1)?.volume)}</span></div>
-              <div>Last: <span style={{color: chartOutcome==="yes" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)", fontWeight:900}}>{(chartCandles.at(-1)?.close ??  0).toFixed(2)}</span></div>
+              <div>Volume:   <span style={{color:"rgba(34,197,94,0.95)", fontWeight:900}}>{fmt(chartCandles.at(-1)?.volume)}</span></div>
+              <div>Last: <span style={{color:  chartOutcome==="yes" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)", fontWeight:900}}>{(chartCandles.at(-1)?.close ??  0).toFixed(2)}</span></div>
             </div>
             <div className="muted" style={{fontSize:"12px"}}>Demo chart (mock)</div>
           </div>
