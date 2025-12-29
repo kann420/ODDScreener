@@ -522,7 +522,7 @@ useEffect(() => {
       filter: isFlip3D ? "saturate(1.06)" : "none",
     }}
   >
-    <LineChartkey={chartOutcome} candles={filtered} color={chartOutcome==="yes" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)"} />
+    <LineChart key={chartOutcome} candles={filtered} color={chartOutcome==="yes" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)"} />
   </div>
 </div>
 
