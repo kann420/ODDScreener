@@ -63,8 +63,6 @@ export default function RootLayout({ children }) {
 
               <div className="search">
                 <span className="muted">Search</span>
-                <span className="pill mono">Ctrl</span>
-                <span className="pill mono">K</span>
               </div>
             </div>
           </div>
