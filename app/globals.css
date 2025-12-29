@@ -187,8 +187,8 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
 }
 
 .brand-beta{
-  grid-column:2;
-  grid-row:1;
+  grid-column:4;
+  grid-row:2;
   margin-top:3px;
   font-size:10px;
   letter-spacing:0.14em;
