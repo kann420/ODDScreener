@@ -8,50 +8,13 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="vi">
-      <head>
-        <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-      </head>
       <body>
         <div className="topbar">
           <div className="container">
             <div className="topbar-inner">
               <div className="brand">
-                {/* Icon */}
-                <svg
-                  className="brand-icon"
-                  viewBox="0 0 64 64"
-                  aria-hidden="true"
-                >
-                  <defs>
-                    <linearGradient id="oddsGrad" x1="10" y1="54" x2="54" y2="10">
-                      <stop offset="0" stopColor="#0B1D33" />
-                      <stop offset="0.5" stopColor="#2D78FF" />
-                      <stop offset="1" stopColor="#34D399" />
-                    </linearGradient>
-                  </defs>
-                  <circle
-                    cx="32"
-                    cy="32"
-                    r="20"
-                    fill="none"
-                    stroke="url(#oddsGrad)"
-                    strokeWidth="6"
-                    strokeLinecap="round"
-                    strokeDasharray="120 22"
-                    transform="rotate(-35 32 32)"
-                  />
-                </svg>
-
-                {/* Text */}
-                <div className="brand-text">
-                  <div className="brand-row">
-                    <span className="odd">ODD</span>
-                    <span className="odd">S</span>
-                    <span className="rest">creener</span>
-                  </div>
-                  <div className="beta">beta</div>
-                </div>
+                <span className="brand-dot" />
+                <span style={{letterSpacing:"0.2px"}}>fireplace <span style={{color:"#ff5b5b"}}>PRO</span></span>
               </div>
               <div className="nav">
                 <a href="/">Discover</a>
