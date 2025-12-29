@@ -400,8 +400,6 @@ useEffect(() => {
   raf = requestAnimationFrame(tick);
   return () => raf && cancelAnimationFrame(raf);
 }, [chartOutcome]);
-  const chartCandlesBase = candlesYes;
-  const chartCandles = useMemo(() => {
 
   useEffect(() => {
     // subtle 3D flip like the reference video
@@ -409,6 +407,9 @@ useEffect(() => {
     const t = setTimeout(() => setIsFlip3D(false), 220);
     return () => clearTimeout(t);
   }, [chartOutcome]);
+
+  const chartCandlesBase = candlesYes;
+  const chartCandles = useMemo(() => {
     // Display series morphs from YES to NO via flipT: v = lerp(v, 1-v)
     if (!chartCandlesBase?.length) return [];
     return chartCandlesBase.map(c => {
