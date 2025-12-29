@@ -13,8 +13,13 @@ export default function RootLayout({ children }) {
           <div className="container">
             <div className="topbar-inner">
               <div className="brand">
-                <span className="brand-dot" />
-                <span style={{letterSpacing:"0.2px"}}>ODDScreener <span style={{color:"#22d3ee"}}>Beta</span></span>
+                <div className="brand-logo">
+                  <div className="brand-name">
+                    <span style={{color:"#fff"}}>ODDS</span>
+                    <span className="brand-screener">creener</span>
+                  </div>
+                  <div className="brand-beta">Beta</div>
+                </div>
               </div>
               <div className="nav">
                 <a href="/">Discover</a>
