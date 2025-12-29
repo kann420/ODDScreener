@@ -243,24 +243,20 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
   const asks = useMemo(()=> [... ob.asks].sort((a,b)=>Number(b.price)-Number(a.price)), [ob]);
   const bids = useMemo(()=> [...ob.bids].sort((a,b)=>Number(b.price)-Number(a.price)), [ob]);
 
-  let cumA = 0;
-  const asksCum = asks.map(r => (cumA += Number(r.shares)));
-  let cumB = 0;
-  const bidsCum = bids.map(r => (cumB += Number(r.shares)));
-
-  const maxAsk = asksCum. at(-1) || 1;
-  const maxBid = bidsCum.at(-1) || 1;
-
-  const Row = ({ r, cum, isAsk }) => {
-    const pct = Math.max(0, Math.min(100, (cum / (isAsk ? maxAsk : maxBid)) * 100));
-    return (
-      <div style={{position:"relative", marginTop:"8px"}}>
+  // Depth shading like Polymarket: per-level TOTAL (USD) normalized per side
+const maxLevelAsk = Math.max(1, ...asks.map(r => Number(r.total) || 0));
+const maxLevelBid = Math.max(1, ...bids.map(r => Number(r.total) || 0));
+const Row = ({ r, isAsk }) => {
+    const levelTotal = Number(r.total) || 0;
+    const pct = Math.max(0, Math.min(100, (levelTotal / (isAsk ? maxLevelAsk : maxLevelBid)) * 100));
+return (
+      <div style={{position:"relative", overflow:"hidden", marginTop:"6px"}}>
         <div style={{
           position:"absolute",
           left:0, top:0, bottom:0,
           width:`${pct}%`,
-          borderRadius:"10px",
-          background:  isAsk ? "rgba(239,68,68,0.14)" : "rgba(34,197,94,0.12)"
+          borderRadius:"0px",
+          background: isAsk ? "rgba(239,68,68,0.26)" : "rgba(34,197,94,0.22)"
         }} />
         <div style={{
           position:"relative",
@@ -270,9 +266,8 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
           alignItems:"center",
           padding:"10px 10px",
           borderRadius:"10px",
-          border:"1px solid rgba(255,255,255,0.08)",
-          background:"rgba(255,255,255,0.03)",
-          transition:"all 0.15s ease"
+          border:"1px solid rgba(255,255,255,0.06)",
+          background:"rgba(255,255,255,0.02)"
         }}>
           <div className={isAsk ? "red" : "green"} style={{fontWeight: 900}}>
             {(Number(r.price)*100).toFixed(0)}¢
@@ -305,7 +300,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
       <div style={{display:"flex", alignItems:"center", justifyContent:"space-between"}}>
         <div style={{fontWeight:900, fontSize:"13px"}}>Order Book</div>
         <div className="select-wrap">
-          <select className="select" value={side} onChange={(e)=>setSide(e.target.value)}>
+          <select className="select" value={side} onChange={(e)=>setSide(e.target. value)}>
             <option value="yes">YES</option>
             <option value="no">NO</option>
           </select>
@@ -328,7 +323,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
 
       <div style={{marginTop:"10px"}}>
         <div style={{display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px"}}>
-          <span className="pill" style={{color:"#fff", background:"rgba(239,68,68,0.20)", border:"1px solid rgba(239,68,68,0.30)", fontWeight:800}}>Asks ({side.toUpperCase()})</span>
+          <span className="pill" style={{color:"#fff", background:"rgba(239,68,68,0.18)"}}>Asks ({side. toUpperCase()})</span>
         </div>
         <div ref={asksRef} style={listStyle}>
           {asks.map((r,i)=>(
@@ -354,7 +349,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
 
       <div style={{marginTop:"12px"}}>
         <div style={{display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px"}}>
-          <span className="pill" style={{color:"#fff", background:"rgba(34,197,94,0.20)", border:"1px solid rgba(34,197,94,0.30)", fontWeight:800}}>Bids ({side.toUpperCase()})</span>
+          <span className="pill" style={{color:"#fff", background:"rgba(34,197,94,0.18)"}}>Bids ({side.toUpperCase()})</span>
         </div>
         <div ref={bidsRef} style={listStyle}>
           {bids.map((r,i)=>(
@@ -402,15 +397,14 @@ useEffect(() => {
   return () => raf && cancelAnimationFrame(raf);
 }, [chartOutcome]);
   const chartCandlesBase = candlesYes;
-  
-  // subtle 3D flip like the reference video
+  const chartCandles = useMemo(() => {
+
   useEffect(() => {
+    // subtle 3D flip like the reference video
     setIsFlip3D(true);
     const t = setTimeout(() => setIsFlip3D(false), 220);
     return () => clearTimeout(t);
   }, [chartOutcome]);
-
-  const chartCandles = useMemo(() => {
     // Display series morphs from YES to NO via flipT: v = lerp(v, 1-v)
     if (!chartCandlesBase?.length) return [];
     return chartCandlesBase.map(c => {
@@ -524,7 +518,7 @@ useEffect(() => {
       filter: isFlip3D ? "saturate(1.06)" : "none",
     }}
   >
-    <LineChart key={chartOutcome} candles={filtered} color={chartOutcome==="yes" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)"} />
+    <LineChartkey={chartOutcome} candles={filtered} color={chartOutcome==="yes" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)"} />
   </div>
 </div>
 
