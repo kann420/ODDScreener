@@ -260,7 +260,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
           left:0, top:0, bottom:0,
           width:`${pct}%`,
           borderRadius:"10px",
-          background:  isAsk ? "rgba(239,68,68,0.16)" : "rgba(34,197,94,0.14)"
+          background:  isAsk ? "rgba(239,68,68,0.14)" : "rgba(34,197,94,0.12)"
         }} />
         <div style={{
           position:"relative",
@@ -270,8 +270,9 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
           alignItems:"center",
           padding:"10px 10px",
           borderRadius:"10px",
-          border:"1px solid rgba(255,255,255,0.06)",
-          background:"rgba(255,255,255,0.02)"
+          border:"1px solid rgba(255,255,255,0.08)",
+          background:"rgba(255,255,255,0.03)",
+          transition:"all 0.15s ease"
         }}>
           <div className={isAsk ? "red" : "green"} style={{fontWeight: 900}}>
             {(Number(r.price)*100).toFixed(0)}¢
@@ -304,7 +305,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
       <div style={{display:"flex", alignItems:"center", justifyContent:"space-between"}}>
         <div style={{fontWeight:900, fontSize:"13px"}}>Order Book</div>
         <div className="select-wrap">
-          <select className="select" value={side} onChange={(e)=>setSide(e.target. value)}>
+          <select className="select" value={side} onChange={(e)=>setSide(e.target.value)}>
             <option value="yes">YES</option>
             <option value="no">NO</option>
           </select>
@@ -327,7 +328,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
 
       <div style={{marginTop:"10px"}}>
         <div style={{display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px"}}>
-          <span className="pill" style={{color:"#fff", background:"rgba(239,68,68,0.18)"}}>Asks ({side. toUpperCase()})</span>
+          <span className="pill" style={{color:"#fff", background:"rgba(239,68,68,0.20)", border:"1px solid rgba(239,68,68,0.30)", fontWeight:800}}>Asks ({side.toUpperCase()})</span>
         </div>
         <div ref={asksRef} style={listStyle}>
           {asks.map((r,i)=>(
@@ -353,7 +354,7 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
 
       <div style={{marginTop:"12px"}}>
         <div style={{display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px"}}>
-          <span className="pill" style={{color:"#fff", background:"rgba(34,197,94,0.18)"}}>Bids ({side.toUpperCase()})</span>
+          <span className="pill" style={{color:"#fff", background:"rgba(34,197,94,0.20)", border:"1px solid rgba(34,197,94,0.30)", fontWeight:800}}>Bids ({side.toUpperCase()})</span>
         </div>
         <div ref={bidsRef} style={listStyle}>
           {bids.map((r,i)=>(
