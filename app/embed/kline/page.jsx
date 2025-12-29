@@ -401,14 +401,15 @@ useEffect(() => {
   return () => raf && cancelAnimationFrame(raf);
 }, [chartOutcome]);
   const chartCandlesBase = candlesYes;
-  const chartCandles = useMemo(() => {
-
+  
+  // subtle 3D flip like the reference video
   useEffect(() => {
-    // subtle 3D flip like the reference video
     setIsFlip3D(true);
     const t = setTimeout(() => setIsFlip3D(false), 220);
     return () => clearTimeout(t);
   }, [chartOutcome]);
+
+  const chartCandles = useMemo(() => {
     // Display series morphs from YES to NO via flipT: v = lerp(v, 1-v)
     if (!chartCandlesBase?.length) return [];
     return chartCandlesBase.map(c => {
