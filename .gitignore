@@ -1,6 +1,5 @@
 node_modules
 .next
-!.next/cache
 out
 dist
 .env
