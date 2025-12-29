@@ -187,7 +187,7 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
 }
 
 .brand-beta{
-  grid-column:-1;
+  grid-column:-0.5;
   grid-row:2;
   margin-top:3px;
   font-size:10px;
