@@ -243,6 +243,27 @@ function OrderBookPoly({ ob, defaultSide="yes" }){
   const asks = useMemo(()=> [... ob.asks].sort((a,b)=>Number(b.price)-Number(a.price)), [ob]);
   const bids = useMemo(()=> [...ob.bids].sort((a,b)=>Number(b.price)-Number(a.price)), [ob]);
 
+  // Calculate cumulative totals for orderbook depth
+  const asksCum = useMemo(() => {
+    const cum = [];
+    let sum = 0;
+    for (let i = 0; i < asks.length; i++) {
+      sum += Number(asks[i].total) || 0;
+      cum.push(sum);
+    }
+    return cum;
+  }, [asks]);
+
+  const bidsCum = useMemo(() => {
+    const cum = [];
+    let sum = 0;
+    for (let i = 0; i < bids.length; i++) {
+      sum += Number(bids[i].total) || 0;
+      cum.push(sum);
+    }
+    return cum;
+  }, [bids]);
+
   // Depth shading like Polymarket: per-level TOTAL (USD) normalized per side
 const maxLevelAsk = Math.max(1, ...asks.map(r => Number(r.total) || 0));
 const maxLevelBid = Math.max(1, ...bids.map(r => Number(r.total) || 0));
@@ -300,7 +321,7 @@ return (
       <div style={{display:"flex", alignItems:"center", justifyContent:"space-between"}}>
         <div style={{fontWeight:900, fontSize:"13px"}}>Order Book</div>
         <div className="select-wrap">
-          <select className="select" value={side} onChange={(e)=>setSide(e.target. value)}>
+          <select className="select" value={side} onChange={(e)=>setSide(e.target.value)}>
             <option value="yes">YES</option>
             <option value="no">NO</option>
           </select>
@@ -323,7 +344,7 @@ return (
 
       <div style={{marginTop:"10px"}}>
         <div style={{display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px"}}>
-          <span className="pill" style={{color:"#fff", background:"rgba(239,68,68,0.18)"}}>Asks ({side. toUpperCase()})</span>
+          <span className="pill" style={{color:"#fff", background:"rgba(239,68,68,0.18)"}}>Asks ({side.toUpperCase()})</span>
         </div>
         <div ref={asksRef} style={listStyle}>
           {asks.map((r,i)=>(
@@ -396,15 +417,16 @@ useEffect(() => {
   raf = requestAnimationFrame(tick);
   return () => raf && cancelAnimationFrame(raf);
 }, [chartOutcome]);
-  const chartCandlesBase = candlesYes;
-  const chartCandles = useMemo(() => {
-
+  
   useEffect(() => {
     // subtle 3D flip like the reference video
     setIsFlip3D(true);
     const t = setTimeout(() => setIsFlip3D(false), 220);
     return () => clearTimeout(t);
   }, [chartOutcome]);
+  
+  const chartCandlesBase = candlesYes;
+  const chartCandles = useMemo(() => {
     // Display series morphs from YES to NO via flipT: v = lerp(v, 1-v)
     if (!chartCandlesBase?.length) return [];
     return chartCandlesBase.map(c => {
@@ -518,7 +540,7 @@ useEffect(() => {
       filter: isFlip3D ? "saturate(1.06)" : "none",
     }}
   >
-    <LineChartkey={chartOutcome} candles={filtered} color={chartOutcome==="yes" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)"} />
+    <LineChart key={chartOutcome} candles={filtered} color={chartOutcome==="yes" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)"} />
   </div>
 </div>
 
