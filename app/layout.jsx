@@ -1,42 +1,56 @@
-import "./globals.css";
+/* ===== ODDSCREENER BRAND (match reference) ===== */
+.brand {
+  display: inline-flex;
+  align-items: center;              /* CHỐT: không lệch với nav */
+  gap: 12px;
+  text-decoration: none;
+  height: 56px;                     /* khớp topbar height phổ biến */
+}
 
-export const metadata = {
-  title: "Opinion GMGN Clone (Demo)",
-  description: "Demo UI for Opinion explorer + embedded chart service"
-};
+.brand-icon {
+  width: 36px;                      /* TO hơn giống hình */
+  height: 36px;
+  flex: 0 0 auto;
+}
 
-export default function RootLayout({ children }) {
-  return (
-    <html lang="vi">
-      <body>
-        <div className="topbar">
-          <div className="container">
-            <div className="topbar-inner">
-              <div className="brand">
-                <div className="brand-logo">
-                  <div className="brand-name">
-                    <span style={{color:"#fff"}}>ODDS</span>
-                    <span className="brand-screener">creener</span>
-                  </div>
-                  <div className="brand-beta">Beta</div>
-                </div>
-              </div>
-              <div className="nav">
-                <a href="/">Discover</a>
-                <a href="/portfolio">Portfolio</a>
-                <a href="/watchlist">Watchlist</a>
-              </div>
-              <div className="spacer" />
-              <div className="search">
-                <span className="muted">Search</span>
-                <span className="pill mono">Ctrl</span>
-                <span className="pill mono">K</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="container">{children}</div>
-      </body>
-    </html>
-  );
+.brand-wordmark {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;          /* CHỐT: canh giữa theo chiều dọc */
+  line-height: 1;
+}
+
+.brand-line1 {
+  display: inline-flex;
+  align-items: baseline;
+  font-weight: 800;
+  font-size: 22px;                  /* TO hơn */
+  letter-spacing: 0.2px;
+}
+
+.brand-odds {
+  color: #ffffff;                   /* ODDS màu trắng (dark navbar) */
+}
+
+.brand-screener {
+  color: #34D399;                   /* creener xanh */
+}
+
+/* line2 để beta nằm dưới phần "creener" */
+.brand-line2 {
+  display: flex;
+  align-items: center;
+  margin-top: 3px;
+}
+
+.brand-spacer {
+  width: 4.2ch;                     /* đúng 4 chữ "ODDS" -> đẩy beta sang dưới creener */
+  flex: 0 0 auto;
+}
+
+.brand-beta {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.75);
 }
