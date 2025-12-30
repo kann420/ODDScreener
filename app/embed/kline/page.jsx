@@ -69,17 +69,22 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)", range="1d" }){
   // Render with a consistent point count so transitions (YES<->NO, range) look smooth
   const N = 160;
 
-  const formatTooltipLabel = (ms, range) => {
-    const d = new Date(ms);
-    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    
-    // Format time in 12-hour am/pm format
+  // Helper function to format time in 12-hour am/pm format
+  const formatTime12Hour = (d) => {
     let hours = d.getHours();
     const ampm = hours >= 12 ? 'pm' : 'am';
     hours = hours % 12;
     hours = hours ? hours : 12; // the hour '0' should be '12'
     const minutes = d.getMinutes().toString().padStart(2, '0');
+    return { hours, minutes, ampm };
+  };
+
+  const formatTooltipLabel = (ms) => {
+    const d = new Date(ms);
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    
+    const { hours, minutes, ampm } = formatTime12Hour(d);
     const month = monthNames[d.getMonth()];
     const day = d.getDate();
     const year = d.getFullYear();
@@ -95,11 +100,7 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)", range="1d" }){
     
     if (range === "1h" || range === "6h") {
       // Show time in 12:00pm format
-      let hours = d.getHours();
-      const ampm = hours >= 12 ? 'pm' : 'am';
-      hours = hours % 12;
-      hours = hours ? hours : 12; // the hour '0' should be '12'
-      const minutes = d.getMinutes().toString().padStart(2, '0');
+      const { hours, minutes, ampm } = formatTime12Hour(d);
       return `${hours}:${minutes}${ampm}`;
     } else if (range === "1d") {
       // Show date like "Dec 29"
@@ -306,7 +307,7 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)", range="1d" }){
             fontSize="11"
             fontFamily='ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
           >
-            {formatTooltipLabel(hv.t, range)}
+            {formatTooltipLabel(hv.t)}
           </text>
         </g>
       )}
