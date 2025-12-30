@@ -610,7 +610,7 @@ useEffect(() => {
       fontWeight:"900",
       color: chartOutcome==="yes" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)"
     }}>
-      {fmtPct(lastPct)} chance
+      {fmtPct(lastPct)} CHANCE
     </div>
   </div>
 </div>
