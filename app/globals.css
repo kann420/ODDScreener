@@ -160,39 +160,60 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   position: relative; /* Enable positioning for Santa hat */
 }
 
-/* Santa Hat - Main body (red triangular part) */
+/* Santa Hat - Main body (red part with realistic shape) */
 .brand-icon::before {
   content: "";
   position: absolute;
-  top: -18px;
-  left: 5px;
-  width: 28px;
-  height: 26px;
-  background: 
-    linear-gradient(to bottom right, transparent 49.5%, var(--danger) 50%),
-    linear-gradient(to bottom left, transparent 49.5%, var(--danger) 50%);
-  background-size: 51% 100%, 51% 100%;
-  background-position: left top, right top;
-  background-repeat: no-repeat;
-  transform: rotate(30deg);
+  top: -16px;
+  left: 6px;
+  width: 26px;
+  height: 28px;
+  background: linear-gradient(135deg, #ff5757 0%, #ef4444 45%, #dc2626 100%);
+  border-radius: 45% 45% 2% 2% / 60% 60% 5% 5%;
+  transform: rotate(28deg);
   transform-origin: bottom center;
-  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
   z-index: 1;
-  border-bottom: 2.5px solid white; /* White fur trim */
+  /* Fluffy white fur trim at the base using box-shadow */
+  box-shadow: 
+    0 27px 0 -1px white,
+    -2px 27px 0 -1px white,
+    2px 27px 0 -1px white,
+    -4px 26px 0 -1px rgba(255, 255, 255, 0.9),
+    4px 26px 0 -1px rgba(255, 255, 255, 0.9),
+    -1px 28px 0 -1px rgba(255, 255, 255, 0.95),
+    1px 28px 0 -1px rgba(255, 255, 255, 0.95),
+    -3px 27.5px 0 -1px rgba(255, 255, 255, 0.85),
+    3px 27.5px 0 -1px rgba(255, 255, 255, 0.85),
+    0 26px 0 0 rgba(255, 255, 255, 0.1),
+    0 28px 2px 0 rgba(0, 0, 0, 0.2);
 }
 
-/* Santa Hat - White pompom at the top */
+/* Santa Hat - Fluffy white pompom at the top */
 .brand-icon::after {
   content: "";
   position: absolute;
-  top: -22px;
+  top: -21px;
   left: 27px;
-  width: 10px;
-  height: 10px;
+  width: 11px;
+  height: 11px;
   background: white;
   border-radius: 50%;
-  box-shadow: 0 0 8px rgba(255, 255, 255, 0.9), 0 2px 3px rgba(0, 0, 0, 0.3);
   z-index: 2;
+  /* Multiple box-shadows to create fluffy appearance */
+  box-shadow: 
+    0 0 0 1px rgba(255, 255, 255, 0.9),
+    -1px -1px 0 1px rgba(255, 255, 255, 0.8),
+    1px -1px 0 1px rgba(255, 255, 255, 0.8),
+    -1px 1px 0 1px rgba(255, 255, 255, 0.8),
+    1px 1px 0 1px rgba(255, 255, 255, 0.8),
+    -2px 0 0 1px rgba(255, 255, 255, 0.7),
+    2px 0 0 1px rgba(255, 255, 255, 0.7),
+    0 -2px 0 1px rgba(255, 255, 255, 0.7),
+    0 2px 0 1px rgba(255, 255, 255, 0.7),
+    0 0 8px rgba(255, 255, 255, 0.95),
+    0 0 12px rgba(255, 255, 255, 0.7),
+    0 3px 4px rgba(0, 0, 0, 0.3);
 }
 
 /* Use grid so BETA sits under the "creener" part exactly */
