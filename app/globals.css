@@ -158,6 +158,7 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   height:38px;
   flex:0 0 auto;
   position: relative; /* Enable positioning for Santa hat */
+  overflow: visible; /* Allow Santa hat to extend beyond icon bounds */
 }
 
 /* Santa Hat - Main body (red triangular part) */
