@@ -13,6 +13,11 @@ function fmt(n){
   return num.toFixed(0);
 }
 
+function fmtPct(p) {
+  // Opinion-like: show one decimal (e.g. 0.2%, 99.8%)
+  return `${p.toFixed(1)}%`;
+}
+
 function makeMockCandles(count=140){
   let seed = 1337;
   const rnd = () => (seed = (seed * 48271) % 0x7fffffff) / 0x7fffffff;
@@ -179,11 +184,6 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)", range="1d" }){
 
   const lastPct = closes.length ? closes[closes.length-1] * 100 : 0;
 
-  const fmtPct = (p) => {
-    // Opinion-like: show one decimal (e.g. 0.2%, 99.8%)
-    return `${p.toFixed(1)}%`;
-  };
-
   const onMove = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const px = e.clientX - rect.left;
@@ -276,11 +276,6 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)", range="1d" }){
 
       {/* last/hover dot */}
       <circle cx={hx} cy={hy} r="4.2" fill={color} />
-
-      {/* top-left label */}
-      <text x={padL} y={padT+6} fill={color} fontSize="22" fontWeight="900">
-        {fmtPct(lastPct)} chance
-      </text>
 
       {/* tooltip */}
       {hoverIdx !== null && hv && (
@@ -548,6 +543,12 @@ useEffect(() => {
     return arr.length >= 5 ? arr : chartCandles.slice(-20);
   }, [chartCandles, range]);
 
+  // Calculate last percentage for display
+  const lastPct = useMemo(() => {
+    const lastClose = filtered.at(-1)?.close;
+    return lastClose !== undefined ? lastClose * 100 : 0;
+  }, [filtered]);
+
   return (
     <div style={{padding:"10px"}}>
       <div style={{display:"flex", gap:"10px", alignItems:"center", justifyContent:"space-between"}}>
@@ -602,6 +603,13 @@ useEffect(() => {
     >
       NO
     </button>
+  </div>
+  <div style={{
+    fontSize:"12px",
+    fontWeight:"700",
+    color: chartOutcome==="yes" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)"
+  }}>
+    {fmtPct(lastPct)} chance
   </div>
 </div>
 
