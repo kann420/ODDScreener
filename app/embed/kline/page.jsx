@@ -277,11 +277,6 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)", range="1d" }){
       {/* last/hover dot */}
       <circle cx={hx} cy={hy} r="4.2" fill={color} />
 
-      {/* top-left label */}
-      <text x={padL} y={padT+6} fill={color} fontSize="22" fontWeight="900">
-        {fmtPct(lastPct)} chance
-      </text>
-
       {/* tooltip */}
       {hoverIdx !== null && hv && (
         <g>
@@ -548,6 +543,16 @@ useEffect(() => {
     return arr.length >= 5 ? arr : chartCandles.slice(-20);
   }, [chartCandles, range]);
 
+  // Calculate last percentage for display
+  const lastPct = useMemo(() => {
+    const lastClose = filtered.at(-1)?.close;
+    return lastClose !== undefined ? lastClose * 100 : 0;
+  }, [filtered]);
+
+  const fmtPct = (p) => {
+    return `${p.toFixed(1)}%`;
+  };
+
   return (
     <div style={{padding:"10px"}}>
       <div style={{display:"flex", gap:"10px", alignItems:"center", justifyContent:"space-between"}}>
@@ -602,6 +607,13 @@ useEffect(() => {
     >
       NO
     </button>
+  </div>
+  <div style={{
+    fontSize:"12px",
+    fontWeight:"700",
+    color: chartOutcome==="yes" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)"
+  }}>
+    {fmtPct(lastPct)} chance
   </div>
 </div>
 
