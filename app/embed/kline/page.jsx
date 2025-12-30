@@ -60,7 +60,7 @@ function makeMockTrades(){
   return rows;
 }
 
-function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
+function LineChart({ candles, color="rgba(34,211,238,0.95)", range="1d" }){
   const [hoverIdx, setHoverIdx] = useState(null);
 
   const w = 980, h = 320;
@@ -74,6 +74,33 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
     return iso.slice(0,16).replace("T"," ") + " UTC";
   };
 
+  // Format X-axis labels based on range
+  const formatXAxisLabel = (ms, range) => {
+    const d = new Date(ms);
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    
+    if (range === "1h" || range === "6h") {
+      // Show time in 12:00pm format
+      let hours = d.getHours();
+      const ampm = hours >= 12 ? 'pm' : 'am';
+      hours = hours % 12;
+      hours = hours ? hours : 12; // the hour '0' should be '12'
+      const minutes = d.getMinutes().toString().padStart(2, '0');
+      return `${hours}:${minutes}${ampm}`;
+    } else if (range === "1d") {
+      // Show date like "Dec 29"
+      const month = monthNames[d.getMonth()];
+      const day = d.getDate();
+      return `${month} ${day}`;
+    } else {
+      // 1w or all: Show dates like "Dec 22"
+      const month = monthNames[d.getMonth()];
+      const day = d.getDate();
+      return `${month} ${day}`;
+    }
+  };
+
   const sampled = useMemo(() => {
     if (!candles || candles.length === 0) return [];
     const out = [];
@@ -84,6 +111,28 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
     }
     return out;
   }, [candles]);
+
+  // Generate tick positions for X-axis (approximately 4-6 labels)
+  const getXAxisTicks = useMemo(() => {
+    if (!sampled || sampled.length === 0) return [];
+    
+    const numTicks = 5; // Show 5 labels across the chart
+    const ticks = [];
+    
+    for (let i = 0; i < numTicks; i++) {
+      const idx = Math.round((i / (numTicks - 1)) * (sampled.length - 1));
+      const candle = sampled[idx];
+      if (candle) {
+        ticks.push({
+          idx,
+          timestamp: candle.t,
+          label: formatXAxisLabel(candle.t, range)
+        });
+      }
+    }
+    
+    return ticks;
+  }, [sampled, range]);
 
   const closes = useMemo(() => sampled.map(c => c.close), [sampled]);
   const min = useMemo(() => closes.length ? Math.min(...closes) : 0, [closes]);
@@ -184,6 +233,24 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
           </text>
         </g>
       ))}
+
+      {/* X-axis time labels */}
+      {getXAxisTicks.map((tick, i) => {
+        const tickX = x(Math.round((tick.idx / (sampled.length - 1)) * (N - 1)));
+        return (
+          <text
+            key={`tick-${i}`}
+            x={tickX}
+            y={h - padB + 18}
+            fill="rgba(148,163,184,0.95)"
+            fontSize="11"
+            fontFamily='ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+            textAnchor="middle"
+          >
+            {tick.label}
+          </text>
+        );
+      })}
 
       {/* area */}
       {areaPath && <path d={areaPath} fill="url(#areaGrad)" />}
@@ -540,7 +607,7 @@ useEffect(() => {
       filter: isFlip3D ? "saturate(1.06)" : "none",
     }}
   >
-    <LineChart key={chartOutcome} candles={filtered} color={chartOutcome==="yes" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)"} />
+    <LineChart key={chartOutcome} candles={filtered} color={chartOutcome==="yes" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)"} range={range} />
   </div>
 </div>
 
