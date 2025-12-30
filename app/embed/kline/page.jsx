@@ -74,29 +74,17 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)", range="1d" }){
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     
-    if (range === "1h" || range === "6h") {
-      // Show time in 12-hour am/pm format with date for short timeframes
-      let hours = d.getHours();
-      const ampm = hours >= 12 ? 'pm' : 'am';
-      hours = hours % 12;
-      hours = hours ? hours : 12; // the hour '0' should be '12'
-      const minutes = d.getMinutes().toString().padStart(2, '0');
-      const month = monthNames[d.getMonth()];
-      const day = d.getDate();
-      const year = d.getFullYear();
-      return `${hours}:${minutes}${ampm}, ${month} ${day}, ${year}`;
-    } else {
-      // For longer timeframes, show date with time
-      const month = monthNames[d.getMonth()];
-      const day = d.getDate();
-      const year = d.getFullYear();
-      let hours = d.getHours();
-      const ampm = hours >= 12 ? 'pm' : 'am';
-      hours = hours % 12;
-      hours = hours ? hours : 12;
-      const minutes = d.getMinutes().toString().padStart(2, '0');
-      return `${hours}:${minutes}${ampm}, ${month} ${day}, ${year}`;
-    }
+    // Format time in 12-hour am/pm format
+    let hours = d.getHours();
+    const ampm = hours >= 12 ? 'pm' : 'am';
+    hours = hours % 12;
+    hours = hours ? hours : 12; // the hour '0' should be '12'
+    const minutes = d.getMinutes().toString().padStart(2, '0');
+    const month = monthNames[d.getMonth()];
+    const day = d.getDate();
+    const year = d.getFullYear();
+    
+    return `${hours}:${minutes}${ampm}, ${month} ${day}, ${year}`;
   };
 
   // Format X-axis labels based on range
