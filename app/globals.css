@@ -169,8 +169,8 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   width: 28px;
   height: 26px;
   background: 
-    linear-gradient(to bottom right, transparent 49.5%, #ef4444 50%),
-    linear-gradient(to bottom left, transparent 49.5%, #ef4444 50%);
+    linear-gradient(to bottom right, transparent 49.5%, var(--danger) 50%),
+    linear-gradient(to bottom left, transparent 49.5%, var(--danger) 50%);
   background-size: 51% 100%, 51% 100%;
   background-position: left top, right top;
   background-repeat: no-repeat;
