@@ -13,37 +13,14 @@ export default function RootLayout({ children }) {
           <div className="container">
             <div className="topbar-inner">
               <a className="brand" href="/" aria-label="ODDScreener">
-                {/* Icon (match reference) */}
-                <svg className="brand-icon" viewBox="0 0 64 64" aria-hidden="true">
-                  <defs>
-                    <linearGradient id="oddsMetal" x1="8" y1="56" x2="56" y2="8" gradientUnits="userSpaceOnUse">
-                      <stop offset="0" stopColor="#0B1D33" />
-                      <stop offset="0.38" stopColor="#7BDFF2" />
-                      <stop offset="0.70" stopColor="#D7F9FF" />
-                      <stop offset="1" stopColor="#1F6FEB" />
-                    </linearGradient>
-                    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
-                      <feGaussianBlur stdDeviation="1.1" result="blur" />
-                      <feMerge>
-                        <feMergeNode in="blur" />
-                        <feMergeNode in="SourceGraphic" />
-                      </feMerge>
-                    </filter>
-                  </defs>
-
-                  <circle
-                    cx="32"
-                    cy="32"
-                    r="21"
-                    fill="none"
-                    stroke="url(#oddsMetal)"
-                    strokeWidth="9"
-                    strokeLinecap="round"
-                    strokeDasharray="112 30"
-                    transform="rotate(-35 32 32)"
-                    filter="url(#softGlow)"
-                  />
-                </svg>
+                {/* Santa Logo */}
+                <img 
+                  className="brand-icon" 
+                  src="/odds_santa_refined.svg" 
+                  alt="ODDScreener Logo"
+                  width="40"
+                  height="40"
+                />
 
                 {/* Wordmark */}
                 <span className="brand-wordmark">

@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="santaMetal" x1="8" y1="56" x2="56" y2="8" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stopColor="#c41e3a" />
+      <stop offset="0.38" stopColor="#ef4444" />
+      <stop offset="0.70" stopColor="#fca5a5" />
+      <stop offset="1" stopColor="#dc2626" />
+    </linearGradient>
+    <linearGradient id="santaAccent" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stopColor="#fef3c7" />
+      <stop offset="0.5" stopColor="#fde047" />
+      <stop offset="1" stopColor="#facc15" />
+    </linearGradient>
+    <filter id="santaGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="1.2" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Main circular element with festive red gradient -->
+  <circle
+    cx="32"
+    cy="32"
+    r="21"
+    fill="none"
+    stroke="url(#santaMetal)"
+    strokeWidth="9"
+    strokeLinecap="round"
+    strokeDasharray="112 30"
+    transform="rotate(-35 32 32)"
+    filter="url(#santaGlow)"
+  />
+  
+  <!-- Small golden accent circle for festive touch -->
+  <circle
+    cx="32"
+    cy="32"
+    r="8"
+    fill="none"
+    stroke="url(#santaAccent)"
+    strokeWidth="2.5"
+    opacity="0.8"
+  />
+</svg>
