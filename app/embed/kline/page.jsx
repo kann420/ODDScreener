@@ -13,6 +13,11 @@ function fmt(n){
   return num.toFixed(0);
 }
 
+function fmtPct(p) {
+  // Opinion-like: show one decimal (e.g. 0.2%, 99.8%)
+  return `${p.toFixed(1)}%`;
+}
+
 function makeMockCandles(count=140){
   let seed = 1337;
   const rnd = () => (seed = (seed * 48271) % 0x7fffffff) / 0x7fffffff;
@@ -178,11 +183,6 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)", range="1d" }){
   });
 
   const lastPct = closes.length ? closes[closes.length-1] * 100 : 0;
-
-  const fmtPct = (p) => {
-    // Opinion-like: show one decimal (e.g. 0.2%, 99.8%)
-    return `${p.toFixed(1)}%`;
-  };
 
   const onMove = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -548,10 +548,6 @@ useEffect(() => {
     const lastClose = filtered.at(-1)?.close;
     return lastClose !== undefined ? lastClose * 100 : 0;
   }, [filtered]);
-
-  const fmtPct = (p) => {
-    return `${p.toFixed(1)}%`;
-  };
 
   return (
     <div style={{padding:"10px"}}>
