@@ -161,7 +161,7 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
 }
 
 /* Santa Hat - Main body (red triangular part) */
-.brand-icon::before{
+.brand-icon::before {
   content: "";
   position: absolute;
   top: -18px;
@@ -182,7 +182,7 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
 }
 
 /* Santa Hat - White pompom at the top */
-.brand-icon::after{
+.brand-icon::after {
   content: "";
   position: absolute;
   top: -22px;
