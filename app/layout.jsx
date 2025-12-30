@@ -17,9 +17,7 @@ export default function RootLayout({ children }) {
                 <img 
                   className="brand-icon" 
                   src="/odds_santa_refined.svg" 
-                  alt="ODDScreener Logo"
-                  width="40"
-                  height="40"
+                  alt="ODDScreener Holiday Logo"
                 />
 
                 {/* Wordmark */}
