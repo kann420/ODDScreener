@@ -605,8 +605,8 @@ useEffect(() => {
     </button>
   </div>
   <div style={{
-    fontSize:"12px",
-    fontWeight:"700",
+    fontSize:"22px",
+    fontWeight:"900",
     color: chartOutcome==="yes" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)"
   }}>
     {fmtPct(lastPct)} chance
