@@ -69,6 +69,10 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)", range="1d" }){
   // Render with a consistent point count so transitions (YES<->NO, range) look smooth
   const N = 160;
 
+  // Month names for date formatting
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
   // Helper function to format time in 12-hour am/pm format
   const formatTime12Hour = (d) => {
     let hours = d.getHours();
@@ -81,8 +85,6 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)", range="1d" }){
 
   const formatTooltipLabel = (ms) => {
     const d = new Date(ms);
-    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     
     const { hours, minutes, ampm } = formatTime12Hour(d);
     const month = monthNames[d.getMonth()];
@@ -95,8 +97,6 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)", range="1d" }){
   // Format X-axis labels based on range
   const formatXAxisLabel = (ms, range) => {
     const d = new Date(ms);
-    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     
     if (range === "1h" || range === "6h") {
       // Show time in 12:00pm format
