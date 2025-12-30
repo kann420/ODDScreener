@@ -85,19 +85,16 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)", range="1d" }){
 
   const formatTooltipLabel = (ms) => {
     const d = new Date(ms);
-    
     const { hours, minutes, ampm } = formatTime12Hour(d);
     const month = monthNames[d.getMonth()];
     const day = d.getDate();
     const year = d.getFullYear();
-    
     return `${hours}:${minutes}${ampm}, ${month} ${day}, ${year}`;
   };
 
   // Format X-axis labels based on range
   const formatXAxisLabel = (ms, range) => {
     const d = new Date(ms);
-    
     if (range === "1h" || range === "6h") {
       // Show time in 12:00pm format
       const { hours, minutes, ampm } = formatTime12Hour(d);
