@@ -77,6 +77,8 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)", range="1d" }){
   // Format X-axis labels based on range
   const formatXAxisLabel = (ms, range) => {
     const d = new Date(ms);
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     
     if (range === "1h" || range === "6h") {
       // Show time in 12:00pm format
@@ -87,16 +89,12 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)", range="1d" }){
       const minutes = d.getMinutes().toString().padStart(2, '0');
       return `${hours}:${minutes}${ampm}`;
     } else if (range === "1d") {
-      // Show date like "Dec 29" with optional time
-      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      // Show date like "Dec 29"
       const month = monthNames[d.getMonth()];
       const day = d.getDate();
       return `${month} ${day}`;
     } else {
       // 1w or all: Show dates like "Dec 22"
-      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       const month = monthNames[d.getMonth()];
       const day = d.getDate();
       return `${month} ${day}`;
