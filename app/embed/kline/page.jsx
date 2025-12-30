@@ -569,47 +569,49 @@ useEffect(() => {
       <div style={{display:"grid", gridTemplateColumns:"1fr 340px", gap:"12px", marginTop:"10px"}}>
         <div className="panel" style={{padding:"10px"}}>
           <div style={{display:"flex", alignItems:"center", justifyContent:"space-between"}}>
-  <div style={{
-    display:"inline-flex",
-    border:"1px solid rgba(255,255,255,0.10)",
-    background:"rgba(255,255,255,0.03)",
-    borderRadius:"12px",
-    padding:"2px",
-    gap:"2px"
-  }}>
-    <button
-      className="btn"
-      onClick={()=>setChartOutcome("yes")}
-      style={{
-        padding:"6px 10px",
-        borderRadius:"10px",
-        opacity: chartOutcome==="yes" ? 1 : 0.65,
-        background: chartOutcome==="yes" ? "rgba(34,211,238,0.18)" : "transparent",
-        border: chartOutcome==="yes" ? "1px solid rgba(34,211,238,0.30)" : "1px solid transparent"
-      }}
-    >
-      YES
-    </button>
-    <button
-      className="btn"
-      onClick={()=>setChartOutcome("no")}
-      style={{
-        padding:"6px 10px",
-        borderRadius:"10px",
-        opacity: chartOutcome==="no" ? 1 : 0.65,
-        background: chartOutcome==="no" ? "rgba(168,85,247,0.16)" : "transparent",
-        border: chartOutcome==="no" ? "1px solid rgba(168,85,247,0.28)" : "1px solid transparent"
-      }}
-    >
-      NO
-    </button>
-  </div>
-  <div style={{
-    fontSize:"22px",
-    fontWeight:"900",
-    color: chartOutcome==="yes" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)"
-  }}>
-    {fmtPct(lastPct)} chance
+  <div style={{display:"flex", alignItems:"center", gap:"16px"}}>
+    <div style={{
+      display:"inline-flex",
+      border:"1px solid rgba(255,255,255,0.10)",
+      background:"rgba(255,255,255,0.03)",
+      borderRadius:"12px",
+      padding:"2px",
+      gap:"2px"
+    }}>
+      <button
+        className="btn"
+        onClick={()=>setChartOutcome("yes")}
+        style={{
+          padding:"6px 10px",
+          borderRadius:"10px",
+          opacity: chartOutcome==="yes" ? 1 : 0.65,
+          background: chartOutcome==="yes" ? "rgba(34,211,238,0.18)" : "transparent",
+          border: chartOutcome==="yes" ? "1px solid rgba(34,211,238,0.30)" : "1px solid transparent"
+        }}
+      >
+        YES
+      </button>
+      <button
+        className="btn"
+        onClick={()=>setChartOutcome("no")}
+        style={{
+          padding:"6px 10px",
+          borderRadius:"10px",
+          opacity: chartOutcome==="no" ? 1 : 0.65,
+          background: chartOutcome==="no" ? "rgba(168,85,247,0.16)" : "transparent",
+          border: chartOutcome==="no" ? "1px solid rgba(168,85,247,0.28)" : "1px solid transparent"
+        }}
+      >
+        NO
+      </button>
+    </div>
+    <div style={{
+      fontSize:"22px",
+      fontWeight:"900",
+      color: chartOutcome==="yes" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)"
+    }}>
+      {fmtPct(lastPct)} chance
+    </div>
   </div>
 </div>
 
