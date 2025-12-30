@@ -42,7 +42,7 @@ a{ color:inherit; text-decoration:none; }
   border:1px solid var(--border);
   border-radius: 10px;
   background: rgba(255,255,255,0.03);
-  min-width: 320px;
+  width: 340px;
   color: var(--muted);
   font-size: 13px;
 }
