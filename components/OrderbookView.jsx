@@ -483,23 +483,6 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
 
   const selectedCents = Number.isFinite(selectedPrice) ? selectedPrice * 100 : null;
 
-  // Mock trades data (API not available yet)
-  const mockTrades = [
-    { outcome: "NO", side: "BUY", price: 0.22, amount: 1700, total: 374, age: "1m", trader: "wolfofshelbyyy" },
-    { outcome: "NO", side: "SELL", price: 0.99, amount: 75, total: 74, age: "1m", trader: "nniu" },
-    { outcome: "NO", side: "SELL", price: 0.99, amount: 259, total: 256, age: "1m", trader: "0x38d...d34" },
-    { outcome: "NO", side: "SELL", price: 0.99, amount: 267, total: 264, age: "1m", trader: "0x968...21e" },
-    { outcome: "NO", side: "BUY", price: 0.22, amount: 259, total: 57, age: "1m", trader: "0x593...e97" },
-    { outcome: "NO", side: "SELL", price: 0.99, amount: 75, total: 74, age: "1m", trader: "0xa65...a67" },
-    { outcome: "NO", side: "SELL", price: 0.99, amount: 267, total: 264, age: "8m", trader: "0xa33...950" },
-    { outcome: "NO", side: "SELL", price: 0.99, amount: 75, total: 74, age: "8m", trader: "0xe5f...39b" },
-    { outcome: "NO", side: "BUY", price: 0.22, amount: 259, total: 57, age: "8m", trader: "wolfofshelbyyy" },
-    { outcome: "NO", side: "SELL", price: 0.99, amount: 267, total: 264, age: "8m", trader: "nniu" },
-    { outcome: "NO", side: "SELL", price: 0.99, amount: 259, total: 256, age: "13m", trader: "0x38d...d34" },
-    { outcome: "NO", side: "SELL", price: 0.99, amount: 75, total: 74, age: "13m", trader: "0x968...21e" },
-    { outcome: "NO", side: "BUY", price: 0.22, amount: 267, total: 59, age: "13m", trader: "0x593...e97" },
-  ];
-
   return (
     <div className="col" style={{ gap: 12 }}>
       {/* Header */}
@@ -620,33 +603,9 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
               <div className="tab">Top Traders</div>
               <div className="tab">Holders</div>
             </div>
-            <div style={{ padding: 10 }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Outcome</th>
-                    <th>Type</th>
-                    <th>Price</th>
-                    <th>Amount</th>
-                    <th>Total USD</th>
-                    <th>Age</th>
-                    <th>Trader</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mockTrades.map((t, idx) => (
-                    <tr key={idx}>
-                      <td>{t.outcome}</td>
-                      <td className={t.side === "BUY" ? "green badge" : "red badge"}>{t.side}</td>
-                      <td>{t.price}</td>
-                      <td>{t.amount >= 1000 ? (t.amount / 1000).toFixed(1) + "K" : t.amount}</td>
-                      <td>${t.total}</td>
-                      <td>{t.age}</td>
-                      <td className="mono">{t.trader}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div style={{ padding: 20, textAlign: "center" }}>
+              <div className="muted" style={{ fontSize: 12 }}>-</div>
+              <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Coming soon</div>
             </div>
           </div>
         </div>
