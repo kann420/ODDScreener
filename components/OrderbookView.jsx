@@ -68,10 +68,27 @@ function shortToken(t) {
   return `${s.slice(0, 10)}…${s.slice(-6)}`;
 }
 
-function buildDepth(rows) {
-  let cumShares = 0;
-  let cumTotal = 0;
-  return rows.map((r) => {
+// Asks: sort descending (84→79), cumulative from bottom (spread) up
+function buildAsksDepth(rows) {
+  if (!rows?.length) return [];
+  const sorted = [...rows].sort((a, b) => b.price - a.price);
+  // Calculate cumulative from bottom (spread) to top
+  const result = new Array(sorted.length);
+  let cumShares = 0, cumTotal = 0;
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    cumShares += sorted[i].shares;
+    cumTotal += sorted[i].total;
+    result[i] = { ...sorted[i], cumShares, cumTotal };
+  }
+  return result;
+}
+
+// Bids: sort descending (77→72), cumulative from top (spread) down
+function buildBidsDepth(rows) {
+  if (!rows?.length) return [];
+  const sorted = [...rows].sort((a, b) => b.price - a.price);
+  let cumShares = 0, cumTotal = 0;
+  return sorted.map((r) => {
     cumShares += r.shares;
     cumTotal += r.total;
     return { ...r, cumShares, cumTotal };
@@ -295,7 +312,17 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
   const [selectedPrice, setSelectedPrice] = useState(null);
   const [selectedSide, setSelectedSide] = useState(null);
 
+  // Extract market stats from marketData
+  const volume24h = marketData.volume24h || marketData.volume_24h || marketData.dayVolume || null;
+  const totalVolume = marketData.totalVolume || marketData.total_volume || marketData.volume || null;
+  const openInterest = marketData.openInterest || marketData.open_interest || null;
+  const rules = marketData.rules || marketData.description || marketData.marketRules || null;
+  const expiresAt = marketData.expiresAt || marketData.expires_at || marketData.endDate || marketData.end_date || null;
+
+  const [showRules, setShowRules] = useState(false);
+
   const abortRef = useRef(null);
+  const asksScrollRef = useRef(null);
 
   // Prevent re-applying same cached data every poll tick
   const appliedCacheAtRef = useRef(0);
@@ -423,8 +450,15 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
     return 0;
   }, [bids, asks]);
 
-  const bidsD = useMemo(() => buildDepth(bids), [bids]);
-  const asksD = useMemo(() => buildDepth(asks), [asks]);
+  const bidsD = useMemo(() => buildBidsDepth(bids), [bids]);
+  const asksD = useMemo(() => buildAsksDepth(asks), [asks]);
+
+  // Auto-scroll asks to bottom when data loads or outcome changes
+  useEffect(() => {
+    if (asksScrollRef.current && asksD.length > 0) {
+      asksScrollRef.current.scrollTop = asksScrollRef.current.scrollHeight;
+    }
+  }, [asksD, outcome]);
 
   const maxBidDepth = useMemo(() => Math.max(1, ...bidsD.map((r) => r.cumTotal)), [bidsD]);
   const maxAskDepth = useMemo(() => Math.max(1, ...asksD.map((r) => r.cumTotal)), [asksD]);
@@ -449,261 +483,341 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
 
   const selectedCents = Number.isFinite(selectedPrice) ? selectedPrice * 100 : null;
 
+  // Mock trades data (API not available yet)
+  const mockTrades = [
+    { outcome: "NO", side: "BUY", price: 0.22, amount: 1700, total: 374, age: "1m", trader: "wolfofshelbyyy" },
+    { outcome: "NO", side: "SELL", price: 0.99, amount: 75, total: 74, age: "1m", trader: "nniu" },
+    { outcome: "NO", side: "SELL", price: 0.99, amount: 259, total: 256, age: "1m", trader: "0x38d...d34" },
+    { outcome: "NO", side: "SELL", price: 0.99, amount: 267, total: 264, age: "1m", trader: "0x968...21e" },
+    { outcome: "NO", side: "BUY", price: 0.22, amount: 259, total: 57, age: "1m", trader: "0x593...e97" },
+    { outcome: "NO", side: "SELL", price: 0.99, amount: 75, total: 74, age: "1m", trader: "0xa65...a67" },
+    { outcome: "NO", side: "SELL", price: 0.99, amount: 267, total: 264, age: "8m", trader: "0xa33...950" },
+    { outcome: "NO", side: "SELL", price: 0.99, amount: 75, total: 74, age: "8m", trader: "0xe5f...39b" },
+    { outcome: "NO", side: "BUY", price: 0.22, amount: 259, total: 57, age: "8m", trader: "wolfofshelbyyy" },
+    { outcome: "NO", side: "SELL", price: 0.99, amount: 267, total: 264, age: "8m", trader: "nniu" },
+    { outcome: "NO", side: "SELL", price: 0.99, amount: 259, total: 256, age: "13m", trader: "0x38d...d34" },
+    { outcome: "NO", side: "SELL", price: 0.99, amount: 75, total: 74, age: "13m", trader: "0x968...21e" },
+    { outcome: "NO", side: "BUY", price: 0.22, amount: 267, total: 59, age: "13m", trader: "0x593...e97" },
+  ];
+
   return (
     <div className="col" style={{ gap: 12 }}>
-      <div className="panel" style={{ padding: 14 }}>
+      {/* Header */}
+      <div className="panel" style={{ padding: "14px 16px" }}>
+        {/* Top row: Market # and title */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div>
-            <div className="muted" style={{ fontSize: 12 }}>Market #{marketId}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 4 }}>
-              <div style={{ fontWeight: 900, fontSize: 16 }}>{title || "Market"}</div>
-              <a
+            <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>Market #{marketId}</div>
+            <div style={{ fontWeight: 900, fontSize: 16, display: "flex", alignItems: "center", gap: 12 }}>
+              {title || "Market"}
+              <a 
                 href={`https://app.opinion.trade/detail?topicId=${marketId}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn ghost"
-                style={{ 
-                  display: "inline-flex", 
-                  alignItems: "center", 
-                  gap: 6, 
-                  padding: "4px 10px",
-                  fontSize: 12,
-                  textDecoration: "none"
-                }}
+                className="btn"
+                style={{ fontSize: 11, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}
               >
-                <img src="/opinion-logo.svg" alt="Opinion" width="16" height="16" style={{ borderRadius: "50%" }} />
+                <img src="/opinion-logo.svg" alt="Opinion" width="16" height="16" />
                 View on Opinion
               </a>
             </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span className="tag"><span className="dot"></span>LIVE</span>
+          </div>
+        </div>
 
-            {/* Market Info Bar */}
-            <div style={{ 
-              display: "flex", 
-              gap: 24, 
-              marginTop: 12, 
-              flexWrap: "wrap",
-              fontSize: 13
-            }}>
-              <div>
-                <div className="muted" style={{ fontSize: 11, marginBottom: 2 }}>Chance</div>
-                <div className="mono" style={{ fontWeight: 600 }}>
-                  {loading && mid === 0 ? (
-                    <div className="skeleton" style={{ width: 45, height: 16, borderRadius: 4 }} />
-                  ) : (
-                    fmtChance(mid)
-                  )}
-                </div>
-              </div>
-              <div>
-                <div className="muted" style={{ fontSize: 11, marginBottom: 2 }}>Expires</div>
-                <div className="mono">{fmtDate(marketData?.endDate || marketData?.end_date || marketData?.expiresAt || marketData?.expires_at)}</div>
-              </div>
-              <div>
-                <div className="muted" style={{ fontSize: 11, marginBottom: 2 }}>24h Change</div>
-                <div className="mono" style={{ 
-                  color: Number(marketData?.change24h || marketData?.priceChange24h || 0) >= 0 ? "#4ade80" : "#f87171" 
-                }}>
-                  {fmtPercent(marketData?.change24h || marketData?.priceChange24h || marketData?.price_change_24h)}
-                </div>
-              </div>
-              <div>
-                <div className="muted" style={{ fontSize: 11, marginBottom: 2 }}>24h Volume</div>
-                <div className="mono">{fmtUsdCompact(marketData?.volume24h || marketData?.vol24h || marketData?.volume_24h)}</div>
-              </div>
-              <div>
-                <div className="muted" style={{ fontSize: 11, marginBottom: 2 }}>Total Volume</div>
-                <div className="mono">{fmtUsdCompact(marketData?.volume || marketData?.volumeTotal || marketData?.volume_total)}</div>
-              </div>
-              <div>
-                <div className="muted" style={{ fontSize: 11, marginBottom: 2 }}>Open Interest</div>
-                <div className="mono">{fmtUsdCompact(marketData?.openInterest || marketData?.open_interest || marketData?.oi)}</div>
-              </div>
-              <div>
-                <div className="muted" style={{ fontSize: 11, marginBottom: 2 }}>Volatility</div>
-                <div className="mono">{fmtPercent(marketData?.volatility || marketData?.vol)}</div>
-              </div>
+        {/* Stats row */}
+        <div style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: 24, 
+          marginTop: 14, 
+          flexWrap: "wrap",
+          fontSize: 12 
+        }}>
+          <div>
+            <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Chance</div>
+            <div style={{ fontWeight: 700, color: "#22d3ee" }}>{mid ? (mid * 100).toFixed(1) + "%" : "-"}</div>
+          </div>
+          <div>
+            <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Expires</div>
+            <div style={{ fontWeight: 700 }}>{expiresAt ? new Date(expiresAt).toLocaleDateString() : "-"}</div>
+          </div>
+          <div>
+            <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>24h Change</div>
+            <div style={{ fontWeight: 700 }}>-</div>
+          </div>
+          <div>
+            <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>24h Volume</div>
+            <div style={{ fontWeight: 700, color: "#22d3ee" }}>{volume24h ? `$${fmtQty(volume24h)}` : "-"}</div>
+          </div>
+          <div>
+            <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Total Volume</div>
+            <div style={{ fontWeight: 700, color: "#22d3ee" }}>{totalVolume ? `$${fmtQty(totalVolume)}` : "-"}</div>
+          </div>
+          <div>
+            <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Open Interest</div>
+            <div style={{ fontWeight: 700 }}>{openInterest ? `$${fmtQty(openInterest)}` : "-"}</div>
+          </div>
+          <div>
+            <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Volatility</div>
+            <div style={{ fontWeight: 700 }}>-</div>
+          </div>
+          <div style={{ marginLeft: "auto" }}>
+            <button 
+              className="btn" 
+              style={{ fontSize: 11, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}
+              onClick={() => setShowRules(!showRules)}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14,2 14,8 20,8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
+                <polyline points="10,9 9,9 8,9" />
+              </svg>
+              Rules
+            </button>
+          </div>
+        </div>
 
-              {/* Rules tooltip */}
-              {(marketData?.rules || marketData?.rule || marketData?.description || marketData?.marketDescription || marketData?.market_description) && (
-                <div style={{ position: "relative" }} className="rules-tooltip-container">
-                  <div 
-                    className="btn ghost rules-trigger"
-                    style={{ 
-                      padding: "4px 10px", 
-                      fontSize: 12, 
-                      display: "flex", 
-                      alignItems: "center", 
-                      gap: 4,
-                      cursor: "pointer"
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                      <polyline points="14 2 14 8 20 8"/>
-                      <line x1="16" y1="13" x2="8" y2="13"/>
-                      <line x1="16" y1="17" x2="8" y2="17"/>
-                      <polyline points="10 9 9 9 8 9"/>
-                    </svg>
-                    Rules
+        {/* Rules Panel (collapsible) */}
+        {showRules && rules && (
+          <div style={{ 
+            marginTop: 12, 
+            padding: 12, 
+            background: "rgba(255,255,255,0.03)", 
+            borderRadius: 8,
+            border: "1px solid rgba(255,255,255,0.08)",
+            fontSize: 12,
+            lineHeight: 1.6,
+            color: "rgba(255,255,255,0.8)"
+          }}>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>Market Rules</div>
+            <div style={{ whiteSpace: "pre-wrap" }}>{rules}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Main Grid: Chart+Trades left, OrderBook right */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 12 }}>
+        {/* Left Column: Chart + Trades */}
+        <div className="col" style={{ gap: 12 }}>
+          <ChartViewV2 
+            key={yesTokenId} 
+            tokenId={yesTokenId} 
+            outcome={outcome}
+            mid={mid} 
+            selectedCents={selectedCents} 
+            onOutcomeChange={setOutcome}
+          />
+
+          {/* Trades Panel */}
+          <div className="panel" style={{ marginTop: 0 }}>
+            <div className="tabs">
+              <div className="tab active">Trades</div>
+              <div className="tab">Top Traders</div>
+              <div className="tab">Holders</div>
+            </div>
+            <div style={{ padding: 10 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Outcome</th>
+                    <th>Type</th>
+                    <th>Price</th>
+                    <th>Amount</th>
+                    <th>Total USD</th>
+                    <th>Age</th>
+                    <th>Trader</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mockTrades.map((t, idx) => (
+                    <tr key={idx}>
+                      <td>{t.outcome}</td>
+                      <td className={t.side === "BUY" ? "green badge" : "red badge"}>{t.side}</td>
+                      <td>{t.price}</td>
+                      <td>{t.amount >= 1000 ? (t.amount / 1000).toFixed(1) + "K" : t.amount}</td>
+                      <td>${t.total}</td>
+                      <td>{t.age}</td>
+                      <td className="mono">{t.trader}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Order Book */}
+        <div className="panel" style={{ padding: 10, height: "fit-content" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontWeight: 900, fontSize: 13 }}>Order Book</div>
+            <div style={{ display: "flex", gap: 4 }}>
+              <button
+                onClick={() => setOutcome("YES")}
+                style={{
+                  padding: "6px 14px",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  borderRadius: 6,
+                  border: "none",
+                  cursor: "pointer",
+                  background: outcome === "YES" ? "#22d3ee" : "rgba(255,255,255,0.08)",
+                  color: outcome === "YES" ? "#0a0a0a" : "rgba(255,255,255,0.6)",
+                  transition: "all 0.15s ease"
+                }}
+              >
+                YES
+              </button>
+              <button
+                onClick={() => setOutcome("NO")}
+                style={{
+                  padding: "6px 14px",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  borderRadius: 6,
+                  border: "none",
+                  cursor: "pointer",
+                  background: outcome === "NO" ? "#a855f7" : "rgba(255,255,255,0.08)",
+                  color: outcome === "NO" ? "#fff" : "rgba(255,255,255,0.6)",
+                  transition: "all 0.15s ease"
+                }}
+              >
+                NO
+              </button>
+            </div>
+          </div>
+
+          {/* Header row */}
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "74px 1fr 1fr",
+            gap: 10,
+            marginTop: 10,
+            fontSize: 11,
+            color: "rgba(148,163,184,0.95)",
+            fontWeight: 800
+          }}>
+            <div>PRICE</div>
+            <div>SHARES</div>
+            <div style={{ textAlign: "right" }}>TOTAL</div>
+          </div>
+
+          {/* Asks section */}
+          <div style={{ marginTop: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <span className="pill" style={{ color: "#fff", background: "rgba(239,68,68,0.18)" }}>Asks ({outcome})</span>
+            </div>
+            <div ref={asksScrollRef} style={{ maxHeight: 5 * 56, overflowY: "auto", paddingRight: 6 }}>
+              {loading && asks.length === 0 ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} style={{ marginTop: 6 }}>
+                    <div className="skeleton" style={{ height: 44, borderRadius: 10 }} />
                   </div>
-                  <div 
-                    className="rules-tooltip"
-                    style={{
-                      position: "absolute",
-                      top: "calc(100% + 4px)",
-                      right: 0,
-                      width: 320,
-                      maxHeight: 300,
-                      overflowY: "auto",
-                      background: "#1a1a2e",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      borderRadius: 8,
-                      padding: 14,
-                      zIndex: 1000,
-                      boxShadow: "0 4px 20px rgba(0,0,0,0.5)"
-                    }}
-                  >
-                    <div style={{ fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                      </svg>
-                      Market Rules
+                ))
+              ) : asksD.length === 0 ? (
+                <div className="muted" style={{ padding: 10, fontSize: 12 }}>No asks</div>
+              ) : (
+                asksD.map((r, i) => {
+                  const maxCum = Math.max(1, ...asksD.map(x => x.cumTotal));
+                  const pct = Math.max(0, Math.min(100, (r.cumTotal / maxCum) * 100));
+                  return (
+                    <div key={`ask-${i}`} style={{ position: "relative", overflow: "hidden", marginTop: 6 }}>
+                      <div style={{
+                        position: "absolute",
+                        left: 0, top: 0, bottom: 0,
+                        width: `${pct}%`,
+                        background: "rgba(239,68,68,0.26)"
+                      }} />
+                      <div style={{
+                        position: "relative",
+                        display: "grid",
+                        gridTemplateColumns: "74px 1fr 1fr",
+                        gap: 10,
+                        alignItems: "center",
+                        padding: "10px 10px",
+                        borderRadius: 10,
+                        border: "1px solid rgba(255,255,255,0.06)",
+                        background: "rgba(255,255,255,0.02)"
+                      }}>
+                        <div className="red" style={{ fontWeight: 900 }}>{(r.price * 100).toFixed(1)}¢</div>
+                        <div className="mono muted">{fmtQty(r.shares)}</div>
+                        <div className="mono" style={{ textAlign: "right" }}>${fmtQty(r.total)}</div>
+                      </div>
                     </div>
-                    <div style={{ fontSize: 12, lineHeight: 1.6, color: "rgba(255,255,255,0.85)", whiteSpace: "pre-wrap" }}>
-                      {marketData?.rules || marketData?.rule || marketData?.description || marketData?.marketDescription || marketData?.market_description}
-                    </div>
-                  </div>
-                </div>
+                  );
+                })
               )}
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <a className="btn" href="/">← Back</a>
-
-            <button className="btn ghost" onClick={() => load()} disabled={!tokenId}>
-              Refresh
-            </button>
+          {/* Spread row */}
+          <div style={{
+            marginTop: 12,
+            padding: "10px 10px",
+            borderTop: "1px solid rgba(255,255,255,0.06)",
+            borderBottom: "1px solid rgba(255,255,255,0.06)",
+            display: "flex",
+            justifyContent: "space-between",
+            color: "rgba(148,163,184,0.95)",
+            fontSize: 12,
+            fontWeight: 800
+          }}>
+            <div>Last: <span className="mono" style={{ color: "#e9eef5" }}>{bids[0] ? (bids[0].price * 100).toFixed(0) + "¢" : "-"}</span></div>
+            <div>Spread: <span className="mono" style={{ color: "#e9eef5" }}>{bids[0] && asks[0] ? ((asks[0].price - bids[0].price) * 100).toFixed(0) + "¢" : "-"}</span></div>
           </div>
-        </div>
-      </div>
 
-      <ChartViewV2 
-        key={yesTokenId} 
-        tokenId={yesTokenId} 
-        outcome={outcome}
-        mid={mid} 
-        selectedCents={selectedCents} 
-        onOutcomeChange={setOutcome}
-      />
-
-      {error ? (
-        <div className="panel" style={{ padding: 12 }}>
-          <div style={{ fontWeight: 900, marginBottom: 6 }}>Orderbook</div>
-          <div className="mono" style={{ fontSize: 12 }}>{error}</div>
-        </div>
-      ) : null}
-
-      <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ padding: 12, fontWeight: 900, display: "flex", alignItems: "center", gap: 8 }}>
-          Order Book
-          {loading && <div className="skeleton" style={{ width: 60, height: 14, borderRadius: 4 }} />}
-        </div>
-        <div style={{ padding: "0 12px 12px" }}>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th style={{ width: 120 }}>Price</th>
-                <th style={{ width: 140 }}>Size</th>
-                <th>Total (USDT)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {/* Show skeleton when loading and no data yet */}
-              {loading && bids.length === 0 && asks.length === 0 ? (
-                <SkeletonOrderbook />
-              ) : (
-                <>
-              {/* ASKS - reversed so highest price at top, lowest near spread */}
-              {asksD.length === 0 ? (
-                <tr>
-                  <td className="muted" colSpan={3}>No asks</td>
-                </tr>
-              ) : (
-                [...asksD].reverse().map((r, i) => {
-                  const pct = Math.min(1, r.cumTotal / maxAskDepth);
-                  const bg = `linear-gradient(to right, rgba(239, 68, 68, 0.18) ${pct * 100}%, rgba(0,0,0,0) ${pct * 100}%)`;
-                  const isSel = selectedSide === "ASK" && samePrice(selectedPrice, r.price);
-
-                  return (
-                    <tr
-                      key={`ask-${i}`}
-                      style={{
-                        background: bg,
-                        cursor: "pointer",
-                        outline: isSel ? "1px solid rgba(255,255,255,0.45)" : "none",
-                        boxShadow: isSel ? "inset 0 0 0 999px rgba(255,255,255,0.06)" : "none",
-                      }}
-                      title="Click to select this price"
-                      onClick={() => onPick("ASK", r.price)}
-                    >
-                      <td className="mono">{fmtCents(r.price)}</td>
-                      <td className="mono">{fmtQty(r.shares)}</td>
-                      <td className="mono">{fmtQty(r.cumShares)}</td>
-                    </tr>
-                  );
-                })
-              )}
-
-              {/* Separator between Asks and Bids */}
-              <tr>
-                <td colSpan={3} style={{ padding: "8px 0", borderTop: "1px solid rgba(255,255,255,0.1)", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-                  <div style={{ fontSize: 12 }}>
-                    <span className="muted">Spread: </span>
-                    <span className="mono">{bids[0] && asks[0] ? fmtCents(asks[0].price - bids[0].price) : "-"}</span>
+          {/* Bids section */}
+          <div style={{ marginTop: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <span className="pill" style={{ color: "#fff", background: "rgba(34,197,94,0.18)" }}>Bids ({outcome})</span>
+            </div>
+            <div style={{ maxHeight: 5 * 56, overflowY: "auto", paddingRight: 6 }}>
+              {loading && bids.length === 0 ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} style={{ marginTop: 6 }}>
+                    <div className="skeleton" style={{ height: 44, borderRadius: 10 }} />
                   </div>
-                </td>
-              </tr>
-
-              {/* BIDS - highest price at top (near spread), decreasing down */}
-              {bidsD.length === 0 ? (
-                <tr>
-                  <td className="muted" colSpan={3}>No bids</td>
-                </tr>
+                ))
+              ) : bidsD.length === 0 ? (
+                <div className="muted" style={{ padding: 10, fontSize: 12 }}>No bids</div>
               ) : (
                 bidsD.map((r, i) => {
-                  const pct = Math.min(1, r.cumTotal / maxBidDepth);
-                  const bg = `linear-gradient(to right, rgba(16, 185, 129, 0.20) ${pct * 100}%, rgba(0,0,0,0) ${pct * 100}%)`;
-                  const isSel = selectedSide === "BID" && samePrice(selectedPrice, r.price);
-
+                  const maxCum = Math.max(1, ...bidsD.map(x => x.cumTotal));
+                  const pct = Math.max(0, Math.min(100, (r.cumTotal / maxCum) * 100));
                   return (
-                    <tr
-                      key={`bid-${i}`}
-                      style={{
-                        background: bg,
-                        cursor: "pointer",
-                        outline: isSel ? "1px solid rgba(255,255,255,0.45)" : "none",
-                        boxShadow: isSel ? "inset 0 0 0 999px rgba(255,255,255,0.06)" : "none",
-                      }}
-                      title="Click to select this price"
-                      onClick={() => onPick("BID", r.price)}
-                    >
-                      <td className="mono">{fmtCents(r.price)}</td>
-                      <td className="mono">{fmtQty(r.shares)}</td>
-                      <td className="mono">{fmtQty(r.cumShares)}</td>
-                    </tr>
+                    <div key={`bid-${i}`} style={{ position: "relative", overflow: "hidden", marginTop: 6 }}>
+                      <div style={{
+                        position: "absolute",
+                        left: 0, top: 0, bottom: 0,
+                        width: `${pct}%`,
+                        background: "rgba(34,197,94,0.22)"
+                      }} />
+                      <div style={{
+                        position: "relative",
+                        display: "grid",
+                        gridTemplateColumns: "74px 1fr 1fr",
+                        gap: 10,
+                        alignItems: "center",
+                        padding: "10px 10px",
+                        borderRadius: 10,
+                        border: "1px solid rgba(255,255,255,0.06)",
+                        background: "rgba(255,255,255,0.02)"
+                      }}>
+                        <div className="green" style={{ fontWeight: 900 }}>{(r.price * 100).toFixed(1)}¢</div>
+                        <div className="mono muted">{fmtQty(r.shares)}</div>
+                        <div className="mono" style={{ textAlign: "right" }}>${fmtQty(r.total)}</div>
+                      </div>
+                    </div>
                   );
                 })
               )}
-                </>
-              )}
-            </tbody>
-          </table>
+            </div>
+          </div>
         </div>
-      </div>
-
-      <div className="muted" style={{ fontSize: 12, paddingLeft: 2 }}>
       </div>
     </div>
   );

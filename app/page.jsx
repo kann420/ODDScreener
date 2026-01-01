@@ -47,9 +47,6 @@ export default async function Home() {
               Top {list.length} markets (initially sorted by 24h volume). Total active: {total}
             </div>
           </div>
-          <a className="btn" href="/embed/kline?marketId=test&outcomeId=yes&interval=1h&theme=dark">
-            Open chart iframe demo
-          </a>
         </div>
       </div>
 
