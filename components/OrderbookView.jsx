@@ -1,6 +1,6 @@
 "use client";
 
-import ChartView from "./ChartView";
+import ChartViewV2 from "./ChartViewV2";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 // Skeleton components for loading states
@@ -585,20 +585,18 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
             <button className="btn ghost" onClick={() => load()} disabled={!tokenId}>
               Refresh
             </button>
-
-            <div style={{ display: "flex", gap: 6 }}>
-              <button className={outcome === "YES" ? "btn" : "btn ghost"} onClick={() => setOutcome("YES")} disabled={!yesTokenId}>
-                YES
-              </button>
-              <button className={outcome === "NO" ? "btn" : "btn ghost"} onClick={() => setOutcome("NO")} disabled={!noTokenId}>
-                NO
-              </button>
-            </div>
           </div>
         </div>
       </div>
 
-      <ChartView key={tokenId} tokenId={tokenId} mid={mid} selectedCents={selectedCents} />
+      <ChartViewV2 
+        key={tokenId} 
+        tokenId={tokenId} 
+        outcome={outcome}
+        mid={mid} 
+        selectedCents={selectedCents} 
+        onOutcomeChange={setOutcome}
+      />
 
       {error ? (
         <div className="panel" style={{ padding: 12 }}>

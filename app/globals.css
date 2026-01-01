@@ -150,25 +150,27 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   .iframe{ height: 460px; }
 }
 
-/* ===== ODDSCREENER BRAND OVERRIDE (match reference) ===== */
+/* ===== ODDSCREENER BRAND OVERRIDE (Santa logo + aligned beta) ===== */
 .brand{
   display:flex;
-  align-items:center;          /* keeps baseline aligned with nav */
+  align-items:center;
   gap:12px;
   font-weight:700;
   height:52px;                 /* matches .topbar-inner height */
 }
 
-/* Hide old red dot if it still exists somewhere */
+/* Hide old red dot (no longer used) */
 .brand-dot{ display:none; }
 
+/* Santa logo size */
 .brand-icon{
-  width:38px;
-  height:38px;
+  width:52px;
+  height:52px;
   flex:0 0 auto;
+  display:block;
 }
 
-/* Use grid so BETA sits under the "creener" part exactly */
+/* Place beta under "creener" precisely */
 .brand-wordmark{
   display:grid;
   grid-template-columns: auto auto;
@@ -192,7 +194,7 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   font-weight:800;
   font-size:22px;
   letter-spacing:0.2px;
-  color:#34D399;
+  color:#E65100;
 }
 
 .brand-beta{
@@ -203,6 +205,11 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   letter-spacing:0.14em;
   text-transform:uppercase;
   color: rgba(233,238,245,0.72);
+}
+
+/* Search icon styling */
+.search-icon {
+  opacity: 0.6;
 }
 /* ===== END ODDSCREENER BRAND OVERRIDE ===== */
 
