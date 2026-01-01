@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "ODDScreener - Opinion Markets Explorer",
+  title: "ODDScreeners - Opinion Markets Explorer",
   description: "Demo UI for Opinion explorer + embedded chart service"
 };
 
@@ -12,14 +12,14 @@ export default function RootLayout({ children }) {
         <div className="topbar">
           <div className="container">
             <div className="topbar-inner">
-              <a className="brand" href="/" aria-label="ODDScreener">
+              <a className="brand" href="/" aria-label="ODDScreeners">
                 {/* Santa logo from v3 */}
-                <img className="brand-icon" src="/logo.svg" alt="ODDScreener" />
+                <img className="brand-icon" src="/logo.svg" alt="ODDScreeners" />
 
                 {/* Wordmark */}
                 <span className="brand-wordmark">
                   <span className="brand-odds">ODDS</span>
-                  <span className="brand-screener">creener</span>
+                  <span className="brand-screener">creeners</span>
                   <span className="brand-beta">beta</span>
                 </span>
               </a>
