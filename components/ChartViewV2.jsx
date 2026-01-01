@@ -107,13 +107,15 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
     return sliced.length >= 2 ? sliced : allPts.slice(-Math.max(2, allPts.length));
   }, [allPts, range]);
 
-  // Apply flip transform to points (mirror around 0.5)
+  // Apply flip transform to points when NO is selected
+  // YES data: use as-is, NO data: flip (1-p) so chart mirrors correctly
   const displayPts = useMemo(() => {
     if (!pts || pts.length === 0) return [];
     return pts.map((pt) => {
-      const v = pt.p;
+      const v = clamp01(pt.p);
+      // flipT goes 0->1 when switching to NO, causing v to become 1-v
       const v2 = v * (1 - flipT) + (1 - v) * flipT;
-      return { ...pt, p: v2 };
+      return { ...pt, p: clamp01(v2) };
     });
   }, [pts, flipT]);
 

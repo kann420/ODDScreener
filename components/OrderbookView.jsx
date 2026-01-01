@@ -590,8 +590,8 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
       </div>
 
       <ChartViewV2 
-        key={tokenId} 
-        tokenId={tokenId} 
+        key={yesTokenId} 
+        tokenId={yesTokenId} 
         outcome={outcome}
         mid={mid} 
         selectedCents={selectedCents} 
