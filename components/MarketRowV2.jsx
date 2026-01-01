@@ -29,7 +29,6 @@ function fmtChanceFromPrice01(p01) {
   return `${s}%`;
 }
 
-// Robust YES token picker
 function pickYesTokenId(m) {
   if (!m) return null;
 
@@ -130,10 +129,6 @@ async function fetchJsonWithRetry(url, opts) {
   return j2;
 }
 
-/**
- * In-flight dedupe: cùng 1 key, chỉ cho phép 1 request chạy.
- * Các nơi khác sẽ await chung Promise đó.
- */
 function getInflightMap() {
   const g = globalThis;
   if (!g.__ODD_INFLIGHT__) g.__ODD_INFLIGHT__ = new Map();
@@ -206,7 +201,7 @@ export default function MarketRowV2({ market, volMode, onOpen, priority = false,
   const [mid, setMid] = useState(0);
   const [sparkPts, setSparkPts] = useState([]);
 
-  const interval = "1d"; // ALL preview: keep simple
+  const interval = "1d";
 
   const computeMidFromOrderbook = (obJson) => {
     const ob = normalizeOrderbook(obJson?.result ?? obJson);
@@ -224,10 +219,8 @@ export default function MarketRowV2({ market, volMode, onOpen, priority = false,
   const prefetch = useCallback(async () => {
     if (!tokenId) return;
     try {
-      // warm both caches, but don't set state here
       await Promise.all([fetchOrderbookCached(tokenId), fetchHistoryCached(tokenId, interval)]);
     } catch {
-      // ignore prefetch errors
     }
   }, [tokenId]);
 
@@ -260,8 +253,7 @@ export default function MarketRowV2({ market, volMode, onOpen, priority = false,
         setMid(m);
         setSparkPts((pts || []).slice(-90));
         setLoading(false);
-        
-        // Report chance value to parent for sorting
+
         if (m > 0 && onChanceLoaded) {
           onChanceLoaded(market?.marketId, m);
         }
@@ -287,11 +279,9 @@ export default function MarketRowV2({ market, volMode, onOpen, priority = false,
       className="panel"
       style={{ padding: "12px 12px", cursor: "pointer" }}
       onMouseEnter={() => {
-        // hover warm cache for A3 detail
         prefetch();
       }}
       onClick={() => {
-        // click warm cache too (fire-and-forget)
         prefetch();
         onOpen?.(market);
       }}
@@ -305,7 +295,6 @@ export default function MarketRowV2({ market, volMode, onOpen, priority = false,
           alignItems: "center",
         }}
       >
-        {/* Market title */}
         <div style={{ minWidth: 0 }}>
           <div
             style={{
@@ -326,7 +315,6 @@ export default function MarketRowV2({ market, volMode, onOpen, priority = false,
           </div>
         </div>
 
-        {/* Mini chart (ALL) */}
         <div>
           {loading ? (
             <div className="skeleton skeleton-chart" style={{ width: 120, height: 32 }} />
@@ -335,7 +323,6 @@ export default function MarketRowV2({ market, volMode, onOpen, priority = false,
           )}
         </div>
 
-        {/* Chance */}
         <div className="mono" style={{ fontWeight: 900 }}>
           {loading ? (
             <div className="skeleton skeleton-text" style={{ width: 50, height: 14 }} />
@@ -344,10 +331,8 @@ export default function MarketRowV2({ market, volMode, onOpen, priority = false,
           )}
         </div>
 
-        {/* Volume */}
         <div className="mono">{volText}</div>
 
-        {/* Expires placeholder */}
         <div className="mono muted">—</div>
       </div>
     </div>

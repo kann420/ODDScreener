@@ -12,11 +12,6 @@ function clamp01(x) {
   return Math.max(0, Math.min(1, x));
 }
 
-/**
- * -------------------------------------------------------
- * Client cache (30s) + in-flight dedupe (global)
- * -------------------------------------------------------
- */
 const __CACHE__ =
   globalThis.__ODD_CLIENT_CACHE__ ?? (globalThis.__ODD_CLIENT_CACHE__ = new Map());
 
@@ -45,7 +40,6 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
   const [err, setErr] = useState("");
   const [allPts, setAllPts] = useState([]);
 
-  // Animation state for YES/NO flip
   const [flipT, setFlipT] = useState(outcome === "NO" ? 1 : 0);
   const [isFlip3D, setIsFlip3D] = useState(false);
   const flipRef = useRef(flipT);
@@ -55,12 +49,10 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
 
   const interval = "1d";
 
-  // Update flipRef when flipT changes
   useEffect(() => {
     flipRef.current = flipT;
   }, [flipT]);
 
-  // Animate flip when outcome changes (mirror effect like v3)
   useEffect(() => {
     const target = outcome === "NO" ? 1 : 0;
     const from = flipRef.current;
@@ -81,14 +73,12 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
     return () => raf && cancelAnimationFrame(raf);
   }, [outcome]);
 
-  // 3D flip effect
   useEffect(() => {
     setIsFlip3D(true);
     const t = setTimeout(() => setIsFlip3D(false), 220);
     return () => clearTimeout(t);
   }, [outcome]);
 
-  // Filter points by range
   const pts = useMemo(() => {
     if (!Array.isArray(allPts) || allPts.length === 0) return [];
     const r = RANGES.find((x) => x.key === range);
@@ -107,13 +97,10 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
     return sliced.length >= 2 ? sliced : allPts.slice(-Math.max(2, allPts.length));
   }, [allPts, range]);
 
-  // Apply flip transform to points when NO is selected
-  // YES data: use as-is, NO data: flip (1-p) so chart mirrors correctly
   const displayPts = useMemo(() => {
     if (!pts || pts.length === 0) return [];
     return pts.map((pt) => {
       const v = clamp01(pt.p);
-      // flipT goes 0->1 when switching to NO, causing v to become 1-v
       const v2 = v * (1 - flipT) + (1 - v) * flipT;
       return { ...pt, p: clamp01(v2) };
     });
@@ -121,7 +108,6 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
 
   const lastPct = displayPts.length ? displayPts[displayPts.length - 1].p * 100 : 0;
 
-  // Fetch data
   useEffect(() => {
     let mounted = true;
     const ac = new AbortController();
@@ -213,10 +199,8 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
 
   return (
     <div className="panel" style={{ padding: 10 }}>
-      {/* Header with YES/NO toggle and percentage */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          {/* YES/NO Toggle */}
           <div
             style={{
               display: "inline-flex",
@@ -255,7 +239,6 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
             </button>
           </div>
 
-          {/* Percentage display */}
           <div
             style={{
               fontSize: 22,
@@ -278,7 +261,6 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
         </div>
       </div>
 
-      {/* Chart with 3D flip animation */}
       <div style={{ marginTop: 8 }}>
         <div
           style={{
@@ -298,7 +280,6 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
         </div>
       </div>
 
-      {/* Range buttons */}
       <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
         {RANGES.map((r) => (
           <button key={r.key} className="btn" onClick={() => setRange(r.key)} style={{ opacity: range === r.key ? 1 : 0.65 }}>
@@ -309,7 +290,6 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
         <div className="muted" style={{ fontSize: 12 }}>UTC tooltip on hover</div>
       </div>
 
-      {/* Volume info */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
         <div style={{ display: "flex", gap: 12, color: "rgba(148,163,184,0.95)", fontSize: 12 }}>
           <div>

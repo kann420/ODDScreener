@@ -3,17 +3,13 @@ import { opinionFetch } from "@/lib/opinion";
 
 export const runtime = "nodejs";
 
-// A1: Orderbook changes fast -> shorter cache
 const TTL_MS = 20_000;
 
-// global cache (per server instance)
 const CACHE = globalThis.__ODD_CACHE__ ?? (globalThis.__ODD_CACHE__ = new Map());
 
 function cacheGet(key) {
   const hit = CACHE.get(key);
   if (!hit) return null;
-
-  // hit = { t: <ms>, v: <payload> }
   if (Date.now() - hit.t > TTL_MS) {
     CACHE.delete(key);
     return null;
@@ -29,9 +25,8 @@ function json(resObj, cacheStatus) {
   return NextResponse.json(resObj, {
     status: 200,
     headers: {
-      // Help CDNs/proxies too; local dev may ignore this, but our in-memory cache still works
       "Cache-Control": "public, s-maxage=20, stale-while-revalidate=20",
-      "x-cache": cacheStatus, // HIT | MISS
+      "x-cache": cacheStatus,
     },
   });
 }
@@ -57,9 +52,8 @@ export async function GET(req) {
       (typeof r?.code === "number" && r.code === 0);
 
     if (!ok) {
-      // do NOT cache failures
       return json(
-        { errno: -1, errormsg: "orderbook_failed", result: null, debug: r },
+        { errno: -1, errormsg: "orderbook_failed", result: null },
         "MISS"
       );
     }
@@ -68,7 +62,6 @@ export async function GET(req) {
     cacheSet(key, payload);
     return json(payload, "MISS");
   } catch (e) {
-    // never crash the route
     return NextResponse.json(
       { errno: -1, errormsg: "orderbook_route_error", result: null },
       { status: 200, headers: { "x-cache": "MISS" } }

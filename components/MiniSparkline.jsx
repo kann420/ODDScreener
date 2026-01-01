@@ -40,9 +40,7 @@ export default function MiniSparkline({ points }) {
 
   return (
     <svg width="120" height="36" viewBox="0 0 120 36" style={{ display: "block" }}>
-      {/* baseline */}
       <path d="M 2 34 L 118 34" stroke="rgba(255,255,255,0.08)" strokeWidth="1" fill="none" />
-      {/* line */}
       {path ? (
         <path
           d={path}

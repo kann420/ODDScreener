@@ -10,8 +10,6 @@ function pickMarketFromApi(payload) {
 export default async function MarketPage({ params }) {
   const marketId = params?.marketId;
 
-  // Use opinionFetch directly instead of fetching internal API route
-  // This avoids localhost issues in production
   const r = await opinionFetch(`/market/${marketId}`);
   
   const ok =
@@ -20,21 +18,15 @@ export default async function MarketPage({ params }) {
 
   const j = ok 
     ? { errno: 0, errormsg: "", result: { data: r?.result?.data ?? r?.result ?? r } }
-    : { errno: -1, errormsg: "market_detail_failed", debug: r };
+    : { errno: -1, errormsg: "market_detail_failed" };
 
   if (j?.errno !== 0) {
     return (
       <div className="panel" style={{ padding: 14 }}>
         <div style={{ fontWeight: 900, fontSize: 14 }}>Market #{marketId}</div>
         <p className="muted" style={{ marginTop: 8 }}>
-          Failed to load market detail from Opinion. (Endpoint:{" "}
-          <span className="mono">/market/{marketId}</span>)
+          Failed to load market detail.
         </p>
-        <div className="panel" style={{ padding: 12, marginTop: 10 }}>
-          <div className="mono" style={{ fontSize: 12, whiteSpace: "pre-wrap" }}>
-            {JSON.stringify(j, null, 2)}
-          </div>
-        </div>
         <div style={{ marginTop: 10 }}>
           <a className="btn" href="/">
             ← Back

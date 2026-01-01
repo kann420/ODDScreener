@@ -7,16 +7,19 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="vi">
+    <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+      </head>
       <body>
         <div className="topbar">
           <div className="container">
             <div className="topbar-inner">
               <a className="brand" href="/" aria-label="ODDScreeners">
-                {/* Santa logo from v3 */}
                 <img className="brand-icon" src="/logo.svg" alt="ODDScreeners" />
 
-                {/* Wordmark */}
                 <span className="brand-wordmark">
                   <span className="brand-odds">ODDS</span>
                   <span className="brand-screener">creeners</span>

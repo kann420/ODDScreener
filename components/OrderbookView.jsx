@@ -3,7 +3,6 @@
 import ChartViewV2 from "./ChartViewV2";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-// Skeleton components for loading states
 function SkeletonOrderbookRow() {
   return (
     <tr>
@@ -17,11 +16,9 @@ function SkeletonOrderbookRow() {
 function SkeletonOrderbook() {
   return (
     <>
-      {/* Skeleton asks */}
       {Array.from({ length: 5 }).map((_, i) => (
         <SkeletonOrderbookRow key={`ask-skel-${i}`} />
       ))}
-      {/* Spread row skeleton */}
       <tr>
         <td colSpan={3} style={{ padding: "8px 0", borderTop: "1px solid rgba(255,255,255,0.1)", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -30,7 +27,6 @@ function SkeletonOrderbook() {
           </div>
         </td>
       </tr>
-      {/* Skeleton bids */}
       {Array.from({ length: 5 }).map((_, i) => (
         <SkeletonOrderbookRow key={`bid-skel-${i}`} />
       ))}
@@ -68,11 +64,9 @@ function shortToken(t) {
   return `${s.slice(0, 10)}…${s.slice(-6)}`;
 }
 
-// Asks: sort descending (84→79), cumulative from bottom (spread) up
 function buildAsksDepth(rows) {
   if (!rows?.length) return [];
   const sorted = [...rows].sort((a, b) => b.price - a.price);
-  // Calculate cumulative from bottom (spread) to top
   const result = new Array(sorted.length);
   let cumShares = 0, cumTotal = 0;
   for (let i = sorted.length - 1; i >= 0; i--) {
@@ -83,7 +77,6 @@ function buildAsksDepth(rows) {
   return result;
 }
 
-// Bids: sort descending (77→72), cumulative from top (spread) down
 function buildBidsDepth(rows) {
   if (!rows?.length) return [];
   const sorted = [...rows].sort((a, b) => b.price - a.price);
@@ -150,11 +143,6 @@ function samePrice(a, b) {
   return Math.abs(a - b) < 1e-9;
 }
 
-/**
- * -------------------------------------------------------
- * Client cache (30s) + in-flight dedupe (global)
- * -------------------------------------------------------
- */
 const __CACHE__ =
   globalThis.__ODD_CLIENT_CACHE__ ?? (globalThis.__ODD_CLIENT_CACHE__ = new Map());
 const __INFLIGHT__ =
@@ -171,20 +159,13 @@ function cacheSet(key, v) {
   __CACHE__.set(key, { t: Date.now(), v });
 }
 
-/**
- * Prefetch helpers (A3.2)
- * - Warm cache for the OTHER outcome tokenId
- * - No setState here, only cache fill
- */
 async function prefetchOrderbookToken(tokenId) {
   if (!tokenId) return;
   const key = `ob:${tokenId}`;
 
-  // If cached fresh, skip
   const cached = cacheGetEntry(key, 30_000);
   if (cached) return;
 
-  // In-flight dedupe
   if (__INFLIGHT__.has(key)) return;
 
   const p = (async () => {
@@ -225,7 +206,6 @@ async function prefetchHistoryToken(tokenId, interval = "1d") {
       const j = await res.json();
       if (j?.errno !== 0) return;
 
-      // Normalize to [{t,p}] same as ChartView expects
       const raw = j?.result ?? j;
       const rows = raw?.prices ?? raw?.history ?? raw?.data ?? raw ?? [];
 
@@ -260,7 +240,6 @@ async function prefetchHistoryToken(tokenId, interval = "1d") {
   __INFLIGHT__.set(key, p);
 }
 
-// Format helpers for market info
 function fmtPercent(v) {
   const n = Number(v);
   if (!Number.isFinite(n)) return "-";
@@ -312,7 +291,6 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
   const [selectedPrice, setSelectedPrice] = useState(null);
   const [selectedSide, setSelectedSide] = useState(null);
 
-  // Extract market stats from marketData
   const volume24h = marketData.volume24h || marketData.volume_24h || marketData.dayVolume || null;
   const totalVolume = marketData.totalVolume || marketData.total_volume || marketData.volume || null;
   const openInterest = marketData.openInterest || marketData.open_interest || null;
@@ -323,8 +301,6 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
 
   const abortRef = useRef(null);
   const asksScrollRef = useRef(null);
-
-  // Prevent re-applying same cached data every poll tick
   const appliedCacheAtRef = useRef(0);
 
   async function load({ silent = false } = {}) {
@@ -361,7 +337,6 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
         setError("");
         setLoading(false);
       } catch (e) {
-        // Ignore abort errors - keep showing loading state
         if (e?.name === 'AbortError' || String(e?.message || '').toLowerCase().includes('abort')) return;
         setError(String(e?.message || e));
         setBids([]);
@@ -402,7 +377,6 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
     }
   }
 
-  // Poll (pause when tab hidden)
   useEffect(() => {
     let t = null;
 
@@ -424,13 +398,10 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
       document.removeEventListener("visibilitychange", onVis);
       if (abortRef.current) abortRef.current.abort();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tokenId]);
 
-  // A3.2: Prefetch other outcome (orderbook + history) whenever token changes
   useEffect(() => {
     if (!otherTokenId) return;
-    // Warm cache for instant outcome switch
     prefetchOrderbookToken(otherTokenId);
     prefetchHistoryToken(otherTokenId, "1d");
   }, [otherTokenId]);
@@ -453,7 +424,6 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
   const bidsD = useMemo(() => buildBidsDepth(bids), [bids]);
   const asksD = useMemo(() => buildAsksDepth(asks), [asks]);
 
-  // Auto-scroll asks to bottom when data loads or outcome changes
   useEffect(() => {
     if (asksScrollRef.current && asksD.length > 0) {
       asksScrollRef.current.scrollTop = asksScrollRef.current.scrollHeight;
@@ -485,9 +455,7 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
 
   return (
     <div className="col" style={{ gap: 12 }}>
-      {/* Header */}
       <div className="panel" style={{ padding: "14px 16px" }}>
-        {/* Top row: Market # and title */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div>
             <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>Market #{marketId}</div>
@@ -510,7 +478,6 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
           </div>
         </div>
 
-        {/* Stats row */}
         <div style={{ 
           display: "flex", 
           alignItems: "center", 
@@ -565,7 +532,6 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
           </div>
         </div>
 
-        {/* Rules Panel (collapsible) */}
         {showRules && rules && (
           <div style={{ 
             marginTop: 12, 
@@ -583,9 +549,7 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
         )}
       </div>
 
-      {/* Main Grid: Chart+Trades left, OrderBook right */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 12 }}>
-        {/* Left Column: Chart + Trades */}
         <div className="col" style={{ gap: 12 }}>
           <ChartViewV2 
             key={yesTokenId} 
@@ -596,7 +560,6 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
             onOutcomeChange={setOutcome}
           />
 
-          {/* Trades Panel */}
           <div className="panel" style={{ marginTop: 0 }}>
             <div className="tabs">
               <div className="tab active">Trades</div>
@@ -610,7 +573,6 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
           </div>
         </div>
 
-        {/* Right Column: Order Book */}
         <div className="panel" style={{ padding: 10, height: "fit-content" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ fontWeight: 900, fontSize: 13 }}>Order Book</div>
@@ -650,7 +612,6 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
             </div>
           </div>
 
-          {/* Header row */}
           <div style={{
             display: "grid",
             gridTemplateColumns: "74px 1fr 1fr",
@@ -665,7 +626,6 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
             <div style={{ textAlign: "right" }}>TOTAL</div>
           </div>
 
-          {/* Asks section */}
           <div style={{ marginTop: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
               <span className="pill" style={{ color: "#fff", background: "rgba(239,68,68,0.18)" }}>Asks ({outcome})</span>
@@ -713,7 +673,6 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
             </div>
           </div>
 
-          {/* Spread row */}
           <div style={{
             marginTop: 12,
             padding: "10px 10px",
@@ -725,11 +684,10 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
             fontSize: 12,
             fontWeight: 800
           }}>
-            <div>Last: <span className="mono" style={{ color: "#e9eef5" }}>{bids[0] ? (bids[0].price * 100).toFixed(0) + "¢" : "-"}</span></div>
-            <div>Spread: <span className="mono" style={{ color: "#e9eef5" }}>{bids[0] && asks[0] ? ((asks[0].price - bids[0].price) * 100).toFixed(0) + "¢" : "-"}</span></div>
+            <div>Last: <span className="mono" style={{ color: "#e9eef5" }}>{bids[0] ? (bids[0].price * 100).toFixed(1).replace(/\.0$/, "") + "¢" : "-"}</span></div>
+            <div>Spread: <span className="mono" style={{ color: "#e9eef5" }}>{bids[0] && asks[0] ? ((asks[0].price - bids[0].price) * 100).toFixed(1).replace(/\.0$/, "") + "¢" : "-"}</span></div>
           </div>
 
-          {/* Bids section */}
           <div style={{ marginTop: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
               <span className="pill" style={{ color: "#fff", background: "rgba(34,197,94,0.18)" }}>Bids ({outcome})</span>

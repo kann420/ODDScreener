@@ -19,8 +19,9 @@ body{
               radial-gradient(900px 600px at 75% 20%, rgba(34,197,94,0.10), transparent 55%),
               var(--bg);
   color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
-  letter-spacing: 0.1px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  letter-spacing: -0.01em;
 }
 a{ color:inherit; text-decoration:none; }
 .container{ max-width: 1500px; margin:0 auto; padding: 12px 14px; }
@@ -111,7 +112,7 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
 .badge{ font-weight:900; font-size:12px; }
 .green{ color: var(--accent); }
 .red{ color: var(--danger); }
-.mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+.mono{ font-family: 'Inter', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-variant-numeric: tabular-nums; }
 .select{
   appearance:none;
   padding: 9px 34px 9px 10px;

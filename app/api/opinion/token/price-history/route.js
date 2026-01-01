@@ -3,10 +3,8 @@ import { opinionFetch } from "@/lib/opinion";
 
 export const runtime = "nodejs";
 
-// A1: Price history changes slowly -> longer cache
 const TTL_MS = 60_000;
 
-// global cache (per server instance)
 const CACHE = globalThis.__ODD_CACHE__ ?? (globalThis.__ODD_CACHE__ = new Map());
 
 function cacheGet(key) {
@@ -28,7 +26,7 @@ function json(resObj, cacheStatus) {
     status: 200,
     headers: {
       "Cache-Control": "public, s-maxage=60, stale-while-revalidate=60",
-      "x-cache": cacheStatus, // HIT | MISS
+      "x-cache": cacheStatus,
     },
   });
 }
@@ -37,7 +35,7 @@ export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
     const token_id = searchParams.get("token_id");
-    const interval = searchParams.get("interval") || "1d"; // default daily
+    const interval = searchParams.get("interval") || "1d";
 
     if (!token_id) {
       return json({ errno: -1, errormsg: "missing_token_id", result: null }, "MISS");
@@ -54,9 +52,8 @@ export async function GET(req) {
       (typeof r?.code === "number" && r.code === 0);
 
     if (!ok) {
-      // do NOT cache failures
       return json(
-        { errno: -1, errormsg: "price_history_failed", result: null, debug: r },
+        { errno: -1, errormsg: "price_history_failed", result: null },
         "MISS"
       );
     }
@@ -65,7 +62,6 @@ export async function GET(req) {
     cacheSet(key, payload);
     return json(payload, "MISS");
   } catch (e) {
-    // never crash the route
     return NextResponse.json(
       { errno: -1, errormsg: "price_history_route_error", result: null },
       { status: 200, headers: { "x-cache": "MISS" } }

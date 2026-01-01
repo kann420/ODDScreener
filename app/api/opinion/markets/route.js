@@ -1,4 +1,3 @@
-// app/api/opinion/markets/route.js
 import { NextResponse } from "next/server";
 import { opinionFetch } from "@/lib/opinion";
 
@@ -12,11 +11,6 @@ export async function GET(req) {
   const data = await opinionFetch("/market", {
     params: { status, sortBy, limit },
   });
-
-  // log ra terminal để bạn chụp cho mình
-  if (data?.code === -1) {
-    console.error("[Opinion markets error]", data);
-  }
 
   return NextResponse.json(data);
 }

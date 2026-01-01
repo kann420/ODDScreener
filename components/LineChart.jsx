@@ -59,7 +59,6 @@ export default function LineChart({ pts, color = "rgba(34,211,238,0.95)", range 
 
   const N = 160;
 
-  // Sample points to consistent count
   const sampled = useMemo(() => {
     if (!pts || pts.length === 0) return [];
     const out = [];
@@ -111,7 +110,6 @@ export default function LineChart({ pts, color = "rgba(34,211,238,0.95)", range 
     ? linePath + ` L ${(w - padR).toFixed(2)} ${(h - padB).toFixed(2)}` + ` L ${padL.toFixed(2)} ${(h - padB).toFixed(2)} Z`
     : "";
 
-  // Grid levels
   const levels = 4;
   const grid = Array.from({ length: levels + 1 }).map((_, i) => {
     const yy = padT + (i / levels) * (h - padT - padB);
@@ -136,13 +134,11 @@ export default function LineChart({ pts, color = "rgba(34,211,238,0.95)", range 
   const hx = hv?.x ?? x(N - 1);
   const hy = hv?.y ?? y(closes[closes.length - 1] ?? 0);
 
-  // Tooltip position
   const tipW = 210;
   const tipH = 54;
   const tipX = Math.min(w - padR - tipW, Math.max(padL, hx - tipW / 2));
   const tipY = Math.max(padT, hy - tipH - 10);
 
-  // Selected price line
   const selY = selectedCents && Number.isFinite(selectedCents) ? y(selectedCents / 100) : null;
 
   return (
@@ -162,7 +158,6 @@ export default function LineChart({ pts, color = "rgba(34,211,238,0.95)", range 
         </filter>
       </defs>
 
-      {/* Grid */}
       {grid.map((g, i) => (
         <g key={i}>
           <line x1={padL} x2={w - padR} y1={g.yy} y2={g.yy} stroke="rgba(255,255,255,0.07)" />
@@ -178,7 +173,6 @@ export default function LineChart({ pts, color = "rgba(34,211,238,0.95)", range 
         </g>
       ))}
 
-      {/* X-axis time labels */}
       {getXAxisTicks.map((tick, i) => {
         const tickX = x(Math.round((tick.idx / (sampled.length - 1)) * (N - 1)));
         return (
@@ -196,13 +190,10 @@ export default function LineChart({ pts, color = "rgba(34,211,238,0.95)", range 
         );
       })}
 
-      {/* Area */}
       {areaPath && <path d={areaPath} fill="url(#areaGrad)" />}
 
-      {/* Line + glow */}
       <path d={linePath} fill="none" stroke={color} strokeWidth="2.4" filter="url(#glow)" />
 
-      {/* Selected price line */}
       {selY !== null && selY >= padT && selY <= h - padB && (
         <g>
           <line x1={padL} x2={w - padR} y1={selY} y2={selY} stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeDasharray="4 4" />
@@ -212,13 +203,10 @@ export default function LineChart({ pts, color = "rgba(34,211,238,0.95)", range 
         </g>
       )}
 
-      {/* Hover vertical line */}
       {hoverIdx !== null && <line x1={hx} x2={hx} y1={padT} y2={h - padB} stroke="rgba(255,255,255,0.16)" />}
 
-      {/* Hover dot */}
       <circle cx={hx} cy={hy} r="4.2" fill={color} />
 
-      {/* Tooltip */}
       {hoverIdx !== null && hv && (
         <g>
           <rect x={tipX} y={tipY} width={tipW} height={tipH} rx="10" fill="rgba(10,12,14,0.92)" stroke="rgba(255,255,255,0.10)" />

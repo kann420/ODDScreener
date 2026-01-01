@@ -5,24 +5,16 @@ export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const r = await opinionFetch("/market", {
-    params: { status: "activated", sortBy: 5, limit: 100 }, // sortBy=5 (24h volume), fetch more for pagination
+    params: { status: "activated", sortBy: 5, limit: 100 },
   });
 
   if (r?.errno !== 0) {
     return (
       <div className="panel" style={{ padding: 14 }}>
-        <div style={{ fontWeight: 900, fontSize: 14 }}>Discover (Opinion)</div>
+        <div style={{ fontWeight: 900, fontSize: 14 }}>Discover</div>
         <p className="muted" style={{ marginTop: 8 }}>
-          Failed to reach Opinion OpenAPI. Please check{" "}
-          <span className="mono">OPINION_API_KEY</span> in your{" "}
-          <span className="mono">.env</span>.
+          Failed to load markets. Please try again later.
         </p>
-
-        <div className="panel" style={{ padding: 12, marginTop: 10 }}>
-          <div className="mono" style={{ fontSize: 12, whiteSpace: "pre-wrap" }}>
-            {JSON.stringify(r, null, 2)}
-          </div>
-        </div>
       </div>
     );
   }
@@ -50,11 +42,8 @@ export default async function Home() {
         </div>
       </div>
 
-      {/* B3.0: client list with realtime metrics + sorting */}
       <MarketListClient markets={list} />
 
-      <div className="muted" style={{ fontSize: 12, padding: "0 4px" }}>
-      </div>
     </div>
   );
 }

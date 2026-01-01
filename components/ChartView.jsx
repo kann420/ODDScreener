@@ -18,11 +18,6 @@ function fmtCentsFromPrice01(p) {
   return `${s}¢`;
 }
 
-/**
- * -------------------------------------------------------
- * Client cache (30s) + in-flight dedupe (global)
- * -------------------------------------------------------
- */
 const __CACHE__ =
   globalThis.__ODD_CLIENT_CACHE__ ?? (globalThis.__ODD_CLIENT_CACHE__ = new Map());
 const __INFLIGHT__ =
@@ -50,7 +45,7 @@ const RANGES = [
 
 export default function ChartView({ tokenId, mid, selectedCents }) {
   const [range, setRange] = useState("1W");
-  const [loading, setLoading] = useState(true); // Start with loading=true
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [allPts, setAllPts] = useState([]);
   const [hover, setHover] = useState(null);
@@ -61,10 +56,7 @@ export default function ChartView({ tokenId, mid, selectedCents }) {
   const rafRef = useRef(0);
   const lastMoveRef = useRef(null);
 
-  // Prevent re-applying same cached payload over and over
   const appliedCacheAtRef = useRef(0);
-  
-  // Track last tokenId to reset appliedCacheAtRef when token changes
   const lastTokenIdRef = useRef(null);
 
   const interval = "1d";
@@ -93,7 +85,6 @@ export default function ChartView({ tokenId, mid, selectedCents }) {
     let mounted = true;
     const ac = new AbortController();
 
-    // Reset appliedCacheAtRef when tokenId changes
     if (lastTokenIdRef.current !== tokenId) {
       appliedCacheAtRef.current = 0;
       lastTokenIdRef.current = tokenId;
@@ -111,14 +102,12 @@ export default function ChartView({ tokenId, mid, selectedCents }) {
 
       const cachedEntry = cacheGetEntry(key, 30_000);
       if (cachedEntry) {
-        // apply cached only if it's newer than the last one we applied
         if (cachedEntry.t > appliedCacheAtRef.current && mounted) {
           appliedCacheAtRef.current = cachedEntry.t;
           setAllPts(Array.isArray(cachedEntry.v) ? cachedEntry.v : []);
           setErr("");
           setLoading(false);
         } else if (mounted) {
-          // Cache exists but already applied, just ensure loading is false
           setLoading(false);
         }
         return;
@@ -126,9 +115,6 @@ export default function ChartView({ tokenId, mid, selectedCents }) {
 
       setLoading(true);
       setErr("");
-
-      // Skip in-flight dedupe to avoid issues with aborted requests
-      // Each mount will make its own request with its own AbortController
 
       try {
         const res = await fetch(
@@ -376,7 +362,6 @@ export default function ChartView({ tokenId, mid, selectedCents }) {
       </div>
 
       <div ref={wrapRef} style={{ marginTop: 10, position: "relative" }} onMouseMove={onMove} onMouseLeave={onLeave}>
-        {/* Skeleton for chart area */}
         {loading && pts.length === 0 ? (
           <div 
             className="skeleton" 

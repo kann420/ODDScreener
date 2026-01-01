@@ -5,7 +5,6 @@ import MarketRowV2 from "@/components/MarketRowV2";
 
 const ITEMS_PER_PAGE = 10;
 
-// Skeleton Row Component
 function SkeletonRow() {
   return (
     <div
@@ -56,25 +55,19 @@ function SkeletonRow() {
   );
 }
 
-// Helper to extract numeric values for sorting
 function getChanceValue(m) {
-  // Try to get yes price from various possible fields (chance is fetched dynamically in MarketRowV2)
-  // For initial sort, we use volume as proxy or yesPrice if available
   const price = m?.yesPrice ?? m?.yes_price ?? m?.price ?? m?.lastPrice ?? m?.chance ?? 0;
   return Number(price) || 0;
 }
 
 function getVolumeValue(m, mode) {
   if (mode === "1h") {
-    // TODO: API not available yet, fallback to 24h
     return Number(m?.volume1h ?? m?.vol1h ?? m?.volume_1h ?? m?.volume24h ?? m?.vol24h ?? 0) || 0;
   }
   if (mode === "6h") {
-    // TODO: API not available yet, fallback to 24h
     return Number(m?.volume6h ?? m?.vol6h ?? m?.volume_6h ?? m?.volume24h ?? m?.vol24h ?? 0) || 0;
   }
   if (mode === "12h") {
-    // TODO: API not available yet, fallback to 24h
     return Number(m?.volume12h ?? m?.vol12h ?? m?.volume_12h ?? m?.volume24h ?? m?.vol24h ?? 0) || 0;
   }
   if (mode === "24h") {
@@ -90,15 +83,13 @@ export default function MarketListClient({ markets }) {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null }); // { key: 'chance' | 'volume', direction: 'asc' | 'desc' }
   const [chanceMap, setChanceMap] = useState({}); // { marketId: chanceValue }
 
-  // Callback when a row loads its chance value
   const handleChanceLoaded = (marketId, chance) => {
     setChanceMap((prev) => {
-      if (prev[marketId] === chance) return prev; // avoid unnecessary re-renders
+      if (prev[marketId] === chance) return prev;
       return { ...prev, [marketId]: chance };
     });
   };
 
-  // Sort and paginate markets
   const sortedMarkets = useMemo(() => {
     const allMarkets = markets || [];
     if (!sortConfig.key) return allMarkets;
@@ -106,7 +97,6 @@ export default function MarketListClient({ markets }) {
     return [...allMarkets].sort((a, b) => {
       let aVal, bVal;
       if (sortConfig.key === "chance") {
-        // Use chanceMap which contains dynamically loaded chance values
         aVal = chanceMap[a.marketId] ?? 0;
         bVal = chanceMap[b.marketId] ?? 0;
       } else if (sortConfig.key === "volume") {
@@ -122,15 +112,13 @@ export default function MarketListClient({ markets }) {
   }, [markets, sortConfig, volMode, chanceMap]);
 
   const totalPages = Math.ceil((sortedMarkets?.length || 0) / ITEMS_PER_PAGE);
-  
-  // Get current page items
+
   const list = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
     const end = start + ITEMS_PER_PAGE;
     return sortedMarkets.slice(start, end);
   }, [sortedMarkets, currentPage]);
 
-  // Handle sort click
   const handleSort = (key) => {
     setSortConfig((prev) => {
       if (prev.key === key) {
@@ -143,7 +131,6 @@ export default function MarketListClient({ markets }) {
     setCurrentPage(1); // Reset to first page when sorting
   };
 
-  // Get sort icon
   const getSortIcon = (key) => {
     if (sortConfig.key !== key) return "↕";
     return sortConfig.direction === "desc" ? "↓" : "↑";
@@ -153,7 +140,6 @@ export default function MarketListClient({ markets }) {
     const total = list.length;
     setVisible(Math.min(6, total));
 
-    // progressive reveal to reduce burst
     const t = setInterval(() => {
       setVisible((v) => (v >= total ? v : Math.min(total, v + 2)));
     }, 320);
@@ -163,7 +149,6 @@ export default function MarketListClient({ markets }) {
 
   return (
     <div className="panel" style={{ padding: 12 }}>
-      {/* Top bar */}
       <div
         style={{
           display: "flex",
@@ -251,7 +236,6 @@ export default function MarketListClient({ markets }) {
         </div>
       </div>
 
-      {/* Sticky header row */}
       <div
         style={{
           position: "sticky",
@@ -328,9 +312,7 @@ export default function MarketListClient({ markets }) {
         </div>
       </div>
 
-      {/* Rows */}
       <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
-        {/* Show skeleton when no markets loaded yet */}
         {(!markets || markets.length === 0) && (
           <>
             {Array.from({ length: 6 }).map((_, idx) => (
@@ -338,8 +320,7 @@ export default function MarketListClient({ markets }) {
             ))}
           </>
         )}
-        
-        {/* Show actual market rows */}
+
         {markets && markets.length > 0 && list.slice(0, visible).map((m, idx) => (
           <MarketRowV2
             key={m.marketId}
@@ -354,7 +335,6 @@ export default function MarketListClient({ markets }) {
         ))}
       </div>
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <div
           style={{
@@ -367,7 +347,6 @@ export default function MarketListClient({ markets }) {
             borderTop: "1px solid rgba(255,255,255,0.06)",
           }}
         >
-          {/* Previous Button */}
           <button
             className="btn ghost"
             onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
@@ -381,7 +360,6 @@ export default function MarketListClient({ markets }) {
             ←
           </button>
 
-          {/* Page Numbers */}
           {(() => {
             const pages = [];
             const maxVisible = 5;
@@ -461,7 +439,6 @@ export default function MarketListClient({ markets }) {
             return pages;
           })()}
 
-          {/* Next Button */}
           <button
             className="btn ghost"
             onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
@@ -475,7 +452,6 @@ export default function MarketListClient({ markets }) {
             →
           </button>
 
-          {/* Page Info */}
           <span className="muted" style={{ fontSize: 12, marginLeft: 12 }}>
             Page {currentPage} of {totalPages}
           </span>

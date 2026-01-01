@@ -28,7 +28,6 @@ function fmtUsd(v) {
   });
 }
 
-// ---- Robust token picker (prevents "all -") ----
 function pickYesTokenId(m) {
   if (!m) return null;
 
@@ -156,12 +155,10 @@ async function sleep(ms) {
 }
 
 async function fetchJsonWithRetry(url, opts) {
-  // try 1
   const r1 = await fetch(url, opts);
   const j1 = await r1.json();
   if (j1?.errno === 0) return j1;
 
-  // retry 1 time (good for rate-limit bursts)
   await sleep(900);
   const r2 = await fetch(url, opts);
   const j2 = await r2.json();
@@ -173,7 +170,7 @@ export default function MarketRow({ market, onOpen, onMetrics }) {
   const tokenId = useMemo(() => pickYesTokenId(market), [market]);
 
   const [loading, setLoading] = useState(true);
-  const [rowErr, setRowErr] = useState(""); // missing_token | fetch_failed
+  const [rowErr, setRowErr] = useState("");
 
   const [mid, setMid] = useState(0);
   const [spreadCents, setSpreadCents] = useState(null);
@@ -196,7 +193,6 @@ export default function MarketRow({ market, onOpen, onMetrics }) {
         return;
       }
 
-      // jitter to avoid all rows firing at the exact same time
       await sleep(150 + Math.floor(Math.random() * 250));
 
       try {

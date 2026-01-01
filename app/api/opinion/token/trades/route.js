@@ -10,7 +10,6 @@ export async function GET(req) {
     return NextResponse.json({ errno: -1, errormsg: "missing_token_id", result: null }, { status: 200 });
   }
 
-  // Try common endpoints (we'll see debug if wrong)
   let r = await opinionFetch("/token/trades", { params: { token_id, limit } });
 
   const ok =
@@ -25,7 +24,7 @@ export async function GET(req) {
 
     if (!ok2) {
       return NextResponse.json(
-        { errno: -1, errormsg: "trades_failed", result: null, debug: { attempt1: r, attempt2: r2 } },
+        { errno: -1, errormsg: "trades_failed", result: null },
         { status: 200 }
       );
     }
