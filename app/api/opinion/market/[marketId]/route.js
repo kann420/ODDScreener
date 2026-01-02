@@ -1,23 +1,21 @@
 import { NextResponse } from "next/server";
-import { opinionFetch } from "@/lib/opinion";
+import { getMultiOutcomeMarkets } from "@/lib/opinionAnalytics";
 
-export async function GET(req, { params }) {
-  const marketId = params?.marketId;
+export const dynamic = "force-dynamic";
 
-  const r = await opinionFetch(`/market/${marketId}`);
+export async function GET(req) {
+  const data = await getMultiOutcomeMarkets();
 
-  const ok =
-    (typeof r?.errno === "number" && r.errno === 0) ||
-    (typeof r?.code === "number" && r.code === 0);
-
-  if (!ok) {
-    return NextResponse.json(
-      { errno: -1, errormsg: "market_detail_failed", result: null },
-      { status: 200 }
-    );
+  if (!data.success) {
+    return NextResponse.json({ 
+      success: false, 
+      error: data.error || { message: "Failed to fetch multi-outcome markets" } 
+    });
   }
 
-  const data = r?.result?.data ?? r?.result ?? r;
-
-  return NextResponse.json({ errno: 0, errormsg: "", result: { data } });
+  return NextResponse.json({
+    success: true,
+    data: data.data,
+    total: data.total,
+  });
 }
