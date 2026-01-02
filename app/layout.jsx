@@ -1,5 +1,6 @@
 import "./globals.css";
 import Script from "next/script";
+import NavLinks from "../components/NavLinks";
 
 const GA_MEASUREMENT_ID = "G-P1NXMB82YZ";
 
@@ -45,11 +46,7 @@ export default function RootLayout({ children }) {
                 </span>
               </a>
 
-              <div className="nav">
-                <a href="/">Discover</a>
-                <a href="/portfolio">Portfolio</a>
-                <a href="/watchlist">Watchlist</a>
-              </div>
+              <NavLinks />
 
               <div className="spacer" />
 
