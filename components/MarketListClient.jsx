@@ -64,11 +64,8 @@ function getVolumeValue(m, mode) {
   if (mode === "1h") {
     return Number(m?.volume1h ?? m?.vol1h ?? m?.volume_1h ?? m?.volume24h ?? m?.vol24h ?? 0) || 0;
   }
-  if (mode === "6h") {
-    return Number(m?.volume6h ?? m?.vol6h ?? m?.volume_6h ?? m?.volume24h ?? m?.vol24h ?? 0) || 0;
-  }
-  if (mode === "12h") {
-    return Number(m?.volume12h ?? m?.vol12h ?? m?.volume_12h ?? m?.volume24h ?? m?.vol24h ?? 0) || 0;
+  if (mode === "4h") {
+    return Number(m?.volume4h ?? m?.vol4h ?? m?.volume_4h ?? m?.volume24h ?? m?.vol24h ?? 0) || 0;
   }
   if (mode === "24h") {
     return Number(m?.volume24h ?? m?.vol24h ?? m?.volume_24h ?? 0) || 0;
@@ -77,7 +74,7 @@ function getVolumeValue(m, mode) {
 }
 
 export default function MarketListClient({ markets }) {
-  const [volMode, setVolMode] = useState("24h"); // "1h" | "6h" | "12h" | "24h" | "all"
+  const [volMode, setVolMode] = useState("24h"); // "1h" | "4h" | "24h" | "all"
   const [visible, setVisible] = useState(6);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null }); // { key: 'chance' | 'volume', direction: 'asc' | 'desc' }
@@ -165,10 +162,10 @@ export default function MarketListClient({ markets }) {
             Volume
           </div>
 
+
           <button
             className="btn ghost"
             disabled
-            title="Coming soon - API not available yet"
             style={{
               padding: "8px 10px",
               borderColor: "rgba(255,255,255,0.06)",
@@ -183,7 +180,6 @@ export default function MarketListClient({ markets }) {
           <button
             className="btn ghost"
             disabled
-            title="Coming soon - API not available yet"
             style={{
               padding: "8px 10px",
               borderColor: "rgba(255,255,255,0.06)",
@@ -192,22 +188,7 @@ export default function MarketListClient({ markets }) {
               cursor: "not-allowed",
             }}
           >
-            6h
-          </button>
-
-          <button
-            className="btn ghost"
-            disabled
-            title="Coming soon - API not available yet"
-            style={{
-              padding: "8px 10px",
-              borderColor: "rgba(255,255,255,0.06)",
-              background: "transparent",
-              opacity: 0.4,
-              cursor: "not-allowed",
-            }}
-          >
-            12h
+            4h
           </button>
 
           <button

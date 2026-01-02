@@ -488,7 +488,7 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
         }}>
           <div>
             <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Chance</div>
-            <div style={{ fontWeight: 700, color: "#22d3ee" }}>{mid ? (mid * 100).toFixed(1) + "%" : "-"}</div>
+            <div style={{ fontWeight: 700, color: "#fff" }}>{mid ? (mid * 100).toFixed(1) + "%" : "-"}</div>
           </div>
           <div>
             <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Expires</div>
@@ -500,11 +500,11 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
           </div>
           <div>
             <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>24h Volume</div>
-            <div style={{ fontWeight: 700, color: "#22d3ee" }}>{volume24h ? `$${fmtQty(volume24h)}` : "-"}</div>
+            <div style={{ fontWeight: 700, color: "#fff" }}>{volume24h ? `$${fmtQty(volume24h)}` : "-"}</div>
           </div>
           <div>
             <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Total Volume</div>
-            <div style={{ fontWeight: 700, color: "#22d3ee" }}>{totalVolume ? `$${fmtQty(totalVolume)}` : "-"}</div>
+            <div style={{ fontWeight: 700, color: "#fff" }}>{totalVolume ? `$${fmtQty(totalVolume)}` : "-"}</div>
           </div>
           <div>
             <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Open Interest</div>
