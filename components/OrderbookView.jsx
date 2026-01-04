@@ -2,6 +2,7 @@
 
 import ChartViewV2 from "./ChartViewV2";
 import { useEffect, useMemo, useRef, useState } from "react";
+import useMarketTrades from "./hooks/useMarketTrades";
 
 function SkeletonOrderbookRow() {
   return (
@@ -277,6 +278,108 @@ function fmtDate(v) {
   }
 }
 
+/**
+ * Extract expiration date from market title
+ * Returns Unix timestamp in SECONDS if found, 0 otherwise
+ */
+function extractExpiresFromTitle(title) {
+  if (!title) return 0;
+  
+  const str = String(title).trim();
+  
+  const months = {
+    'january': 0, 'jan': 0,
+    'february': 1, 'feb': 1,
+    'march': 2, 'mar': 2,
+    'april': 3, 'apr': 3,
+    'may': 4,
+    'june': 5, 'jun': 5,
+    'july': 6, 'jul': 6,
+    'august': 7, 'aug': 7,
+    'september': 8, 'sep': 8, 'sept': 8,
+    'october': 9, 'oct': 9,
+    'november': 10, 'nov': 10,
+    'december': 11, 'dec': 11,
+  };
+  
+  // Pattern 1: "Month Day, Year" or "Month Day"
+  const pattern1 = /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?\b/i;
+  const match1 = str.match(pattern1);
+  if (match1) {
+    const month = months[match1[1].toLowerCase()];
+    const day = parseInt(match1[2], 10);
+    let year = match1[3] ? parseInt(match1[3], 10) : new Date().getFullYear();
+    
+    const now = new Date();
+    const testDate = new Date(year, month, day);
+    if (testDate < now && !match1[3]) {
+      year = now.getFullYear() + 1;
+    }
+    
+    if (month !== undefined && day >= 1 && day <= 31 && year >= 2020 && year <= 2030) {
+      return Math.floor(new Date(year, month, day, 23, 59, 59).getTime() / 1000);
+    }
+  }
+  
+  // Pattern 2: "in Month Year?" or "in Month?"
+  const pattern2 = /\bin\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)(?:\s+(\d{4}))?\b/i;
+  const match2 = str.match(pattern2);
+  if (match2) {
+    const month = months[match2[1].toLowerCase()];
+    let year = match2[2] ? parseInt(match2[2], 10) : new Date().getFullYear();
+    
+    const now = new Date();
+    if (month < now.getMonth() && !match2[2]) {
+      year = now.getFullYear() + 1;
+    }
+    
+    if (month !== undefined && year >= 2020 && year <= 2030) {
+      const lastDay = new Date(year, month + 1, 0).getDate();
+      return Math.floor(new Date(year, month, lastDay, 23, 59, 59).getTime() / 1000);
+    }
+  }
+  
+  // Pattern 3: "by Month Day, Year"
+  const pattern3 = /\bby\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?\b/i;
+  const match3 = str.match(pattern3);
+  if (match3) {
+    const month = months[match3[1].toLowerCase()];
+    const day = parseInt(match3[2], 10);
+    let year = match3[3] ? parseInt(match3[3], 10) : new Date().getFullYear();
+    
+    const now = new Date();
+    const testDate = new Date(year, month, day);
+    if (testDate < now && !match3[3]) {
+      year = now.getFullYear() + 1;
+    }
+    
+    if (month !== undefined && day >= 1 && day <= 31 && year >= 2020 && year <= 2030) {
+      return Math.floor(new Date(year, month, day, 23, 59, 59).getTime() / 1000);
+    }
+  }
+  
+  // Pattern 4: "on Month Day"
+  const pattern4 = /\bon\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i;
+  const match4 = str.match(pattern4);
+  if (match4) {
+    const month = months[match4[1].toLowerCase()];
+    const day = parseInt(match4[2], 10);
+    let year = new Date().getFullYear();
+    
+    const now = new Date();
+    const testDate = new Date(year, month, day);
+    if (testDate < now) {
+      year = now.getFullYear() + 1;
+    }
+    
+    if (month !== undefined && day >= 1 && day <= 31) {
+      return Math.floor(new Date(year, month, day, 23, 59, 59).getTime() / 1000);
+    }
+  }
+  
+  return 0;
+}
+
 export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, marketData = {} }) {
   const [outcome, setOutcome] = useState(yesTokenId ? "YES" : "NO");
   const tokenId = outcome === "YES" ? yesTokenId : noTokenId;
@@ -295,9 +398,17 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
   const totalVolume = marketData.totalVolume || marketData.total_volume || marketData.volume || null;
   const openInterest = marketData.openInterest || marketData.open_interest || null;
   const rules = marketData.rules || marketData.description || marketData.marketRules || null;
-  const expiresAt = marketData.expiresAt || marketData.expires_at || marketData.endDate || marketData.end_date || null;
+  
+  // Get expiresAt - try cutoffAt first, then fallback to extracting from title
+  let expiresAt = marketData.cutoffAt || marketData.resolvedAt || marketData.expiresAt || marketData.expires_at || marketData.endDate || marketData.end_date || null;
+  if (!expiresAt || expiresAt === 0) {
+    expiresAt = extractExpiresFromTitle(title);
+  }
 
   const [showRules, setShowRules] = useState(false);
+  
+  // Recent trades via WebSocket
+  const { trades: recentTrades, connected: wsConnected, error: wsError } = useMarketTrades(marketId);
 
   const abortRef = useRef(null);
   const asksScrollRef = useRef(null);
@@ -492,7 +603,13 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
           </div>
           <div>
             <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Expires</div>
-            <div style={{ fontWeight: 700 }}>{expiresAt ? new Date(expiresAt).toLocaleDateString() : "-"}</div>
+            <div style={{ fontWeight: 700 }}>{expiresAt ? (() => {
+              const ts = Number(expiresAt);
+              const ms = ts > 1e12 ? ts : ts * 1000;
+              const d = new Date(ms);
+              if (isNaN(d.getTime())) return "-";
+              return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+            })() : "-"}</div>
           </div>
           <div>
             <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>24h Change</div>
@@ -566,9 +683,125 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
               <div className="tab">Top Traders</div>
               <div className="tab">Holders</div>
             </div>
-            <div style={{ padding: 20, textAlign: "center" }}>
-              <div className="muted" style={{ fontSize: 12 }}>-</div>
-              <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Coming soon</div>
+            
+            {/* Recent Trades Section */}
+            <div style={{ padding: "12px 16px" }}>
+              {/* Trades table with scroll */}
+              <div style={{ maxHeight: 500, overflowY: "auto", overflowX: "auto" }}>
+                <table style={{ 
+                  width: "100%", 
+                  borderCollapse: "collapse",
+                  fontSize: 13
+                }}>
+                  <thead style={{ position: "sticky", top: 0, background: "#0d0d0d", zIndex: 1 }}>
+                    <tr style={{ 
+                      fontSize: 12, 
+                      color: "rgba(148,163,184,0.8)",
+                      fontWeight: 700,
+                      textAlign: "left"
+                    }}>
+                      <th style={{ padding: "10px 12px 10px 0", fontWeight: 700 }}>Time</th>
+                      <th style={{ padding: "10px 12px", fontWeight: 700 }}>Outcome</th>
+                      <th style={{ padding: "10px 12px", fontWeight: 700 }}>Type</th>
+                      <th style={{ padding: "10px 12px", fontWeight: 700 }}>Price</th>
+                      <th style={{ padding: "10px 12px", fontWeight: 700 }}>Amount</th>
+                      <th style={{ padding: "10px 0 10px 12px", fontWeight: 700, textAlign: "right" }}>Total USD</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentTrades.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ 
+                          textAlign: "center", 
+                          padding: "24px 0",
+                          color: "rgba(148,163,184,0.6)",
+                          fontSize: 13
+                        }}>
+                          {wsConnected 
+                            ? "Waiting for trades..." 
+                            : wsError 
+                              ? "Unable to connect to live feed"
+                              : "Connecting to live feed..."}
+                        </td>
+                      </tr>
+                    ) : (
+                      recentTrades.map((trade) => {
+                        const isBuy = trade.side === "Buy";
+                        const outcomeLabel = trade.outcomeSide === 1 ? "YES" : "NO";
+                        // UTC time format
+                        const timeStr = new Date(trade.timestamp).toISOString().slice(11, 19);
+                        // Price in cents with decimal
+                        const priceCents = (trade.price * 100).toFixed(1).replace(/\.0$/, "");
+                        // Amount formatted
+                        const amount = trade.shares >= 1000 
+                          ? (trade.shares / 1000).toFixed(1) + "K"
+                          : Math.round(trade.shares).toLocaleString();
+                        // Total USD
+                        const totalUsd = trade.price * trade.shares;
+                        const totalStr = totalUsd >= 1000
+                          ? "$" + (totalUsd / 1000).toFixed(1) + "K"
+                          : "$" + Math.round(totalUsd).toLocaleString();
+                        
+                        return (
+                          <tr 
+                            key={trade.id}
+                            style={{
+                              borderBottom: "1px solid rgba(255,255,255,0.04)",
+                              animation: "fadeIn 0.3s ease"
+                            }}
+                          >
+                            <td className="mono muted" style={{ 
+                              padding: "12px 12px 12px 0", 
+                              fontSize: 13,
+                              whiteSpace: "nowrap"
+                            }}>
+                              {timeStr}
+                            </td>
+                            <td style={{ padding: "12px" }}>
+                              <span style={{
+                                fontSize: 13,
+                                fontWeight: 600,
+                                color: trade.outcomeSide === 1 ? "#22d3ee" : "#a855f7"
+                              }}>
+                                {outcomeLabel}
+                              </span>
+                            </td>
+                            <td style={{ padding: "12px" }}>
+                              <span style={{ 
+                                color: isBuy ? "#22c55e" : "#ef4444",
+                                fontWeight: 700,
+                                fontSize: 13
+                              }}>
+                                {isBuy ? "BUY" : "SELL"}
+                              </span>
+                            </td>
+                            <td className="mono" style={{ 
+                              padding: "12px",
+                              fontWeight: 500
+                            }}>
+                              {priceCents}¢
+                            </td>
+                            <td className="mono" style={{ 
+                              padding: "12px",
+                              fontWeight: 500
+                            }}>
+                              {amount}
+                            </td>
+                            <td className="mono" style={{ 
+                              padding: "12px 0 12px 12px",
+                              textAlign: "right",
+                              color: isBuy ? "#22c55e" : "#ef4444",
+                              fontWeight: 600
+                            }}>
+                              {totalStr}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>

@@ -29,6 +29,132 @@ function fmtChanceFromPrice01(p01) {
   return `${s}%`;
 }
 
+/**
+ * Extract expiration date from market title
+ * Returns Unix timestamp in SECONDS if found, null otherwise
+ */
+function extractExpiresFromTitle(title) {
+  if (!title) return null;
+  
+  const str = String(title).trim();
+  
+  const months = {
+    'january': 0, 'jan': 0,
+    'february': 1, 'feb': 1,
+    'march': 2, 'mar': 2,
+    'april': 3, 'apr': 3,
+    'may': 4,
+    'june': 5, 'jun': 5,
+    'july': 6, 'jul': 6,
+    'august': 7, 'aug': 7,
+    'september': 8, 'sep': 8, 'sept': 8,
+    'october': 9, 'oct': 9,
+    'november': 10, 'nov': 10,
+    'december': 11, 'dec': 11,
+  };
+  
+  // Pattern 1: "Month Day, Year" or "Month Day Year" (e.g., "January 4", "March 31, 2026")
+  const pattern1 = /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?\b/i;
+  const match1 = str.match(pattern1);
+  if (match1) {
+    const month = months[match1[1].toLowerCase()];
+    const day = parseInt(match1[2], 10);
+    let year = match1[3] ? parseInt(match1[3], 10) : new Date().getFullYear();
+    
+    // If month/day is in the past for this year, assume next year
+    const now = new Date();
+    const testDate = new Date(year, month, day);
+    if (testDate < now && !match1[3]) {
+      year = now.getFullYear() + 1;
+    }
+    
+    if (month !== undefined && day >= 1 && day <= 31 && year >= 2020 && year <= 2030) {
+      // Return end of day in SECONDS
+      return Math.floor(new Date(year, month, day, 23, 59, 59).getTime() / 1000);
+    }
+  }
+  
+  // Pattern 2: "in Month Year?" or "in Month?" (e.g., "in January?", "in March 2026?")
+  const pattern2 = /\bin\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)(?:\s+(\d{4}))?\b/i;
+  const match2 = str.match(pattern2);
+  if (match2) {
+    const month = months[match2[1].toLowerCase()];
+    let year = match2[2] ? parseInt(match2[2], 10) : new Date().getFullYear();
+    
+    // If month is in the past for this year, assume next year
+    const now = new Date();
+    if (month < now.getMonth() && !match2[2]) {
+      year = now.getFullYear() + 1;
+    }
+    
+    if (month !== undefined && year >= 2020 && year <= 2030) {
+      // End of the month
+      const lastDay = new Date(year, month + 1, 0).getDate();
+      return Math.floor(new Date(year, month, lastDay, 23, 59, 59).getTime() / 1000);
+    }
+  }
+  
+  // Pattern 3: "by Month Day, Year" (e.g., "by March 31, 2026")
+  const pattern3 = /\bby\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?\b/i;
+  const match3 = str.match(pattern3);
+  if (match3) {
+    const month = months[match3[1].toLowerCase()];
+    const day = parseInt(match3[2], 10);
+    let year = match3[3] ? parseInt(match3[3], 10) : new Date().getFullYear();
+    
+    const now = new Date();
+    const testDate = new Date(year, month, day);
+    if (testDate < now && !match3[3]) {
+      year = now.getFullYear() + 1;
+    }
+    
+    if (month !== undefined && day >= 1 && day <= 31 && year >= 2020 && year <= 2030) {
+      return Math.floor(new Date(year, month, day, 23, 59, 59).getTime() / 1000);
+    }
+  }
+  
+  // Pattern 4: "on Month Day" (e.g., "on January 4?(12:00 ET)")
+  const pattern4 = /\bon\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i;
+  const match4 = str.match(pattern4);
+  if (match4) {
+    const month = months[match4[1].toLowerCase()];
+    const day = parseInt(match4[2], 10);
+    let year = new Date().getFullYear();
+    
+    const now = new Date();
+    const testDate = new Date(year, month, day);
+    if (testDate < now) {
+      year = now.getFullYear() + 1;
+    }
+    
+    if (month !== undefined && day >= 1 && day <= 31) {
+      return Math.floor(new Date(year, month, day, 23, 59, 59).getTime() / 1000);
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Format expiration date from Unix timestamp (seconds)
+ * API returns timestamps in SECONDS, not milliseconds
+ */
+function fmtExpires(timestampSec) {
+  if (!timestampSec || timestampSec <= 0) return "—";
+  
+  // Convert seconds to milliseconds
+  const ms = Number(timestampSec) * 1000;
+  const d = new Date(ms);
+  
+  if (isNaN(d.getTime())) return "—";
+  
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const month = months[d.getMonth()];
+  const day = d.getDate();
+  const year = d.getFullYear();
+  return `${month} ${day}, ${year}`;
+}
+
 function pickYesTokenId(m) {
   if (!m) return null;
 
@@ -188,7 +314,34 @@ async function fetchHistoryCached(tokenId, interval = "1d") {
   });
 }
 
-export default function MarketRowV2({ market, volMode, onOpen, priority = false, onChanceLoaded }) {
+async function fetchMarketDetailCached(marketId) {
+  const key = `mkt:${marketId}`;
+  const cached = clientGet(key);
+  if (cached) return cached;
+
+  return fetchOnce(`inflight:${key}`, async () => {
+    const j = await withConcurrency(
+      () =>
+        fetchJsonWithRetry(`/api/opinion/market/${encodeURIComponent(marketId)}`, {
+          cache: "no-store",
+        }),
+      4
+    );
+    // cache even failures briefly to avoid spamming
+    clientSet(key, j, 30_000);
+    return j;
+  });
+}
+
+export default function MarketRowV2({
+  market,
+  volMode,
+  onOpen,
+  priority = false,
+  onChanceLoaded,
+  onVolumeLoaded,
+  volumeOverride,
+}) {
   const tokenId = useMemo(() => pickYesTokenId(market), [market]);
   const title = market?.title || "Market";
 
@@ -220,8 +373,7 @@ export default function MarketRowV2({ market, volMode, onOpen, priority = false,
     if (!tokenId) return;
     try {
       await Promise.all([fetchOrderbookCached(tokenId), fetchHistoryCached(tokenId, interval)]);
-    } catch {
-    }
+    } catch {}
   }, [tokenId]);
 
   useEffect(() => {
@@ -270,8 +422,63 @@ export default function MarketRowV2({ market, volMode, onOpen, priority = false,
     };
   }, [tokenId, inView, priority]);
 
+  // Lazy-load accurate volume for Discover list.
+  // Some markets (especially multi-outcome) may not include volume fields in the /market list API,
+  // but they do exist in the /market/{id} detail API.
+  useEffect(() => {
+    let alive = true;
+
+    async function loadVolume() {
+      const marketId = market?.marketId;
+      if (!marketId) return;
+      if (!inView && !priority) return;
+
+      const current24h = Number(volumeOverride?.volume24h ?? market?.volume24h ?? 0);
+      const currentAll = Number(volumeOverride?.volume ?? market?.volume ?? 0);
+
+      // If we already have non-zero numbers, don't fetch.
+      if (current24h > 0 || currentAll > 0) return;
+
+      try {
+        const j = await fetchMarketDetailCached(marketId);
+        if (!alive) return;
+
+        const data = j?.result?.data ?? j?.result ?? j?.data ?? j ?? {};
+        const vAll = Number(data?.volume ?? 0) || 0;
+        const v24h = Number(data?.volume24h ?? 0) || 0;
+
+        if ((vAll > 0 || v24h > 0) && onVolumeLoaded) {
+          onVolumeLoaded(marketId, { volume: vAll, volume24h: v24h });
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    loadVolume();
+    return () => {
+      alive = false;
+    };
+  }, [market?.marketId, market?.volume, market?.volume24h, volumeOverride, inView, priority, onVolumeLoaded]);
+
   const chanceText = mid > 0 ? fmtChanceFromPrice01(mid) : "-";
-  const volText = volMode === "24h" ? fmtUsdCompact(market?.volume24h) : fmtUsdCompact(market?.volume);
+
+  // API currently supports: 24h and total volume only
+  const volNumber =
+    volMode === "24h"
+      ? (volumeOverride?.volume24h ?? market?.volume24h)
+      : (volumeOverride?.volume ?? market?.volume);
+
+  const volText = fmtUsdCompact(volNumber);
+
+  // Get expiration date - cutoffAt is Unix timestamp in SECONDS
+  // If not available from API, try to extract from title
+  const marketTitle = market?.title ?? "";
+  let expiresTimestamp = market?.cutoffAt || market?.resolvedAt || 0;
+  if (!expiresTimestamp || expiresTimestamp === 0) {
+    expiresTimestamp = extractExpiresFromTitle(marketTitle) || 0;
+  }
+  const expiresText = fmtExpires(expiresTimestamp);
 
   return (
     <div
@@ -333,7 +540,7 @@ export default function MarketRowV2({ market, volMode, onOpen, priority = false,
 
         <div className="mono">{volText}</div>
 
-        <div className="mono muted">—</div>
+        <div className="mono muted">{expiresText}</div>
       </div>
     </div>
   );

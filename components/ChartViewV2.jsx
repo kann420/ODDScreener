@@ -287,7 +287,6 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
           </button>
         ))}
         <div className="spacer" />
-        <div className="muted" style={{ fontSize: 12 }}>UTC tooltip on hover</div>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
@@ -300,7 +299,6 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
             <span style={{ color: chartColor, fontWeight: 900 }}>{displayPts.length ? (displayPts[displayPts.length - 1]?.p ?? 0).toFixed(2) : "-"}</span>
           </div>
         </div>
-        <div className="muted" style={{ fontSize: 12 }}>Demo chart (mock)</div>
       </div>
 
       {err && (

@@ -1,6 +1,7 @@
 import "./globals.css";
 import Script from "next/script";
 import NavLinks from "../components/NavLinks";
+import GlobalMarketSearchInput from "../components/GlobalMarketSearchInput";
 
 const GA_MEASUREMENT_ID = "G-P1NXMB82YZ";
 
@@ -50,29 +51,35 @@ export default function RootLayout({ children }) {
 
               <div className="spacer" />
 
-              <div className="search">
-                <svg
-                  className="search-icon"
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <circle cx="11" cy="11" r="8" />
-                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-                <span className="muted">Search</span>
+              <div className="search" style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <GlobalMarketSearchInput />
               </div>
             </div>
           </div>
         </div>
 
         <div className="container">{children}</div>
+        {/* Footer: bottom left */}
+        <div style={{
+          position: "fixed",
+          left: 12,
+          bottom: 10,
+          zIndex: 100,
+          fontSize: 13,
+          color: "#fff",
+          fontWeight: 700,
+          background: "rgba(215, 192, 176, 0.22)",
+          borderRadius: 8,
+          padding: "4px 12px",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 4
+        }}>
+          <span style={{ width: 8, height: 8, borderRadius: 99, background: "#22c55e", display: "inline-block", marginRight: 2 }}></span>
+          <span style={{ color: '#fff', fontWeight: 700, marginRight: 2 }}>Live</span>
+          <span style={{ color: '#cbd5e1', fontStyle: 'italic', fontWeight: 400 }}>version 1.0 Beta</span>
+        </div>
       </body>
     </html>
   );
