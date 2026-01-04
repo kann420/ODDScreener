@@ -19,6 +19,19 @@ const iconButtonStyle = {
   transition: "transform 120ms ease, border-color 120ms ease, background 120ms ease",
 };
 
+const partnerWrapStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  marginRight: 12,
+};
+
+const partnerLogoBase = {
+  width: 44,
+  height: 44,
+  display: "block",
+};
+
 const IconX = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <path d="M4 3h4.9l3.3 4.8L15.7 3H20l-6.3 7.7L20 21h-4.9l-3.6-5.2L7.7 21H4l6.6-8.1L4 3Z" fill="currentColor" />
@@ -72,7 +85,34 @@ export default function RootLayout({ children }) {
       <body>
         <div className="topbar">
           <div className="container">
-            <div className="topbar-inner">
+            <div className="topbar-inner" style={{ position: "relative" }}>
+              <div
+                style={{
+                  ...partnerWrapStyle,
+                  position: "absolute",
+                  left: -450,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                }}
+              >
+                <img
+                  src="/polymarket_600.svg"
+                  alt="Polymarket"
+                  style={{
+                    ...partnerLogoBase,
+                    filter: "grayscale(1) brightness(0.8)",
+                    opacity: 0.7,
+                  }}
+                />
+                <img
+                  src="/op_logo_600.svg"
+                  alt="OPinion"
+                  style={{
+                    ...partnerLogoBase,
+                    filter: "drop-shadow(0 0 6px rgba(255,255,255,0.22))",
+                  }}
+                />
+              </div>
               <a className="brand" href="/" aria-label="ODDScreeners">
                 <img className="brand-icon" src="/logo.svg" alt="ODDScreeners" />
 
