@@ -29,6 +29,10 @@ export default function NavLinks() {
         Copy Trade
         <span className="coming-soon">coming soon</span>
       </span>
+      <span className="nav-disabled">
+        Arbitage
+        <span className="coming-soon">coming soon</span>
+      </span>
     </div>
   );
 }
