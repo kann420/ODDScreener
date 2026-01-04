@@ -718,7 +718,7 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                           fontSize: 13
                         }}>
                           {wsConnected 
-                            ? "Waiting for trades..." 
+                            ? "Loading..." 
                             : wsError 
                               ? "Unable to connect to live feed"
                               : "Connecting to live feed..."}
