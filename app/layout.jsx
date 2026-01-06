@@ -154,7 +154,7 @@ export default function RootLayout({ children }) {
         }}>
           <span style={{ width: 8, height: 8, borderRadius: 99, background: "#22c55e", display: "inline-block", marginRight: 2 }}></span>
           <span style={{ color: '#fff', fontWeight: 700, marginRight: 2 }}>Live</span>
-          <span style={{ color: '#cbd5e1', fontStyle: 'italic', fontWeight: 400 }}>version 1.0 Beta</span>
+          <span style={{ color: '#cbd5e1', fontStyle: 'italic', fontWeight: 400 }}>version 1.0.1 Beta</span>
         </div>
 
         <div style={{
