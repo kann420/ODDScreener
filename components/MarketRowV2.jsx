@@ -6,6 +6,7 @@ import MiniSparkline from "@/components/MiniSparkline";
 import useInView from "@/components/hooks/useInView";
 import { withConcurrency } from "@/lib/concurrency";
 import { clientGet, clientSet } from "@/lib/clientCache";
+import Link from "next/link";
 
 function num(v) {
   const n = Number(v);
@@ -481,67 +482,77 @@ export default function MarketRowV2({
   const expiresText = fmtExpires(expiresTimestamp);
 
   return (
+  <Link
+    href={`/market/${market?.marketId}`}
+    prefetch={false}
+    className="panel"
+    style={{
+      padding: "12px 12px",
+      cursor: "pointer",
+      display: "block",
+      color: "inherit",
+      textDecoration: "none",
+    }}
+    onMouseEnter={() => {
+      prefetch();
+    }}
+    onClick={() => {
+      // IMPORTANT: do NOT preventDefault
+      // so right-click / middle-click / ctrl-click work natively
+      prefetch();
+      onOpen?.(market); // keep only if you use it for analytics (no redirect)
+    }}
+    title="Open market"
+  >
     <div
       ref={rowRef}
-      className="panel"
-      style={{ padding: "12px 12px", cursor: "pointer" }}
-      onMouseEnter={() => {
-        prefetch();
+      style={{
+        display: "grid",
+        gridTemplateColumns: "minmax(320px, 1.6fr) 140px 110px 140px 130px",
+        gap: 12,
+        alignItems: "center",
       }}
-      onClick={() => {
-        prefetch();
-        onOpen?.(market);
-      }}
-      title="Open market"
     >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(320px, 1.6fr) 140px 110px 140px 130px",
-          gap: 12,
-          alignItems: "center",
-        }}
-      >
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontWeight: 900,
-              lineHeight: 1.15,
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {title}
-          </div>
-
-          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-            {rowErr ? "" : ""}
-          </div>
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontWeight: 900,
+            lineHeight: 1.15,
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {title}
         </div>
 
-        <div>
-          {loading ? (
-            <div className="skeleton skeleton-chart" style={{ width: 120, height: 32 }} />
-          ) : (
-            <MiniSparkline points={sparkPts} />
-          )}
+        <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+          {rowErr ? "" : ""}
         </div>
-
-        <div className="mono" style={{ fontWeight: 900 }}>
-          {loading ? (
-            <div className="skeleton skeleton-text" style={{ width: 50, height: 14 }} />
-          ) : (
-            chanceText
-          )}
-        </div>
-
-        <div className="mono">{volText}</div>
-
-        <div className="mono muted">{expiresText}</div>
       </div>
+
+      <div>
+        {loading ? (
+          <div className="skeleton skeleton-chart" style={{ width: 120, height: 32 }} />
+        ) : (
+          <MiniSparkline points={sparkPts} />
+        )}
+      </div>
+
+      <div className="mono" style={{ fontWeight: 900 }}>
+        {loading ? (
+          <div className="skeleton skeleton-text" style={{ width: 50, height: 14 }} />
+        ) : (
+          chanceText
+        )}
+      </div>
+
+      <div className="mono">{volText}</div>
+
+      <div className="mono muted">{expiresText}</div>
     </div>
-  );
+  </Link>
+);
 }
