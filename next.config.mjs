@@ -1,10 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  distDir: '.next',
-  experimental: {
-    turbo: {
-      memoryLimit: 512,
-    },
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "**",
+      },
+    ],
   },
 };
+
 export default nextConfig;

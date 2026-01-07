@@ -1,6 +1,7 @@
 import { opinionFetch, normalizeMarketList } from "@/lib/opinion";
 import { getMultiOutcomeMarkets } from "@/lib/opinionAnalytics";
 import MarketListClient from "@/components/MarketListClient";
+import DiscoverNewsBar from "@/components/DiscoverNewsBar";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 30; // Cache for 30 seconds
@@ -55,26 +56,39 @@ const TOPIC_STATUS = {
  */
 function extractDateFromTitle(title) {
   if (!title) return null;
-  
+
   const str = String(title).trim();
-  
+
   const months = {
-    'january': 0, 'jan': 0,
-    'february': 1, 'feb': 1,
-    'march': 2, 'mar': 2,
-    'april': 3, 'apr': 3,
-    'may': 4,
-    'june': 5, 'jun': 5,
-    'july': 6, 'jul': 6,
-    'august': 7, 'aug': 7,
-    'september': 8, 'sep': 8, 'sept': 8,
-    'october': 9, 'oct': 9,
-    'november': 10, 'nov': 10,
-    'december': 11, 'dec': 11,
+    january: 0,
+    jan: 0,
+    february: 1,
+    feb: 1,
+    march: 2,
+    mar: 2,
+    april: 3,
+    apr: 3,
+    may: 4,
+    june: 5,
+    jun: 5,
+    july: 6,
+    jul: 6,
+    august: 7,
+    aug: 7,
+    september: 8,
+    sep: 8,
+    sept: 8,
+    october: 9,
+    oct: 9,
+    november: 10,
+    nov: 10,
+    december: 11,
+    dec: 11,
   };
-  
+
   // Pattern 1: "Month Day, Year" (e.g., "December 31, 2025")
-  const pattern1 = /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})\b/i;
+  const pattern1 =
+    /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})\b/i;
   const match1 = str.match(pattern1);
   if (match1) {
     const month = months[match1[1].toLowerCase()];
@@ -84,14 +98,15 @@ function extractDateFromTitle(title) {
       return new Date(year, month, day, 23, 59, 59, 999).getTime();
     }
   }
-  
+
   // Pattern 2: "in Month Year?" or "in Month?"
-  const pattern2 = /\bin\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)(?:\s+(\d{4}))?\s*\??/i;
+  const pattern2 =
+    /\bin\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)(?:\s+(\d{4}))?\s*\??/i;
   const match2 = str.match(pattern2);
   if (match2) {
     const month = months[match2[1].toLowerCase()];
     let year = match2[2] ? parseInt(match2[2], 10) : null;
-    
+
     if (!year) {
       const now = new Date();
       const currentYear = now.getFullYear();
@@ -104,13 +119,13 @@ function extractDateFromTitle(title) {
         year = currentYear - 1;
       }
     }
-    
+
     if (month !== undefined && year >= 2020 && year <= 2030) {
       const lastDay = new Date(year, month + 1, 0).getDate();
       return new Date(year, month, lastDay, 23, 59, 59, 999).getTime();
     }
   }
-  
+
   return null;
 }
 
@@ -120,7 +135,7 @@ function extractDateFromTitle(title) {
  */
 function isExpiredFast(market) {
   if (!market) return true;
-  
+
   const now = Date.now();
 
   // 1) Check status
@@ -128,7 +143,7 @@ function isExpiredFast(market) {
   if (status === TOPIC_STATUS.RESOLVED) return true;
   if (status === TOPIC_STATUS.RESOLVING) return true;
   if (status >= TOPIC_STATUS.FAILED) return true;
-  
+
   const statusEnum = String(market?.statusEnum ?? market?.status_enum ?? "").toLowerCase();
   if (statusEnum === "resolved" || statusEnum === "resolving" || statusEnum === "failed" || statusEnum === "deleted") {
     return true;
@@ -141,7 +156,7 @@ function isExpiredFast(market) {
   // 3) Check resolvedAt
   const resolvedAtMs = toMs(market?.resolvedAt ?? market?.resolved_at);
   if (resolvedAtMs && resolvedAtMs > 0) return true;
-  
+
   // 4) Check cutoffAt if available
   const cutoffAtMs = toMs(market?.cutoffAt ?? market?.cutoff_at);
   if (cutoffAtMs && cutoffAtMs > 0 && cutoffAtMs < now) {
@@ -165,7 +180,7 @@ function isExpiredFast(market) {
 
 export default async function Home() {
   const startTime = Date.now();
-  
+
   // Fetch both APIs in parallel - NO detail fetches
   const [opinionResult, analyticsResult] = await Promise.all([
     opinionFetch("/market", {
@@ -179,7 +194,6 @@ export default async function Home() {
   if (opinionResult?.errno !== 0) {
     return (
       <div className="panel" style={{ padding: 14 }}>
-        <div style={{ fontWeight: 900, fontSize: 14 }}>Discover</div>
         <p className="muted" style={{ marginTop: 8 }}>
           Failed to load markets. Please try again later.
         </p>
@@ -211,25 +225,10 @@ export default async function Home() {
 
   return (
     <div className="col" style={{ gap: 12 }}>
-      <div className="panel" style={{ padding: 14 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 900, fontSize: 14 }}>Discover</div>
-            <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-              Showing {filtered.length} markets. Total active (API): {total}
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* HEADER PANEL: replace Discover/Showing text with News bar */}
+      <DiscoverNewsBar initialMarkets={filtered} />
 
+      {/* Markets */}
       <MarketListClient markets={filtered} />
     </div>
   );
