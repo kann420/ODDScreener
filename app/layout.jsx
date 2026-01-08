@@ -56,7 +56,7 @@ const SOCIAL_LINKS = [
 
 export const metadata = {
   title: "ODDScreeners - Opinion Markets Explorer",
-  description: "Demo UI for Opinion explorer + embedded chart service"
+  description: "Demo UI for Opinion explorer + embedded chart service",
 };
 
 export default function RootLayout({ children }) {
@@ -64,10 +64,7 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <head>
         {/* Google Analytics */}
-        <Script
-          src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
-          strategy="afterInteractive"
-        />
+        <Script src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`} strategy="afterInteractive" />
         <Script id="google-analytics" strategy="afterInteractive">
           {`
             window.dataLayer = window.dataLayer || [];
@@ -78,23 +75,29 @@ export default function RootLayout({ children }) {
             });
           `}
         </Script>
+
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+          rel="stylesheet"
+        />
       </head>
+
       <body>
         <div className="topbar">
           <div className="container">
-            <div className="topbar-inner" style={{ position: "relative" }}>
-              <div
-                style={{
-                  ...partnerWrapStyle,
-                  position: "absolute",
-                  left: -450,
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                }}
-              >
+            {/* ✅ align everything nicely (no absolute hacks) */}
+            <div
+              className="topbar-inner"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 18,
+              }}
+            >
+              {/* partner logos (left of brand) */}
+              <div style={{ ...partnerWrapStyle, flex: "0 0 auto" }}>
                 <img
                   src="/polymarket_600.svg"
                   alt="Polymarket"
@@ -113,9 +116,9 @@ export default function RootLayout({ children }) {
                   }}
                 />
               </div>
+
               <a className="brand" href="/" aria-label="ODDScreeners">
                 <img className="brand-icon" src="/logo.svg" alt="ODDScreeners" />
-
                 <span className="brand-wordmark">
                   <span className="brand-odds">ODDS</span>
                   <span className="brand-screener">creeners</span>
@@ -123,11 +126,13 @@ export default function RootLayout({ children }) {
                 </span>
               </a>
 
-              <NavLinks />
+              <div style={{ display: "flex", alignItems: "center" }}>
+                <NavLinks />
+              </div>
 
               <div className="spacer" />
 
-              <div className="search" style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <div className="search" style={{ display: "flex", alignItems: "center", gap: 1 }}>
                 <GlobalMarketSearchInput />
               </div>
             </div>
@@ -135,46 +140,45 @@ export default function RootLayout({ children }) {
         </div>
 
         <div className="container">{children}</div>
+
         {/* Footer: bottom left */}
-        <div style={{
-          position: "fixed",
-          left: 12,
-          bottom: 10,
-          zIndex: 100,
-          fontSize: 13,
-          color: "#fff",
-          fontWeight: 700,
-          background: "rgba(215, 192, 176, 0.22)",
-          borderRadius: 8,
-          padding: "4px 12px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 4
-        }}>
-          <span style={{ width: 8, height: 8, borderRadius: 99, background: "#22c55e", display: "inline-block", marginRight: 2 }}></span>
-          <span style={{ color: '#fff', fontWeight: 700, marginRight: 2 }}>Live</span>
-          <span style={{ color: '#cbd5e1', fontStyle: 'italic', fontWeight: 400 }}>version 1.0.2 Beta</span>
+        <div
+          style={{
+            position: "fixed",
+            left: 12,
+            bottom: 10,
+            zIndex: 100,
+            fontSize: 13,
+            color: "#fff",
+            fontWeight: 700,
+            background: "rgba(215, 192, 176, 0.22)",
+            borderRadius: 8,
+            padding: "4px 12px",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+          }}
+        >
+          <span style={{ width: 8, height: 8, borderRadius: 99, background: "#22c55e", display: "inline-block", marginRight: 2 }} />
+          <span style={{ color: "#fff", fontWeight: 700, marginRight: 2 }}>Live</span>
+          <span style={{ color: "#cbd5e1", fontStyle: "italic", fontWeight: 400 }}>version 1.1.0 Beta</span>
         </div>
 
-        <div style={{
-          position: "fixed",
-          right: 12,
-          bottom: 10,
-          zIndex: 100,
-          display: "flex",
-          alignItems: "center",
-          gap: 8
-        }}>
+        {/* Footer: bottom right */}
+        <div
+          style={{
+            position: "fixed",
+            right: 12,
+            bottom: 10,
+            zIndex: 100,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
           {SOCIAL_LINKS.map(({ id, href, label, Icon, src }) => (
-            <a
-              key={id}
-              href={href}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={label}
-              style={iconButtonStyle}
-            >
+            <a key={id} href={href} target="_blank" rel="noreferrer" aria-label={label} style={iconButtonStyle}>
               {Icon ? (
                 <Icon />
               ) : (
@@ -187,7 +191,7 @@ export default function RootLayout({ children }) {
                     objectFit: "contain",
                     transform: "scale(1.8)",
                     transformOrigin: "center",
-                    display: "block"
+                    display: "block",
                   }}
                 />
               )}
@@ -198,4 +202,3 @@ export default function RootLayout({ children }) {
     </html>
   );
 }
-
