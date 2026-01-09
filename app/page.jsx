@@ -184,7 +184,9 @@ export default async function Home() {
   // Fetch both APIs in parallel - NO detail fetches
   const [opinionResult, analyticsResult] = await Promise.all([
     opinionFetch("/market", {
-      params: { status: "activated", sortBy: 5, limit: 100 },
+      // Higher limit so BONUS markets are reliably included.
+      // (Bonus markets are sparse and can be missed in a small top-N fetch.)
+      params: { status: "activated", sortBy: 5, limit: 500 },
     }),
     getMultiOutcomeMarkets(),
   ]);
@@ -203,6 +205,13 @@ export default async function Home() {
 
   const { total, list: opinionList } = normalizeMarketList(opinionResult);
   const multiOutcomeList = analyticsResult.success ? analyticsResult.data : [];
+
+  // Detect bonus markets from list data (check hasBonus flag)
+  const bonusIdsFromList = opinionList
+    .filter((m) => m.hasBonus === true)
+    .map((m) => m.marketId);
+  
+  console.log(`[Discover] Found ${bonusIdsFromList.length} bonus markets in list data`);
 
   // Merge list + multi-outcome, dedup by marketId
   const baseList = [...(multiOutcomeList || []), ...(opinionList || [])];
@@ -229,7 +238,7 @@ export default async function Home() {
       <DiscoverNewsBar initialMarkets={filtered} />
 
       {/* Markets */}
-      <MarketListClient markets={filtered} />
+      <MarketListClient markets={filtered} initialBonusIds={bonusIdsFromList} />
     </div>
   );
 }

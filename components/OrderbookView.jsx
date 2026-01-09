@@ -582,6 +582,9 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                 <img src="/opinion-logo.svg" alt="Opinion" width="16" height="16" />
                 View on Opinion
               </a>
+              {marketData && Object.prototype.hasOwnProperty.call(marketData, "incentiveFactor") ? (
+                <img src="/gift_icon_24.svg" alt="Bonus" title="Bonus market" style={{ width: 40, height: 40, marginLeft: -10, verticalAlign: "middle" }} />
+              ) : null}
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>

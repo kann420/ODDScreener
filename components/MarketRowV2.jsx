@@ -36,124 +36,117 @@ function fmtChanceFromPrice01(p01) {
  */
 function extractExpiresFromTitle(title) {
   if (!title) return null;
-  
+
   const str = String(title).trim();
-  
+
   const months = {
-    'january': 0, 'jan': 0,
-    'february': 1, 'feb': 1,
-    'march': 2, 'mar': 2,
-    'april': 3, 'apr': 3,
-    'may': 4,
-    'june': 5, 'jun': 5,
-    'july': 6, 'jul': 6,
-    'august': 7, 'aug': 7,
-    'september': 8, 'sep': 8, 'sept': 8,
-    'october': 9, 'oct': 9,
-    'november': 10, 'nov': 10,
-    'december': 11, 'dec': 11,
+    january: 0,
+    jan: 0,
+    february: 1,
+    feb: 1,
+    march: 2,
+    mar: 2,
+    april: 3,
+    apr: 3,
+    may: 4,
+    june: 5,
+    jun: 5,
+    july: 6,
+    jul: 6,
+    august: 7,
+    aug: 7,
+    september: 8,
+    sep: 8,
+    sept: 8,
+    october: 9,
+    oct: 9,
+    november: 10,
+    nov: 10,
+    december: 11,
+    dec: 11,
   };
-  
-  // Pattern 1: "Month Day, Year" or "Month Day Year" (e.g., "January 4", "March 31, 2026")
-  const pattern1 = /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?\b/i;
+
+  const pattern1 =
+    /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?\b/i;
+
   const match1 = str.match(pattern1);
   if (match1) {
     const month = months[match1[1].toLowerCase()];
     const day = parseInt(match1[2], 10);
     let year = match1[3] ? parseInt(match1[3], 10) : new Date().getFullYear();
-    
-    // If month/day is in the past for this year, assume next year
+
     const now = new Date();
     const testDate = new Date(year, month, day);
-    if (testDate < now && !match1[3]) {
-      year = now.getFullYear() + 1;
-    }
-    
-    if (month !== undefined && day >= 1 && day <= 31 && year >= 2020 && year <= 2030) {
-      // Return end of day in SECONDS
+    if (testDate < now && !match1[3]) year = now.getFullYear() + 1;
+
+    if (month !== undefined && day >= 1 && day <= 31 && year >= 2020 && year <= 2035) {
       return Math.floor(new Date(year, month, day, 23, 59, 59).getTime() / 1000);
     }
   }
-  
-  // Pattern 2: "in Month Year?" or "in Month?" (e.g., "in January?", "in March 2026?")
-  const pattern2 = /\bin\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)(?:\s+(\d{4}))?\b/i;
+
+  const pattern2 =
+    /\bin\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)(?:\s+(\d{4}))?\b/i;
+
   const match2 = str.match(pattern2);
   if (match2) {
     const month = months[match2[1].toLowerCase()];
     let year = match2[2] ? parseInt(match2[2], 10) : new Date().getFullYear();
-    
-    // If month is in the past for this year, assume next year
+
     const now = new Date();
-    if (month < now.getMonth() && !match2[2]) {
-      year = now.getFullYear() + 1;
-    }
-    
-    if (month !== undefined && year >= 2020 && year <= 2030) {
-      // End of the month
+    if (month < now.getMonth() && !match2[2]) year = now.getFullYear() + 1;
+
+    if (month !== undefined && year >= 2020 && year <= 2035) {
       const lastDay = new Date(year, month + 1, 0).getDate();
       return Math.floor(new Date(year, month, lastDay, 23, 59, 59).getTime() / 1000);
     }
   }
-  
-  // Pattern 3: "by Month Day, Year" (e.g., "by March 31, 2026")
-  const pattern3 = /\bby\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?\b/i;
+
+  const pattern3 =
+    /\bby\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?\b/i;
+
   const match3 = str.match(pattern3);
   if (match3) {
     const month = months[match3[1].toLowerCase()];
     const day = parseInt(match3[2], 10);
     let year = match3[3] ? parseInt(match3[3], 10) : new Date().getFullYear();
-    
+
     const now = new Date();
     const testDate = new Date(year, month, day);
-    if (testDate < now && !match3[3]) {
-      year = now.getFullYear() + 1;
-    }
-    
-    if (month !== undefined && day >= 1 && day <= 31 && year >= 2020 && year <= 2030) {
+    if (testDate < now && !match3[3]) year = now.getFullYear() + 1;
+
+    if (month !== undefined && day >= 1 && day <= 31 && year >= 2020 && year <= 2035) {
       return Math.floor(new Date(year, month, day, 23, 59, 59).getTime() / 1000);
     }
   }
-  
-  // Pattern 4: "on Month Day" (e.g., "on January 4?(12:00 ET)")
-  const pattern4 = /\bon\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i;
+
+  const pattern4 =
+    /\bon\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i;
+
   const match4 = str.match(pattern4);
   if (match4) {
     const month = months[match4[1].toLowerCase()];
     const day = parseInt(match4[2], 10);
     let year = new Date().getFullYear();
-    
+
     const now = new Date();
     const testDate = new Date(year, month, day);
-    if (testDate < now) {
-      year = now.getFullYear() + 1;
-    }
-    
+    if (testDate < now) year = now.getFullYear() + 1;
+
     if (month !== undefined && day >= 1 && day <= 31) {
       return Math.floor(new Date(year, month, day, 23, 59, 59).getTime() / 1000);
     }
   }
-  
+
   return null;
 }
 
-/**
- * Format expiration date from Unix timestamp (seconds)
- * API returns timestamps in SECONDS, not milliseconds
- */
 function fmtExpires(timestampSec) {
   if (!timestampSec || timestampSec <= 0) return "—";
-  
-  // Convert seconds to milliseconds
   const ms = Number(timestampSec) * 1000;
   const d = new Date(ms);
-  
   if (isNaN(d.getTime())) return "—";
-  
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const month = months[d.getMonth()];
-  const day = d.getDate();
-  const year = d.getFullYear();
-  return `${month} ${day}, ${year}`;
+  return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 }
 
 function pickYesTokenId(m) {
@@ -181,21 +174,11 @@ function pickYesTokenId(m) {
 
   if (nested) return String(nested);
 
-  const tokens =
-    m?.tokens ??
-    m?.token_list ??
-    m?.tokenList ??
-    m?.outcomeTokens ??
-    m?.outcome_tokens ??
-    null;
+  const tokens = m?.tokens ?? m?.token_list ?? m?.tokenList ?? m?.outcomeTokens ?? m?.outcome_tokens ?? null;
 
   if (Array.isArray(tokens) && tokens.length) {
     const yesLike =
-      tokens.find((t) =>
-        String(t?.outcome ?? t?.name ?? t?.label ?? "")
-          .toLowerCase()
-          .includes("yes")
-      ) ?? null;
+      tokens.find((t) => String(t?.outcome ?? t?.name ?? t?.label ?? "").toLowerCase().includes("yes")) ?? null;
 
     const candidate = yesLike ?? tokens[0];
     const tid = candidate?.token_id ?? candidate?.tokenId ?? candidate?.id ?? null;
@@ -220,10 +203,7 @@ function normalizeOrderbook(raw) {
       return { price, shares: aLooks ? b : a };
     }
     if (r && typeof r === "object") {
-      return {
-        price: num(r.price ?? r.p ?? r.px),
-        shares: num(r.shares ?? r.size ?? r.qty),
-      };
+      return { price: num(r.price ?? r.p ?? r.px), shares: num(r.shares ?? r.size ?? r.qty) };
     }
     return { price: 0, shares: 0 };
   };
@@ -328,7 +308,6 @@ async function fetchMarketDetailCached(marketId) {
         }),
       4
     );
-    // cache even failures briefly to avoid spamming
     clientSet(key, j, 30_000);
     return j;
   });
@@ -338,13 +317,17 @@ export default function MarketRowV2({
   market,
   volMode,
   onOpen,
+  isBonus = false,
   priority = false,
   onChanceLoaded,
   onVolumeLoaded,
+  onBonusDetected,
   volumeOverride,
 }) {
   const tokenId = useMemo(() => pickYesTokenId(market), [market]);
-  const title = market?.title || "Market";
+
+  // IMPORTANT: list API might return marketTitle, not title
+  const title = market?.title ?? market?.marketTitle ?? "Market";
 
   const rowRef = useRef(null);
   const inView = useInView(rowRef, { root: null, rootMargin: "220px", threshold: 0.01 });
@@ -354,6 +337,9 @@ export default function MarketRowV2({
 
   const [mid, setMid] = useState(0);
   const [sparkPts, setSparkPts] = useState([]);
+  
+  // Bonus state - check from detail API if not provided via prop
+  const [detectedBonus, setDetectedBonus] = useState(false);
 
   const interval = "1d";
 
@@ -361,13 +347,7 @@ export default function MarketRowV2({
     const ob = normalizeOrderbook(obJson?.result ?? obJson);
     const bestBid = ob.bids?.[0]?.price ?? 0;
     const bestAsk = ob.asks?.[0]?.price ?? 0;
-    return bestBid > 0 && bestAsk > 0
-      ? (bestBid + bestAsk) / 2
-      : bestBid > 0
-        ? bestBid
-        : bestAsk > 0
-          ? bestAsk
-          : 0;
+    return bestBid > 0 && bestAsk > 0 ? (bestBid + bestAsk) / 2 : bestBid > 0 ? bestBid : bestAsk > 0 ? bestAsk : 0;
   };
 
   const prefetch = useCallback(async () => {
@@ -393,11 +373,7 @@ export default function MarketRowV2({
       }
 
       try {
-        const [obJson, phJson] = await Promise.all([
-          fetchOrderbookCached(tokenId),
-          fetchHistoryCached(tokenId, interval),
-        ]);
-
+        const [obJson, phJson] = await Promise.all([fetchOrderbookCached(tokenId), fetchHistoryCached(tokenId, interval)]);
         if (!alive) return;
 
         const m = computeMidFromOrderbook(obJson);
@@ -407,9 +383,7 @@ export default function MarketRowV2({
         setSparkPts((pts || []).slice(-90));
         setLoading(false);
 
-        if (m > 0 && onChanceLoaded) {
-          onChanceLoaded(market?.marketId, m);
-        }
+        if (m > 0 && onChanceLoaded) onChanceLoaded(market?.marketId, m);
       } catch {
         if (!alive) return;
         setRowErr("fetch_failed");
@@ -421,42 +395,40 @@ export default function MarketRowV2({
     return () => {
       alive = false;
     };
-  }, [tokenId, inView, priority]);
+  }, [tokenId, inView, priority]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Lazy-load accurate volume for Discover list.
-  // Some markets (especially multi-outcome) may not include volume fields in the /market list API,
-  // but they do exist in the /market/{id} detail API.
   useEffect(() => {
     let alive = true;
 
-    async function loadVolume() {
+    async function loadVolumeAndBonus() {
       const marketId = market?.marketId;
       if (!marketId) return;
       if (!inView && !priority) return;
-
-      const current24h = Number(volumeOverride?.volume24h ?? market?.volume24h ?? 0);
-      const currentAll = Number(volumeOverride?.volume ?? market?.volume ?? 0);
-
-      // If we already have non-zero numbers, don't fetch.
-      if (current24h > 0 || currentAll > 0) return;
 
       try {
         const j = await fetchMarketDetailCached(marketId);
         if (!alive) return;
 
         const data = j?.result?.data ?? j?.result ?? j?.data ?? j ?? {};
-        const vAll = Number(data?.volume ?? 0) || 0;
-        const v24h = Number(data?.volume24h ?? 0) || 0;
-
-        if ((vAll > 0 || v24h > 0) && onVolumeLoaded) {
-          onVolumeLoaded(marketId, { volume: vAll, volume24h: v24h });
+        
+        // Load volume if not already available
+        const current24h = Number(volumeOverride?.volume24h ?? market?.volume24h ?? 0);
+        const currentAll = Number(volumeOverride?.volume ?? market?.volume ?? 0);
+        if (current24h <= 0 && currentAll <= 0) {
+          const vAll = Number(data?.volume ?? 0) || 0;
+          const v24h = Number(data?.volume24h ?? 0) || 0;
+          if ((vAll > 0 || v24h > 0) && onVolumeLoaded) onVolumeLoaded(marketId, { volume: vAll, volume24h: v24h });
         }
-      } catch {
-        // ignore
-      }
+        
+        // Check for bonus (incentiveFactor field exists in detail)
+        if ("incentiveFactor" in data) {
+          setDetectedBonus(true);
+          if (onBonusDetected) onBonusDetected(marketId);
+        }
+      } catch {}
     }
 
-    loadVolume();
+    loadVolumeAndBonus();
     return () => {
       alive = false;
     };
@@ -464,95 +436,100 @@ export default function MarketRowV2({
 
   const chanceText = mid > 0 ? fmtChanceFromPrice01(mid) : "-";
 
-  // API currently supports: 24h and total volume only
   const volNumber =
-    volMode === "24h"
-      ? (volumeOverride?.volume24h ?? market?.volume24h)
-      : (volumeOverride?.volume ?? market?.volume);
+    volMode === "24h" ? volumeOverride?.volume24h ?? market?.volume24h : volumeOverride?.volume ?? market?.volume;
 
   const volText = fmtUsdCompact(volNumber);
 
-  // Get expiration date - cutoffAt is Unix timestamp in SECONDS
-  // If not available from API, try to extract from title
-  const marketTitle = market?.title ?? "";
+  const marketTitle = title ?? "";
   let expiresTimestamp = market?.cutoffAt || market?.resolvedAt || 0;
-  if (!expiresTimestamp || expiresTimestamp === 0) {
-    expiresTimestamp = extractExpiresFromTitle(marketTitle) || 0;
-  }
+  if (!expiresTimestamp || expiresTimestamp === 0) expiresTimestamp = extractExpiresFromTitle(marketTitle) || 0;
   const expiresText = fmtExpires(expiresTimestamp);
 
   return (
-  <Link
-    href={`/market/${market?.marketId}`}
-    prefetch={false}
-    className="panel"
-    style={{
-      padding: "12px 12px",
-      cursor: "pointer",
-      display: "block",
-      color: "inherit",
-      textDecoration: "none",
-    }}
-    onMouseEnter={() => {
-      prefetch();
-    }}
-    onClick={() => {
-      // IMPORTANT: do NOT preventDefault
-      // so right-click / middle-click / ctrl-click work natively
-      prefetch();
-      onOpen?.(market); // keep only if you use it for analytics (no redirect)
-    }}
-    title="Open market"
-  >
-    <div
-      ref={rowRef}
+    <Link
+      href={`/market/${market?.marketId}`}
+      prefetch={false}
+      className="panel"
       style={{
-        display: "grid",
-        gridTemplateColumns: "minmax(320px, 1.6fr) 140px 110px 140px 130px",
-        gap: 12,
-        alignItems: "center",
+        padding: "12px 12px",
+        cursor: "pointer",
+        display: "block",
+        color: "inherit",
+        textDecoration: "none",
       }}
+      onMouseEnter={() => {
+        prefetch();
+      }}
+      onClick={() => {
+        prefetch();
+        onOpen?.(market);
+      }}
+      title="Open market"
     >
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontWeight: 900,
-            lineHeight: 1.15,
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}
-        >
-          {title}
+      <div
+        ref={rowRef}
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(320px, 1.6fr) 140px 110px 140px 130px",
+          gap: 12,
+          alignItems: "center",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          {/* Title row: [Title] [Gift icon] */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+            <span
+              style={{
+                fontWeight: 900,
+                lineHeight: 1.15,
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+              }}
+            >
+              {title}
+            </span>
+
+            {(isBonus || detectedBonus) ? (
+              <img
+                src="/gift_icon_24.svg"
+                alt="Bonus"
+                title="Bonus market"
+                style={{
+                  width: 32,
+                  height: 32,
+                  flex: "0 0 auto",
+                  display: "block",
+                }}
+              />
+            ) : null}
+          </div>
+
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+            {rowErr ? "" : ""}
+          </div>
         </div>
 
-        <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-          {rowErr ? "" : ""}
+        <div>
+          {loading ? (
+            <div className="skeleton skeleton-chart" style={{ width: 120, height: 32 }} />
+          ) : (
+            <MiniSparkline points={sparkPts} />
+          )}
         </div>
+
+        <div className="mono" style={{ fontWeight: 900 }}>
+          {loading ? <div className="skeleton skeleton-text" style={{ width: 50, height: 14 }} /> : chanceText}
+        </div>
+
+        <div className="mono">{volText}</div>
+
+        <div className="mono muted">{expiresText}</div>
       </div>
-
-      <div>
-        {loading ? (
-          <div className="skeleton skeleton-chart" style={{ width: 120, height: 32 }} />
-        ) : (
-          <MiniSparkline points={sparkPts} />
-        )}
-      </div>
-
-      <div className="mono" style={{ fontWeight: 900 }}>
-        {loading ? (
-          <div className="skeleton skeleton-text" style={{ width: 50, height: 14 }} />
-        ) : (
-          chanceText
-        )}
-      </div>
-
-      <div className="mono">{volText}</div>
-
-      <div className="mono muted">{expiresText}</div>
-    </div>
-  </Link>
-);
+    </Link>
+  );
 }
