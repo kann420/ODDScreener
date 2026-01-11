@@ -282,10 +282,10 @@ async function runWithConcurrency(items, worker, concurrency = 2) {
   await Promise.all(runners);
 }
 
-export default function MarketListClient({ initialMarkets, markets: marketsProp }) {
+export default function MarketListClient({ initialMarkets, markets: marketsProp, initialBonusIds }) {
   const markets = (initialMarkets && Array.isArray(initialMarkets) ? initialMarkets : marketsProp) || [];
 
-  const [activeTab, setActiveTab] = useState("trending"); // "new" | "hot" | "trending" | "all"
+  const [activeTab, setActiveTab] = useState("trending"); // "new" | "hot" | "trending" | "bonus" | "all"
   const [volMode, setVolMode] = useState("24h"); // "24h" | "all"
   const [currentPage, setCurrentPage] = useState(1);
   const [visible, setVisible] = useState(6);
@@ -296,9 +296,119 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp 
   const [volumeMap, setVolumeMap] = useState({});
   const [search, setSearch] = useState("");
 
+  const [bonusIds, setBonusIds] = useState(initialBonusIds || []);
+  const [bonusLoading, setBonusLoading] = useState(!initialBonusIds || initialBonusIds.length === 0);
+  const bonusSet = useMemo(() => new Set((bonusIds || []).map((x) => String(x))), [bonusIds]);
+
+
   const [allTabLoaded, setAllTabLoaded] = useState(false);
   const initTrendingDoneRef = useRef(false);
   const hotPrefetchDoneRef = useRef(false);
+  const bonusScanDoneRef = useRef(false);
+
+  // Detect bonus markets from list data first (if incentiveFactor exists in list)
+  // Fallback to API if list doesn't have incentiveFactor info
+  useEffect(() => {
+    // If we already have initialBonusIds from server, use them
+    if (initialBonusIds && initialBonusIds.length > 0) {
+      setBonusIds(initialBonusIds);
+      setBonusLoading(false);
+      return;
+    }
+
+    let alive = true;
+    
+    // First: check if markets already have hasBonus flag from list API
+    const localBonusIds = (markets || [])
+      .filter((m) => m?.hasBonus === true)
+      .map((m) => m?.marketId)
+      .filter(Boolean);
+
+    if (localBonusIds.length > 0) {
+      // Use local data - no API call needed
+      setBonusIds(localBonusIds);
+      setBonusLoading(false);
+      return;
+    }
+
+    // Fallback: fetch from API (scans market details)
+    (async () => {
+      try {
+        const r = await fetch(`/api/opinion/bonus-markets?limit=1000`, { cache: "no-store" });
+        const j = await r.json();
+        const ids = j?.ids || j?.result?.ids || [];
+        if (alive && Array.isArray(ids)) setBonusIds(ids);
+      } catch (e) {
+        console.error("[Bonus] API fetch failed:", e);
+      } finally {
+        if (alive) setBonusLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [markets, initialBonusIds]);
+
+  // PRE-SCAN: Fetch detail for ALL markets to detect bonus on page load
+  useEffect(() => {
+    if (bonusScanDoneRef.current) return;
+    if (!markets || markets.length === 0) return;
+    
+    bonusScanDoneRef.current = true;
+    
+    const scanBonusMarkets = async () => {
+      const detectedBonusIds = [];
+      const marketIds = markets.map((m) => m?.marketId).filter(Boolean);
+      
+      // Scan in batches with concurrency
+      const batchSize = 10;
+      for (let i = 0; i < marketIds.length; i += batchSize) {
+        const batch = marketIds.slice(i, i + batchSize);
+        
+        const results = await Promise.allSettled(
+          batch.map(async (marketId) => {
+            try {
+              const res = await fetch(`/api/opinion/market/${encodeURIComponent(marketId)}`, { cache: "no-store" });
+              if (!res.ok) return null;
+              const j = await safeReadJson(res);
+              const data = j?.result?.data ?? j?.result ?? j?.data ?? j ?? {};
+              
+              // Check if incentiveFactor exists in detail
+              if ("incentiveFactor" in data) {
+                return marketId;
+              }
+              return null;
+            } catch {
+              return null;
+            }
+          })
+        );
+        
+        for (const r of results) {
+          if (r.status === "fulfilled" && r.value) {
+            detectedBonusIds.push(r.value);
+          }
+        }
+        
+        // Update bonusIds progressively
+        if (detectedBonusIds.length > 0) {
+          setBonusIds((prev) => {
+            const newIds = detectedBonusIds.filter((id) => !prev.includes(id) && !prev.includes(String(id)));
+            if (newIds.length === 0) return prev;
+            return [...prev, ...newIds];
+          });
+        }
+        
+        // Small delay between batches to not overwhelm
+        await sleep(50);
+      }
+      
+      setBonusLoading(false);
+      console.log(`[Bonus] Pre-scan complete: found ${detectedBonusIds.length} bonus markets`);
+    };
+    
+    scanBonusMarkets();
+  }, [markets]);
 
   const handleChanceLoaded = (marketId, chance) => {
     setChanceMap((prev) => (prev[marketId] === chance ? prev : { ...prev, [marketId]: chance }));
@@ -314,6 +424,16 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp 
       const cur = prev[marketId];
       if (cur && cur.volume === next.volume && cur.volume24h === next.volume24h) return prev;
       return { ...prev, [marketId]: next };
+    });
+  };
+
+  // Handle bonus detection from MarketRowV2
+  const handleBonusDetected = (marketId) => {
+    if (!marketId) return;
+    setBonusIds((prev) => {
+      const idStr = String(marketId);
+      if (prev.includes(idStr) || prev.includes(marketId)) return prev;
+      return [...prev, marketId];
     });
   };
 
@@ -365,22 +485,30 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp 
     return arr.slice(0, TRENDING_COUNT);
   }, [markets, volumeMap]);
 
-  const currentTabMarkets = useMemo(() => {
+  
+  const bonusMarkets = useMemo(() => {
+    if (!markets || markets.length === 0) return [];
+    // A market is BONUS if its detail JSON contains 'incentiveFactor' (gift icon on Opinion).
+    return markets.filter((m) => bonusSet.has(String(m?.marketId)));
+  }, [markets, bonusSet]);
+
+const currentTabMarkets = useMemo(() => {
     if (activeTab === "new") return newMarkets;
     if (activeTab === "hot") return hotMarkets;
     if (activeTab === "trending") return trendingMarkets;
+    if (activeTab === "bonus") return bonusMarkets;
     return markets;
-  }, [activeTab, newMarkets, hotMarkets, trendingMarkets, markets]);
+  }, [activeTab, newMarkets, hotMarkets, trendingMarkets, bonusMarkets, markets]);
 
   const filteredMarkets = useMemo(() => {
-    const s = search.trim().toLowerCase();
-    if (!s) return currentTabMarkets;
-    return currentTabMarkets.filter((m) => {
-      const title = String(m?.title ?? "").toLowerCase();
-      const id = String(m?.marketId ?? "");
-      return title.includes(s) || id.includes(s);
-    });
-  }, [currentTabMarkets, search]);
+  const s = search.trim().toLowerCase();
+  if (!s) return currentTabMarkets;
+  return currentTabMarkets.filter((m) => {
+    const title = String(m?.title ?? m?.marketTitle ?? "").toLowerCase();
+    const id = String(m?.marketId ?? "");
+    return title.includes(s) || id.includes(s);
+  });
+}, [currentTabMarkets, search]);
 
   // Prefetch for trending (top 30 by estimated 24h vol from list)
   useEffect(() => {
@@ -624,7 +752,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp 
           marginBottom: 10,
         }}
       >
-        {/* Tabs: NEW | HOT | TRENDING | ALL */}
+        {/* Tabs: NEW | HOT | TRENDING | BONUS | ALL */}
         <div style={{ display: "flex", gap: 4 }}>
           <button
             onClick={() => handleTabChange("new")}
@@ -683,6 +811,22 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp 
           >
             TRENDING
           </button>
+          <button
+            onClick={() => handleTabChange("bonus")}
+            style={{
+              padding: "10px 18px",
+              borderRadius: 8,
+              border: "1px solid",
+              borderColor: activeTab === "bonus" ? "rgba(245, 200, 75, 0.55)" : "rgba(255,255,255,0.12)",
+              background: activeTab === "bonus" ? "rgba(245, 200, 75, 0.12)" : "transparent",
+              color: activeTab === "bonus" ? "#F5C84B" : "#fff",
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            BONUS
+          </button>
+
 
           <button
             onClick={() => handleTabChange("all")}
@@ -715,6 +859,8 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp 
                 ? "Hot"
                 : activeTab === "trending"
                 ? "Trending"
+                : activeTab === "bonus"
+                ? "BONUS"
                 : "All"
             } Markets...`}
             value={search}
@@ -853,7 +999,13 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp 
       <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
         {pageList.length === 0 ? (
           <div className="muted" style={{ textAlign: "center", padding: 20 }}>
-            {search ? "No markets found" : "Loading..."}
+            {activeTab === "bonus" && bonusLoading
+              ? "Scanning for bonus markets... Please wait."
+              : search
+              ? "No markets found"
+              : activeTab === "bonus"
+              ? "No bonus markets available"
+              : "Loading..."}
           </div>
         ) : (
           pageList.slice(0, visible).map((m, idx) => (
@@ -865,6 +1017,8 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp 
               priority={idx < 6}
               onChanceLoaded={handleChanceLoaded}
               onVolumeLoaded={handleVolumeLoaded}
+              onBonusDetected={handleBonusDetected}
+              isBonus={bonusSet.has(String(m.marketId))}
               onOpen={(mk) => (window.location.href = `/market/${mk.marketId}`)}
             />
           ))
@@ -906,6 +1060,10 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp 
           ? `Top ${Math.min(NEW_LIMIT, sortedMarkets.length)} newest active markets`
           : activeTab === "trending"
           ? `Top ${Math.min(TRENDING_COUNT, sortedMarkets.length)} markets by 24h volume`
+          : activeTab === "bonus"
+          ? bonusLoading 
+            ? `Scanning... Found ${sortedMarkets.length} bonus markets so far`
+            : `${sortedMarkets.length} bonus markets`
           : `${sortedMarkets.length} markets total`}
       </div>
     </div>
