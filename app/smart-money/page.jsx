@@ -19,10 +19,15 @@ function fmtUsd(n) {
 }
 
 export default function SmartMoneyPage() {
-  const [minAmount, setMinAmount] = useState(200);
+  const [minAmount, setMinAmount] = useState(1);
   const [rows, setRows] = useState([]);
+  const [hubStatus, setHubStatus] = useState(null);
+  const [statusTick, setStatusTick] = useState(0);
   const [customOpen, setCustomOpen] = useState(false);
   const [customVal, setCustomVal] = useState("1000");
+
+  // ✅ Search by market title or marketId
+  const [query, setQuery] = useState("");
 
   const chips = useMemo(
     () => [
@@ -33,21 +38,64 @@ export default function SmartMoneyPage() {
     []
   );
 
+  // ✅ 1) Load history from DB first (so user sees old trades immediately)
   useEffect(() => {
-    setRows([]);
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/smart-money/history?hours=24&minAmount=${encodeURIComponent(minAmount)}&limit=200`,
+          { cache: "no-store" }
+        );
+        if (!res.ok) return;
+        const j = await res.json();
+        if (!cancelled && Array.isArray(j?.rows)) {
+          setRows(j.rows);
+        }
+      } catch {}
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [minAmount]);
+
+  // ✅ 2) SSE stream: realtime updates (do NOT wipe history)
+  useEffect(() => {
     const es = new EventSource(`/api/smart-money/stream?minAmount=${encodeURIComponent(minAmount)}`);
 
     es.addEventListener("snapshot", (e) => {
       try {
         const data = JSON.parse(e.data);
-        setRows(data);
+
+        // IMPORTANT:
+        // SSE snapshot is from in-memory hub.latest (can be empty after restart).
+        // Do NOT overwrite DB history with empty snapshot.
+        if (Array.isArray(data) && data.length > 0) {
+          setRows(data);
+        }
       } catch {}
     });
 
     es.addEventListener("trade", (e) => {
       try {
         const obj = JSON.parse(e.data);
-        setRows((prev) => [obj, ...prev].slice(0, 200));
+        setRows((prev) => {
+          const next = [obj, ...(Array.isArray(prev) ? prev : [])];
+
+          // optional de-dupe (avoid duplicates when history + live overlap)
+          const seen = new Set();
+          const deduped = [];
+          for (const t of next) {
+            const key = `${t.marketId}-${t.ts}-${t.side}-${t.amount}-${t.outcome}-${t.price}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            deduped.push(t);
+            if (deduped.length >= 200) break;
+          }
+          return deduped;
+        });
       } catch {}
     });
 
@@ -58,58 +106,119 @@ export default function SmartMoneyPage() {
     return () => es.close();
   }, [minAmount]);
 
+  // ✅ status poll (không ảnh hưởng hiển thị history)
+  useEffect(() => {
+    let alive = true;
+    const run = async () => {
+      try {
+        const res = await fetch("/api/smart-money/status", { cache: "no-store" });
+        if (!res.ok) return;
+        const j = await res.json();
+        if (alive) setHubStatus(j);
+      } catch {}
+    };
+    run();
+    const id = setInterval(() => {
+      setStatusTick((v) => v + 1);
+    }, 5000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/smart-money/status", { cache: "no-store" });
+        if (!res.ok) return;
+        const j = await res.json();
+        setHubStatus(j);
+      } catch {}
+    })();
+  }, [statusTick]);
+
+  // ✅ Filter rows by market title OR marketId
+  const filteredRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+
+    const idMatch = q.match(/\b(\d{3,})\b/);
+    const qId = idMatch ? idMatch[1] : null;
+
+    return (rows || []).filter((r) => {
+      const title = String(r?.marketTitle ?? "").toLowerCase();
+      const id = String(r?.marketId ?? "");
+      if (qId && id.includes(qId)) return true;
+      return title.includes(q) || id.includes(q);
+    });
+  }, [rows, query]);
+
   return (
     <div style={{ padding: 18 }}>
+      {/* Note line */}
+      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10, opacity: 0.85 }}>
+        <div style={{ fontSize: 12 }}>
+          Note:
+          <span style={{ marginLeft: 8, fontWeight: 800, color: hubStatus?.wsReady ? "#d06b35" : "#ffb020" }}>
+            {hubStatus?.wsReady
+              ? "Due to data limitations, this feature only displays trades made within the last 24 hours."
+              : "Starting…"}
+          </span>
+        </div>
+      </div>
+
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
         <div style={{ flex: 1, display: "flex", gap: 10 }}>
           <input
-            disabled
-            placeholder="Search with address or market (coming soon)"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by market title or marketId (e.g. 'Fed', 'Japan', '12345')"
             style={{
               flex: 1,
               padding: "12px 12px",
               borderRadius: 12,
               border: "1px solid rgba(255,255,255,.10)",
               background: "rgba(255,255,255,.03)",
-              color: "rgba(255,255,255,.6)",
+              color: "#fff",
+              outline: "none",
             }}
           />
-          <div style={{ display: "flex", gap: 10 }}>
-  {/* Top PNL (disabled / coming later) */}
-  <button
-    type="button"
-    disabled
-    style={{
-      padding: "10px 14px",
-      borderRadius: 12,
-      border: "1px solid rgba(255,255,255,.10)",
-      background: "rgba(255,255,255,.02)",
-      color: "rgba(255,255,255,.45)",
-      cursor: "not-allowed",
-      opacity: 0.75,
-    }}
-    title="Coming soon (API not available yet)"
-  >
-    Top PNL
-  </button>
 
-  {/* Volume (active/highlight) */}
-  <button
-    type="button"
-    style={{
-      padding: "10px 14px",
-      borderRadius: 12,
-      border: "1px solid rgba(255,255,255,.14)",
-      background: "rgba(255,255,255,.10)",
-      color: "#fff",
-      cursor: "default",
-      fontWeight: 700,
-    }}
-    aria-current="true"
-  >
-    Volume
-  </button>
-</div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              type="button"
+              disabled
+              style={{
+                padding: "10px 14px",
+                borderRadius: 12,
+                border: "1px solid rgba(255,255,255,.10)",
+                background: "rgba(255,255,255,.02)",
+                color: "rgba(255,255,255,.45)",
+                cursor: "not-allowed",
+                opacity: 0.75,
+              }}
+              title="Coming soon (API not available yet)"
+            >
+              Top PNL
+            </button>
+
+            <button
+              type="button"
+              style={{
+                padding: "10px 14px",
+                borderRadius: 12,
+                border: "1px solid rgba(255,255,255,.14)",
+                background: "rgba(255,255,255,.10)",
+                color: "#fff",
+                cursor: "default",
+                fontWeight: 700,
+              }}
+              aria-current="true"
+            >
+              Volume
+            </button>
+          </div>
         </div>
 
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -127,7 +236,6 @@ export default function SmartMoneyPage() {
                 cursor: "pointer",
               }}
             >
-              
               ${c.label}
             </button>
           ))}
@@ -150,6 +258,15 @@ export default function SmartMoneyPage() {
         </div>
       </div>
 
+      {/* Quick count line (kept minimal) */}
+      <div style={{ marginBottom: 10, fontSize: 12, opacity: 0.75 }}>
+        {query.trim() ? (
+          <span style={{ marginLeft: 10, opacity: 0.8 }}>
+            • Filter: <span style={{ fontWeight: 800 }}>{query.trim()}</span>
+          </span>
+        ) : null}
+      </div>
+
       {/* table */}
       <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 14, overflow: "hidden" }}>
         <div
@@ -169,10 +286,12 @@ export default function SmartMoneyPage() {
           <div>Price</div>
         </div>
 
-        {rows.length === 0 ? (
-          <div style={{ padding: 14, opacity: 0.7 }}>No whale trades yet…</div>
+        {filteredRows.length === 0 ? (
+          <div style={{ padding: 14, opacity: 0.7 }}>
+            {rows.length === 0 ? "No whale trades yet…" : query.trim() ? "No trades match your search." : "No whale trades yet…"}
+          </div>
         ) : (
-          rows.map((r, i) => (
+          filteredRows.map((r, i) => (
             <div
               key={`${r.marketId}-${r.ts}-${i}`}
               style={{
@@ -184,7 +303,12 @@ export default function SmartMoneyPage() {
               }}
             >
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <span style={{ color: String(r.side).toLowerCase().includes("sell") ? "#ff6b6b" : "#35d07f", fontWeight: 800 }}>
+                <span
+                  style={{
+                    color: String(r.side).toLowerCase().includes("sell") ? "#ff6b6b" : "#35d07f",
+                    fontWeight: 800,
+                  }}
+                >
                   {String(r.side).toLowerCase().includes("sell") ? "Sell" : "Buy"}
                 </span>
                 <span style={{ opacity: 0.7, fontSize: 12 }}>{timeAgo(r.ts)}</span>
@@ -251,6 +375,7 @@ export default function SmartMoneyPage() {
                 border: "1px solid rgba(255,255,255,.10)",
                 background: "rgba(255,255,255,.03)",
                 color: "#fff",
+                outline: "none",
               }}
               placeholder="e.g. 2500"
             />

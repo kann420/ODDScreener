@@ -10,6 +10,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "better-sqlite3": "^12.6.0",
     "cheerio": "^1.1.2",
     "fast-xml-parser": "^5.3.3",
     "next": "14.2.35",

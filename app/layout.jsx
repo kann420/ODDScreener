@@ -85,59 +85,77 @@ export default function RootLayout({ children }) {
       </head>
 
       <body>
+        {/* Smart Money hub warm-up (server-side safe) */}
+        <img src="/api/smart-money/warm" alt="" style={{ display: "none" }} />
         <div className="topbar">
-          <div className="container">
-            {/* ✅ align everything nicely (no absolute hacks) */}
-            <div
-              className="topbar-inner"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 18,
-              }}
-            >
-              {/* partner logos (left of brand) */}
-              <div style={{ ...partnerWrapStyle, flex: "0 0 auto" }}>
-                <img
-                  src="/polymarket_600.svg"
-                  alt="Polymarket"
-                  style={{
-                    ...partnerLogoBase,
-                    filter: "grayscale(1) brightness(0.8)",
-                    opacity: 0.7,
-                  }}
-                />
-                <img
-                  src="/op_logo_600.svg"
-                  alt="OPinion"
-                  style={{
-                    ...partnerLogoBase,
-                    filter: "drop-shadow(0 0 6px rgba(255,255,255,0.22))",
-                  }}
-                />
-              </div>
+  {/* ✅ Partner logos: OUTSIDE container => can sit at far-left */}
+  <div
+    style={{
+      position: "absolute",
+      left: 16,
+      top: "50%",
+      transform: "translateY(-50%)",
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      zIndex: 5,
+    }}
+  >
+    <img
+      src="/polymarket_600.svg"
+      alt="Polymarket"
+      style={{
+        width: 44,
+        height: 44,
+        filter: "grayscale(1) brightness(0.8)",
+        opacity: 0.7,
+        display: "block",
+      }}
+    />
+    <img
+      src="/op_logo_600.svg"
+      alt="Opinion"
+      style={{
+        width: 44,
+        height: 44,
+        filter: "drop-shadow(0 0 6px rgba(255,255,255,0.22))",
+        display: "block",
+      }}
+    />
+  </div>
 
-              <a className="brand" href="/" aria-label="ODDScreeners">
-                <img className="brand-icon" src="/logo.svg" alt="ODDScreeners" />
-                <span className="brand-wordmark">
-                  <span className="brand-odds">ODDS</span>
-                  <span className="brand-screener">creeners</span>
-                  <span className="brand-beta">beta</span>
-                </span>
-              </a>
+  <div className="container">
+    {/* ✅ give the inner header a left padding so it doesn't overlap the logos */}
+    <div
+      className="topbar-inner"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        width: "100%",
+      }}
+    >
+      {/* CENTER-LEFT: brand + nav */}
+      <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+        <a className="brand" href="/" aria-label="ODDScreeners">
+          <img className="brand-icon" src="/logo.svg" alt="ODDScreeners" />
+          <span className="brand-wordmark">
+            <span className="brand-odds">ODDS</span>
+            <span className="brand-screener">creeners</span>
+            <span className="brand-beta">beta</span>
+          </span>
+        </a>
 
-              <div style={{ display: "flex", alignItems: "center" }}>
-                <NavLinks />
-              </div>
+        <NavLinks />
+      </div>
 
-              <div className="spacer" />
+      <div style={{ flex: 1 }} />
 
-              <div className="search" style={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <GlobalMarketSearchInput />
-              </div>
-            </div>
-          </div>
-        </div>
+      <div className="search" style={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <GlobalMarketSearchInput />
+      </div>
+    </div>
+  </div>
+</div>
 
         <div className="container">{children}</div>
 
