@@ -784,7 +784,7 @@ const currentTabMarkets = useMemo(() => {
               color: activeTab === "hot" ? "#ff9900" : "#fff",
               cursor: "pointer",
               fontSize: 15,
-              fontWeight: 800,
+              fontWeight: 700,
               lineHeight: 1.2,
               transition: "all 0.2s",
             }}
@@ -803,7 +803,7 @@ const currentTabMarkets = useMemo(() => {
               background: activeTab === "trending" ? "rgba(0, 255, 136, 0.15)" : "transparent",
               color: activeTab === "trending" ? "#00ff88" : "#fff",
               cursor: "pointer",
-              fontSize: 16,
+              fontSize: 15,
               fontWeight: 700,
               lineHeight: 1.2,
               transition: "all 0.2s",
@@ -820,8 +820,11 @@ const currentTabMarkets = useMemo(() => {
               borderColor: activeTab === "bonus" ? "rgba(245, 200, 75, 0.55)" : "rgba(255,255,255,0.12)",
               background: activeTab === "bonus" ? "rgba(245, 200, 75, 0.12)" : "transparent",
               color: activeTab === "bonus" ? "#F5C84B" : "#fff",
-              fontWeight: 800,
               cursor: "pointer",
+              fontSize: 15,
+              fontWeight: 700,
+              lineHeight: 1.2,
+              transition: "all 0.2s",
             }}
           >
             BONUS
@@ -839,7 +842,7 @@ const currentTabMarkets = useMemo(() => {
               color: activeTab === "all" ? "#0088ff" : "#fff",
               cursor: "pointer",
               fontSize: 15,
-              fontWeight: 600,
+              fontWeight: 700,
               lineHeight: 1.2,
               transition: "all 0.2s",
             }}
