@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 function timeAgo(ts) {
   const t = Number(ts) || Date.now();
@@ -19,7 +19,7 @@ function fmtUsd(n) {
 }
 
 export default function SmartMoneyPage() {
-  const [minAmount, setMinAmount] = useState(1);
+  const [minAmount, setMinAmount] = useState(1); // ✅ keep default = 1 (for your testing)
   const [rows, setRows] = useState([]);
   const [hubStatus, setHubStatus] = useState(null);
   const [statusTick, setStatusTick] = useState(0);
@@ -28,6 +28,9 @@ export default function SmartMoneyPage() {
 
   // ✅ Search by market title or marketId
   const [query, setQuery] = useState("");
+
+  // ✅ Prevent SSE snapshot from overwriting DB history
+  const historyLoadedRef = useRef(false);
 
   const chips = useMemo(
     () => [
@@ -41,6 +44,7 @@ export default function SmartMoneyPage() {
   // ✅ 1) Load history from DB first (so user sees old trades immediately)
   useEffect(() => {
     let cancelled = false;
+    historyLoadedRef.current = false; // reset when minAmount changes
 
     (async () => {
       try {
@@ -51,6 +55,7 @@ export default function SmartMoneyPage() {
         if (!res.ok) return;
         const j = await res.json();
         if (!cancelled && Array.isArray(j?.rows)) {
+          historyLoadedRef.current = true; // ✅ mark history loaded
           setRows(j.rows);
         }
       } catch {}
@@ -58,6 +63,7 @@ export default function SmartMoneyPage() {
 
     return () => {
       cancelled = true;
+      // keep as-is; next run will reset historyLoadedRef anyway
     };
   }, [minAmount]);
 
@@ -69,9 +75,11 @@ export default function SmartMoneyPage() {
       try {
         const data = JSON.parse(e.data);
 
-        // IMPORTANT:
-        // SSE snapshot is from in-memory hub.latest (can be empty after restart).
-        // Do NOT overwrite DB history with empty snapshot.
+        // ✅ Once DB history has loaded, ignore snapshot completely
+        // Snapshot is from in-memory hub.latest and can be empty/short after restart.
+        if (historyLoadedRef.current) return;
+
+        // ✅ Only use snapshot as fallback when history hasn't loaded yet
         if (Array.isArray(data) && data.length > 0) {
           setRows(data);
         }
@@ -173,7 +181,7 @@ export default function SmartMoneyPage() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by market title or marketId (e.g. 'Fed', 'Japan', '12345')"
+            placeholder="Search by Market Title"
             style={{
               flex: 1,
               padding: "12px 12px",
@@ -258,15 +266,6 @@ export default function SmartMoneyPage() {
         </div>
       </div>
 
-      {/* Quick count line (kept minimal) */}
-      <div style={{ marginBottom: 10, fontSize: 12, opacity: 0.75 }}>
-        {query.trim() ? (
-          <span style={{ marginLeft: 10, opacity: 0.8 }}>
-            • Filter: <span style={{ fontWeight: 800 }}>{query.trim()}</span>
-          </span>
-        ) : null}
-      </div>
-
       {/* table */}
       <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 14, overflow: "hidden" }}>
         <div
@@ -288,7 +287,11 @@ export default function SmartMoneyPage() {
 
         {filteredRows.length === 0 ? (
           <div style={{ padding: 14, opacity: 0.7 }}>
-            {rows.length === 0 ? "No whale trades yet…" : query.trim() ? "No trades match your search." : "No whale trades yet…"}
+            {rows.length === 0
+              ? "No whale trades yet…"
+              : query.trim()
+              ? "No trades match your search."
+              : "No whale trades yet…"}
           </div>
         ) : (
           filteredRows.map((r, i) => (
