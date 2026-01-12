@@ -168,10 +168,10 @@ export default function SmartMoneyPage() {
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10, opacity: 0.85 }}>
         <div style={{ fontSize: 12 }}>
           Note:
-          <span style={{ marginLeft: 8, fontWeight: 800, color: hubStatus?.wsReady ? "#d06b35" : "#ffb020" }}>
+          <span style={{ marginLeft: 8, fontWeight: 800, color: hubStatus?.wsReady ? "#c8d035" : "#ffb020" }}>
             {hubStatus?.wsReady
-              ? "Due to data limitations, this feature only displays trades made within the last 24 hours."
-              : "Starting…"}
+              ? "Due to data limitations, this feature only displays trades made within the last 24 hours. Default min trade size: $1"
+              : "Due to data limitations, this feature only displays trades made within the last 24 hours. Default min trade size: $1"}
           </span>
         </div>
       </div>
