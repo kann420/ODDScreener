@@ -160,27 +160,25 @@ export default function RootLayout({ children }) {
         <div className="container">{children}</div>
 
         {/* Footer: bottom left */}
-        <div
-          style={{
-            position: "fixed",
-            left: 12,
-            bottom: 10,
-            zIndex: 100,
-            fontSize: 13,
-            color: "#fff",
-            fontWeight: 700,
-            background: "rgba(215, 192, 176, 0.22)",
-            borderRadius: 8,
-            padding: "4px 12px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-          }}
-        >
-          <span style={{ width: 8, height: 8, borderRadius: 99, background: "#22c55e", display: "inline-block", marginRight: 2 }} />
-          <span style={{ color: "#fff", fontWeight: 700, marginRight: 2 }}>Live</span>
-          <span style={{ color: "#cbd5e1", fontStyle: "italic", fontWeight: 400 }}>version 1.1.0 Beta</span>
+        <div style={{
+          position: "fixed",
+          left: 12,
+          bottom: 10,
+          zIndex: 100,
+          fontSize: 13,
+          color: "#fff",
+          fontWeight: 700,
+          background: "rgba(215, 192, 176, 0.22)",
+          borderRadius: 8,
+          padding: "4px 12px",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 4
+        }}>
+          <span style={{ width: 8, height: 8, borderRadius: 99, background: "#22c55e", display: "inline-block", marginRight: 2 }}></span>
+          <span style={{ color: '#fff', fontWeight: 700, marginRight: 2 }}>Live</span>
+          <span style={{ color: '#cbd5e1', fontStyle: 'italic', fontWeight: 400 }}>version 1.0.2 Beta</span>
         </div>
 
         {/* Footer: bottom right */}
