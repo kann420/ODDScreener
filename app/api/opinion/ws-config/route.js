@@ -1,15 +1,11 @@
 import { NextResponse } from "next/server";
 
+// DEPRECATED: This endpoint is no longer needed.
+// Trades are now proxied through SSE at /api/opinion/token/trades/stream
+// This keeps the API key secure on the server side.
 export async function GET() {
-  const apiKey = process.env.OPINION_API_KEY || "";
-  
-  if (!apiKey) {
-    return NextResponse.json({ error: "API key not configured" }, { status: 500 });
-  }
-  
-  // Return only the WebSocket URL with API key embedded
-  // This keeps the key on server-side but allows client to connect
   return NextResponse.json({ 
-    wsUrl: `wss://ws.opinion.trade?apikey=${apiKey}` 
-  });
+    error: "This endpoint has been deprecated for security reasons. Use /api/opinion/token/trades/stream instead.",
+    deprecated: true
+  }, { status: 410 });
 }
