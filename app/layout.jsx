@@ -88,42 +88,6 @@ export default function RootLayout({ children }) {
         {/* Smart Money hub warm-up (server-side safe) */}
         <img src="/api/smart-money/warm" alt="" style={{ display: "none" }} />
         <div className="topbar">
-  {/* ✅ Partner logos: OUTSIDE container => can sit at far-left */}
-  <div
-    style={{
-      position: "absolute",
-      left: 16,
-      top: "50%",
-      transform: "translateY(-50%)",
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      zIndex: 5,
-    }}
-  >
-    <img
-      src="/polymarket_600.svg"
-      alt="Polymarket"
-      style={{
-        width: 44,
-        height: 44,
-        filter: "grayscale(1) brightness(0.8)",
-        opacity: 0.7,
-        display: "block",
-      }}
-    />
-    <img
-      src="/op_logo_600.svg"
-      alt="Opinion"
-      style={{
-        width: 44,
-        height: 44,
-        filter: "drop-shadow(0 0 6px rgba(255,255,255,0.22))",
-        display: "block",
-      }}
-    />
-  </div>
-
   <div className="container">
     {/* ✅ give the inner header a left padding so it doesn't overlap the logos */}
     <div
@@ -178,7 +142,7 @@ export default function RootLayout({ children }) {
         }}>
           <span style={{ width: 8, height: 8, borderRadius: 99, background: "#22c55e", display: "inline-block", marginRight: 2 }}></span>
           <span style={{ color: '#fff', fontWeight: 700, marginRight: 2 }}>Live</span>
-          <span style={{ color: '#cbd5e1', fontStyle: 'italic', fontWeight: 400 }}>version 1.1.0 Beta</span>
+          <span style={{ color: '#cbd5e1', fontStyle: 'italic', fontWeight: 400 }}>version 1.1.1 Beta</span>
         </div>
 
         {/* Footer: bottom right */}

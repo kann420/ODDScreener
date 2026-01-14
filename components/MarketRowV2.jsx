@@ -31,6 +31,49 @@ function fmtChanceFromPrice01(p01) {
 }
 
 /**
+ * ✅ FIXED Thumbnail: always renders a fixed box (prevents vertical misalignment)
+ * size = 45 (your chosen size)
+ */
+function MarketThumbnail({ url, size = 45, radius = 10 }) {
+  const [errored, setErrored] = useState(false);
+  const showImg = Boolean(url) && !errored;
+
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: radius,
+        overflow: "hidden",
+        background: "rgba(255,255,255,0.08)",
+        flex: "0 0 auto",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {showImg ? (
+        <img
+          src={url}
+          alt=""
+          width={size}
+          height={size}
+          loading="lazy"
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+          onError={() => setErrored(true)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * Extract expiration date from market title
  * Returns Unix timestamp in SECONDS if found, null otherwise
  */
@@ -329,6 +372,18 @@ export default function MarketRowV2({
   // IMPORTANT: list API might return marketTitle, not title
   const title = market?.title ?? market?.marketTitle ?? "Market";
 
+  // ✅ Thumbnail: hydrate from detail API (because list may not include thumbnailUrl yet)
+  const [thumbUrl, setThumbUrl] = useState(
+    market?.thumbnailUrl ??
+      market?.thumbnail_url ??
+      market?.coverUrl ??
+      market?.cover_url ??
+      market?.imageUrl ??
+      market?.image_url ??
+      market?.image ??
+      null
+  );
+
   const rowRef = useRef(null);
   const inView = useInView(rowRef, { root: null, rootMargin: "220px", threshold: 0.01 });
 
@@ -337,7 +392,7 @@ export default function MarketRowV2({
 
   const [mid, setMid] = useState(0);
   const [sparkPts, setSparkPts] = useState([]);
-  
+
   // Bonus state - check from detail API if not provided via prop
   const [detectedBonus, setDetectedBonus] = useState(false);
 
@@ -347,7 +402,13 @@ export default function MarketRowV2({
     const ob = normalizeOrderbook(obJson?.result ?? obJson);
     const bestBid = ob.bids?.[0]?.price ?? 0;
     const bestAsk = ob.asks?.[0]?.price ?? 0;
-    return bestBid > 0 && bestAsk > 0 ? (bestBid + bestAsk) / 2 : bestBid > 0 ? bestBid : bestAsk > 0 ? bestAsk : 0;
+    return bestBid > 0 && bestAsk > 0
+      ? (bestBid + bestAsk) / 2
+      : bestBid > 0
+        ? bestBid
+        : bestAsk > 0
+          ? bestAsk
+          : 0;
   };
 
   const prefetch = useCallback(async () => {
@@ -373,7 +434,10 @@ export default function MarketRowV2({
       }
 
       try {
-        const [obJson, phJson] = await Promise.all([fetchOrderbookCached(tokenId), fetchHistoryCached(tokenId, interval)]);
+        const [obJson, phJson] = await Promise.all([
+          fetchOrderbookCached(tokenId),
+          fetchHistoryCached(tokenId, interval),
+        ]);
         if (!alive) return;
 
         const m = computeMidFromOrderbook(obJson);
@@ -410,7 +474,20 @@ export default function MarketRowV2({
         if (!alive) return;
 
         const data = j?.result?.data ?? j?.result ?? j?.data ?? j ?? {};
-        
+
+        // ✅ Hydrate thumbnail from detail API
+        const detailThumb =
+          data?.thumbnailUrl ??
+          data?.thumbnail_url ??
+          data?.coverUrl ??
+          data?.cover_url ??
+          data?.imageUrl ??
+          data?.image_url ??
+          data?.image ??
+          null;
+
+        if (detailThumb) setThumbUrl(detailThumb);
+
         // Load volume if not already available
         const current24h = Number(volumeOverride?.volume24h ?? market?.volume24h ?? 0);
         const currentAll = Number(volumeOverride?.volume ?? market?.volume ?? 0);
@@ -419,7 +496,7 @@ export default function MarketRowV2({
           const v24h = Number(data?.volume24h ?? 0) || 0;
           if ((vAll > 0 || v24h > 0) && onVolumeLoaded) onVolumeLoaded(marketId, { volume: vAll, volume24h: v24h });
         }
-        
+
         // Check for bonus (incentiveFactor field exists in detail)
         if ("incentiveFactor" in data) {
           setDetectedBonus(true);
@@ -452,7 +529,7 @@ export default function MarketRowV2({
       prefetch={false}
       className="panel"
       style={{
-        padding: "12px 12px",
+        padding: "8px 12px",
         cursor: "pointer",
         display: "block",
         color: "inherit",
@@ -477,12 +554,14 @@ export default function MarketRowV2({
         }}
       >
         <div style={{ minWidth: 0 }}>
-          {/* Title row: [Title] [Gift icon] */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+          {/* Title row: [Thumbnail] [Title] [Gift icon] */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+            <MarketThumbnail url={thumbUrl} size={50} radius={10} />
+
             <span
               style={{
                 fontWeight: 900,
-                lineHeight: 1.15,
+                lineHeight: 1.05,
                 minWidth: 0,
                 overflow: "hidden",
                 textOverflow: "ellipsis",
