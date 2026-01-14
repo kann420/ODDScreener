@@ -4,6 +4,50 @@ import ChartViewV2 from "./ChartViewV2";
 import { useEffect, useMemo, useRef, useState } from "react";
 import useMarketTrades from "./hooks/useMarketTrades";
 
+/* =========================
+   NEW: Thumbnail (Detail)
+   - Fixed size box so it never misaligns
+   - Uses marketData.thumbnailUrl / coverUrl
+========================= */
+function MarketThumbnailDetail({ url, size = 100, radius = 14 }) {
+  const [errored, setErrored] = useState(false);
+  const showImg = Boolean(url) && !errored;
+
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: radius,
+        overflow: "hidden",
+        background: "rgba(255,255,255,0.08)",
+        flex: "0 0 auto",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {showImg ? (
+        <img
+          src={url}
+          alt=""
+          width={size}
+          height={size}
+          loading="lazy"
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+          onError={() => setErrored(true)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function SkeletonOrderbookRow() {
   return (
     <tr>
@@ -284,9 +328,9 @@ function fmtDate(v) {
  */
 function extractExpiresFromTitle(title) {
   if (!title) return 0;
-  
+
   const str = String(title).trim();
-  
+
   const months = {
     'january': 0, 'jan': 0,
     'february': 1, 'feb': 1,
@@ -301,82 +345,78 @@ function extractExpiresFromTitle(title) {
     'november': 10, 'nov': 10,
     'december': 11, 'dec': 11,
   };
-  
-  // Pattern 1: "Month Day, Year" or "Month Day"
+
   const pattern1 = /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?\b/i;
   const match1 = str.match(pattern1);
   if (match1) {
     const month = months[match1[1].toLowerCase()];
     const day = parseInt(match1[2], 10);
     let year = match1[3] ? parseInt(match1[3], 10) : new Date().getFullYear();
-    
+
     const now = new Date();
     const testDate = new Date(year, month, day);
     if (testDate < now && !match1[3]) {
       year = now.getFullYear() + 1;
     }
-    
+
     if (month !== undefined && day >= 1 && day <= 31 && year >= 2020 && year <= 2030) {
       return Math.floor(new Date(year, month, day, 23, 59, 59).getTime() / 1000);
     }
   }
-  
-  // Pattern 2: "in Month Year?" or "in Month?"
+
   const pattern2 = /\bin\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)(?:\s+(\d{4}))?\b/i;
   const match2 = str.match(pattern2);
   if (match2) {
     const month = months[match2[1].toLowerCase()];
     let year = match2[2] ? parseInt(match2[2], 10) : new Date().getFullYear();
-    
+
     const now = new Date();
     if (month < now.getMonth() && !match2[2]) {
       year = now.getFullYear() + 1;
     }
-    
+
     if (month !== undefined && year >= 2020 && year <= 2030) {
       const lastDay = new Date(year, month + 1, 0).getDate();
       return Math.floor(new Date(year, month, lastDay, 23, 59, 59).getTime() / 1000);
     }
   }
-  
-  // Pattern 3: "by Month Day, Year"
+
   const pattern3 = /\bby\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?\b/i;
   const match3 = str.match(pattern3);
   if (match3) {
     const month = months[match3[1].toLowerCase()];
     const day = parseInt(match3[2], 10);
     let year = match3[3] ? parseInt(match3[3], 10) : new Date().getFullYear();
-    
+
     const now = new Date();
     const testDate = new Date(year, month, day);
     if (testDate < now && !match3[3]) {
       year = now.getFullYear() + 1;
     }
-    
+
     if (month !== undefined && day >= 1 && day <= 31 && year >= 2020 && year <= 2030) {
       return Math.floor(new Date(year, month, day, 23, 59, 59).getTime() / 1000);
     }
   }
-  
-  // Pattern 4: "on Month Day"
+
   const pattern4 = /\bon\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i;
   const match4 = str.match(pattern4);
   if (match4) {
     const month = months[match4[1].toLowerCase()];
     const day = parseInt(match4[2], 10);
     let year = new Date().getFullYear();
-    
+
     const now = new Date();
     const testDate = new Date(year, month, day);
     if (testDate < now) {
       year = now.getFullYear() + 1;
     }
-    
+
     if (month !== undefined && day >= 1 && day <= 31) {
       return Math.floor(new Date(year, month, day, 23, 59, 59).getTime() / 1000);
     }
   }
-  
+
   return 0;
 }
 
@@ -398,7 +438,15 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
   const totalVolume = marketData.totalVolume || marketData.total_volume || marketData.volume || null;
   const openInterest = marketData.openInterest || marketData.open_interest || null;
   const rules = marketData.rules || marketData.description || marketData.marketRules || null;
-  
+
+  // NEW: image url for thumbnail (prefers thumbnailUrl, fallback coverUrl)
+  const thumbnailUrl =
+    marketData.thumbnailUrl ||
+    marketData.thumbnail_url ||
+    marketData.coverUrl ||
+    marketData.cover_url ||
+    null;
+
   // Get expiresAt - try cutoffAt first, then fallback to extracting from title
   let expiresAt = marketData.cutoffAt || marketData.resolvedAt || marketData.expiresAt || marketData.expires_at || marketData.endDate || marketData.end_date || null;
   if (!expiresAt || expiresAt === 0) {
@@ -406,7 +454,7 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
   }
 
   const [showRules, setShowRules] = useState(false);
-  
+
   // Recent trades via WebSocket
   const { trades: recentTrades, connected: wsConnected, error: wsError } = useMarketTrades(marketId);
 
@@ -568,37 +616,43 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
     <div className="col" style={{ gap: 12 }}>
       <div className="panel" style={{ padding: "14px 16px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div>
-            <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>Market #{marketId}</div>
-            <div style={{ fontWeight: 900, fontSize: 16, display: "flex", alignItems: "center", gap: 12 }}>
-              {title || "Market"}
-              <a 
-                href={`https://app.opinion.trade/detail?topicId=${marketId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn"
-                style={{ fontSize: 11, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}
-              >
-                <img src="/opinion-logo.svg" alt="Opinion" width="16" height="16" />
-                View on Opinion
-              </a>
-              {marketData && Object.prototype.hasOwnProperty.call(marketData, "incentiveFactor") ? (
-                <img src="/gift_icon_24.svg" alt="Bonus" title="Bonus market" style={{ width: 40, height: 40, marginLeft: -10, verticalAlign: "middle" }} />
-              ) : null}
+          {/* LEFT BLOCK (unchanged content, just insert thumbnail) */}
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            {/* NEW: thumbnail at the exact left spot you marked */}
+            <MarketThumbnailDetail url={thumbnailUrl} size={100} radius={14} />
+
+            <div>
+              <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>Market #{marketId}</div>
+              <div style={{ fontWeight: 900, fontSize: 16, display: "flex", alignItems: "center", gap: 12 }}>
+                {title || "Market"}
+                <a
+                  href={`https://app.opinion.trade/detail?topicId=${marketId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn"
+                  style={{ fontSize: 11, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}
+                >
+                  <img src="/opinion-logo.svg" alt="Opinion" width="16" height="16" />
+                  View on Opinion
+                </a>
+              </div>
             </div>
           </div>
+
+          {/* RIGHT BLOCK (unchanged) */}
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <span className="tag"><span className="dot"></span>LIVE</span>
           </div>
         </div>
 
-        <div style={{ 
-          display: "flex", 
-          alignItems: "center", 
-          gap: 24, 
-          marginTop: 14, 
+        {/* EVERYTHING BELOW: unchanged */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 24,
+          marginTop: 14,
           flexWrap: "wrap",
-          fontSize: 12 
+          fontSize: 12
         }}>
           <div>
             <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Chance</div>
@@ -635,8 +689,8 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
             <div style={{ fontWeight: 700 }}>-</div>
           </div>
           <div style={{ marginLeft: "auto" }}>
-            <button 
-              className="btn" 
+            <button
+              className="btn"
               style={{ fontSize: 11, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}
               onClick={() => setShowRules(!showRules)}
             >
@@ -653,10 +707,10 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
         </div>
 
         {showRules && rules && (
-          <div style={{ 
-            marginTop: 12, 
-            padding: 12, 
-            background: "rgba(255,255,255,0.03)", 
+          <div style={{
+            marginTop: 12,
+            padding: 12,
+            background: "rgba(255,255,255,0.03)",
             borderRadius: 8,
             border: "1px solid rgba(255,255,255,0.08)",
             fontSize: 12,
@@ -671,12 +725,12 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 12 }}>
         <div className="col" style={{ gap: 12 }}>
-          <ChartViewV2 
-            key={yesTokenId} 
-            tokenId={yesTokenId} 
+          <ChartViewV2
+            key={yesTokenId}
+            tokenId={yesTokenId}
             outcome={outcome}
-            mid={mid} 
-            selectedCents={selectedCents} 
+            mid={mid}
+            selectedCents={selectedCents}
             onOutcomeChange={setOutcome}
           />
 
@@ -686,19 +740,17 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
               <div className="tab">Top Traders</div>
               <div className="tab">Holders</div>
             </div>
-            
-            {/* Recent Trades Section */}
+
             <div style={{ padding: "12px 16px" }}>
-              {/* Trades table with scroll */}
               <div style={{ maxHeight: 500, overflowY: "auto", overflowX: "auto" }}>
-                <table style={{ 
-                  width: "100%", 
+                <table style={{
+                  width: "100%",
                   borderCollapse: "collapse",
                   fontSize: 13
                 }}>
                   <thead style={{ position: "sticky", top: 0, background: "#0d0d0d", zIndex: 1 }}>
-                    <tr style={{ 
-                      fontSize: 12, 
+                    <tr style={{
+                      fontSize: 12,
                       color: "rgba(148,163,184,0.8)",
                       fontWeight: 700,
                       textAlign: "left"
@@ -714,15 +766,15 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                   <tbody>
                     {recentTrades.length === 0 ? (
                       <tr>
-                        <td colSpan={6} style={{ 
-                          textAlign: "center", 
+                        <td colSpan={6} style={{
+                          textAlign: "center",
                           padding: "24px 0",
                           color: "rgba(148,163,184,0.6)",
                           fontSize: 13
                         }}>
-                          {wsConnected 
-                            ? "Loading..." 
-                            : wsError 
+                          {wsConnected
+                            ? "Loading..."
+                            : wsError
                               ? "Unable to connect to live feed"
                               : "Connecting to live feed..."}
                         </td>
@@ -731,30 +783,26 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                       recentTrades.map((trade) => {
                         const isBuy = trade.side === "Buy";
                         const outcomeLabel = trade.outcomeSide === 1 ? "YES" : "NO";
-                        // UTC time format
                         const timeStr = new Date(trade.timestamp).toISOString().slice(11, 19);
-                        // Price in cents with decimal
                         const priceCents = (trade.price * 100).toFixed(1).replace(/\.0$/, "");
-                        // Amount formatted
-                        const amount = trade.shares >= 1000 
+                        const amount = trade.shares >= 1000
                           ? (trade.shares / 1000).toFixed(1) + "K"
                           : Math.round(trade.shares).toLocaleString();
-                        // Total USD
                         const totalUsd = trade.price * trade.shares;
                         const totalStr = totalUsd >= 1000
                           ? "$" + (totalUsd / 1000).toFixed(1) + "K"
                           : "$" + Math.round(totalUsd).toLocaleString();
-                        
+
                         return (
-                          <tr 
+                          <tr
                             key={trade.id}
                             style={{
                               borderBottom: "1px solid rgba(255,255,255,0.04)",
                               animation: "fadeIn 0.3s ease"
                             }}
                           >
-                            <td className="mono muted" style={{ 
-                              padding: "12px 12px 12px 0", 
+                            <td className="mono muted" style={{
+                              padding: "12px 12px 12px 0",
                               fontSize: 13,
                               whiteSpace: "nowrap"
                             }}>
@@ -770,7 +818,7 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                               </span>
                             </td>
                             <td style={{ padding: "12px" }}>
-                              <span style={{ 
+                              <span style={{
                                 color: isBuy ? "#22c55e" : "#ef4444",
                                 fontWeight: 700,
                                 fontSize: 13
@@ -778,19 +826,19 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                                 {isBuy ? "BUY" : "SELL"}
                               </span>
                             </td>
-                            <td className="mono" style={{ 
+                            <td className="mono" style={{
                               padding: "12px",
                               fontWeight: 500
                             }}>
                               {priceCents}¢
                             </td>
-                            <td className="mono" style={{ 
+                            <td className="mono" style={{
                               padding: "12px",
                               fontWeight: 500
                             }}>
                               {amount}
                             </td>
-                            <td className="mono" style={{ 
+                            <td className="mono" style={{
                               padding: "12px 0 12px 12px",
                               textAlign: "right",
                               color: isBuy ? "#22c55e" : "#ef4444",

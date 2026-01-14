@@ -2,6 +2,43 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+/* =========================
+   Smart Money Thumbnail (20px)
+========================= */
+function MarketThumbnailSM({ url, size = 20, radius = 5 }) {
+  const [errored, setErrored] = useState(false);
+  const showImg = Boolean(url) && !errored;
+
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: radius,
+        overflow: "hidden",
+        background: "rgba(255,255,255,.10)",
+        flex: "0 0 auto",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+      aria-hidden="true"
+    >
+      {showImg ? (
+        <img
+          src={url}
+          alt=""
+          width={size}
+          height={size}
+          loading="lazy"
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          onError={() => setErrored(true)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function timeAgo(ts) {
   const t = Number(ts) || Date.now();
   const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
@@ -18,19 +55,33 @@ function fmtUsd(n) {
   return x.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
+// tiny concurrency helper (avoid TPS spike)
+async function runWithLimit(tasks, limit = 6) {
+  let idx = 0;
+  async function worker() {
+    while (idx < tasks.length) {
+      const cur = idx++;
+      try {
+        await tasks[cur]();
+      } catch {}
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, () => worker()));
+}
+
 export default function SmartMoneyPage() {
-  const [minAmount, setMinAmount] = useState(1); // ✅ keep default = 1 (for your testing)
+  const [minAmount, setMinAmount] = useState(200);
   const [rows, setRows] = useState([]);
-  const [hubStatus, setHubStatus] = useState(null);
-  const [statusTick, setStatusTick] = useState(0);
   const [customOpen, setCustomOpen] = useState(false);
   const [customVal, setCustomVal] = useState("1000");
 
-  // ✅ Search by market title or marketId
+  // ✅ restore Search by Market Title
   const [query, setQuery] = useState("");
 
-  // ✅ Prevent SSE snapshot from overwriting DB history
-  const historyLoadedRef = useRef(false);
+  // ✅ cache thumbnailUrl by marketId
+  const [thumbById, setThumbById] = useState(() => new Map());
+  const inflightThumbRef = useRef(new Set()); // marketIds currently fetching
+  const thumbTimerRef = useRef(null);
 
   const chips = useMemo(
     () => [
@@ -41,69 +92,21 @@ export default function SmartMoneyPage() {
     []
   );
 
-  // ✅ 1) Load history from DB first (so user sees old trades immediately)
   useEffect(() => {
-    let cancelled = false;
-    historyLoadedRef.current = false; // reset when minAmount changes
-
-    (async () => {
-      try {
-        const res = await fetch(
-          `/api/smart-money/history?hours=24&minAmount=${encodeURIComponent(minAmount)}&limit=200`,
-          { cache: "no-store" }
-        );
-        if (!res.ok) return;
-        const j = await res.json();
-        if (!cancelled && Array.isArray(j?.rows)) {
-          historyLoadedRef.current = true; // ✅ mark history loaded
-          setRows(j.rows);
-        }
-      } catch {}
-    })();
-
-    return () => {
-      cancelled = true;
-      // keep as-is; next run will reset historyLoadedRef anyway
-    };
-  }, [minAmount]);
-
-  // ✅ 2) SSE stream: realtime updates (do NOT wipe history)
-  useEffect(() => {
+    setRows([]);
     const es = new EventSource(`/api/smart-money/stream?minAmount=${encodeURIComponent(minAmount)}`);
 
     es.addEventListener("snapshot", (e) => {
       try {
         const data = JSON.parse(e.data);
-
-        // ✅ Once DB history has loaded, ignore snapshot completely
-        // Snapshot is from in-memory hub.latest and can be empty/short after restart.
-        if (historyLoadedRef.current) return;
-
-        // ✅ Only use snapshot as fallback when history hasn't loaded yet
-        if (Array.isArray(data) && data.length > 0) {
-          setRows(data);
-        }
+        setRows(data);
       } catch {}
     });
 
     es.addEventListener("trade", (e) => {
       try {
         const obj = JSON.parse(e.data);
-        setRows((prev) => {
-          const next = [obj, ...(Array.isArray(prev) ? prev : [])];
-
-          // optional de-dupe (avoid duplicates when history + live overlap)
-          const seen = new Set();
-          const deduped = [];
-          for (const t of next) {
-            const key = `${t.marketId}-${t.ts}-${t.side}-${t.amount}-${t.outcome}-${t.price}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            deduped.push(t);
-            if (deduped.length >= 200) break;
-          }
-          return deduped;
-        });
+        setRows((prev) => [obj, ...prev].slice(0, 200));
       } catch {}
     });
 
@@ -114,70 +117,89 @@ export default function SmartMoneyPage() {
     return () => es.close();
   }, [minAmount]);
 
-  // ✅ status poll (không ảnh hưởng hiển thị history)
+  // ✅ Enrich thumbnails for current rows (marketId -> /api/opinion/market/:id)
   useEffect(() => {
-    let alive = true;
-    const run = async () => {
-      try {
-        const res = await fetch("/api/smart-money/status", { cache: "no-store" });
-        if (!res.ok) return;
-        const j = await res.json();
-        if (alive) setHubStatus(j);
-      } catch {}
-    };
-    run();
-    const id = setInterval(() => {
-      setStatusTick((v) => v + 1);
-    }, 5000);
+    if (!rows || rows.length === 0) return;
+
+    if (thumbTimerRef.current) clearTimeout(thumbTimerRef.current);
+
+    // debounce a bit so streaming doesn't spam
+    thumbTimerRef.current = setTimeout(async () => {
+      const need = [];
+      for (const r of rows) {
+        const id = r?.marketId;
+        if (!id) continue;
+
+        // if stream ever includes thumbnailUrl in future, cache it immediately
+        const direct = r?.thumbnailUrl || r?.market?.thumbnailUrl;
+        if (direct) {
+          setThumbById((prev) => {
+            if (prev.get(id) === direct) return prev;
+            const next = new Map(prev);
+            next.set(id, direct);
+            return next;
+          });
+          continue;
+        }
+
+        if (thumbById.get(id)) continue;
+        if (inflightThumbRef.current.has(id)) continue;
+
+        inflightThumbRef.current.add(id);
+        need.push(id);
+      }
+
+      if (need.length === 0) return;
+
+      // limit batch size per wave
+      const batch = need.slice(0, 60);
+
+      const tasks = batch.map((id) => async () => {
+        try {
+          const res = await fetch(`/api/opinion/market/${encodeURIComponent(id)}`, { cache: "no-store" });
+          const j = await res.json();
+          const data = j?.result?.data || j?.result || j?.data || null;
+          const url = data?.thumbnailUrl || data?.coverUrl || null;
+
+          if (url) {
+            setThumbById((prev) => {
+              const next = new Map(prev);
+              next.set(id, url);
+              return next;
+            });
+          }
+        } catch {
+          // ignore
+        } finally {
+          inflightThumbRef.current.delete(id);
+        }
+      });
+
+      await runWithLimit(tasks, 6);
+    }, 250);
+
     return () => {
-      alive = false;
-      clearInterval(id);
+      if (thumbTimerRef.current) clearTimeout(thumbTimerRef.current);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/smart-money/status", { cache: "no-store" });
-        if (!res.ok) return;
-        const j = await res.json();
-        setHubStatus(j);
-      } catch {}
-    })();
-  }, [statusTick]);
-
-  // ✅ Filter rows by market title OR marketId
+  // ✅ filter rows by market title (and marketId)
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return rows;
-
-    const idMatch = q.match(/\b(\d{3,})\b/);
-    const qId = idMatch ? idMatch[1] : null;
-
-    return (rows || []).filter((r) => {
+    return rows.filter((r) => {
       const title = String(r?.marketTitle ?? "").toLowerCase();
       const id = String(r?.marketId ?? "");
-      if (qId && id.includes(qId)) return true;
       return title.includes(q) || id.includes(q);
     });
   }, [rows, query]);
 
   return (
     <div style={{ padding: 18 }}>
-      {/* Note line */}
-      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10, opacity: 0.85 }}>
-        <div style={{ fontSize: 12 }}>
-          Note:
-          <span style={{ marginLeft: 8, fontWeight: 800, color: hubStatus?.wsReady ? "#c8d035" : "#ffb020" }}>
-            {hubStatus?.wsReady
-              ? "Due to data limitations, this feature only displays trades made within the last 24 hours. Default min trade size: $1"
-              : "Due to data limitations, this feature only displays trades made within the last 24 hours. Default min trade size: $1"}
-          </span>
-        </div>
-      </div>
-
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
         <div style={{ flex: 1, display: "flex", gap: 10 }}>
+          {/* ✅ Search restored */}
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -194,6 +216,7 @@ export default function SmartMoneyPage() {
           />
 
           <div style={{ display: "flex", gap: 10 }}>
+            {/* Top PNL (disabled / coming later) */}
             <button
               type="button"
               disabled
@@ -211,6 +234,7 @@ export default function SmartMoneyPage() {
               Top PNL
             </button>
 
+            {/* Volume (active/highlight) */}
             <button
               type="button"
               style={{
@@ -286,61 +310,62 @@ export default function SmartMoneyPage() {
         </div>
 
         {filteredRows.length === 0 ? (
-          <div style={{ padding: 14, opacity: 0.7 }}>
-            {rows.length === 0
-              ? "No whale trades yet…"
-              : query.trim()
-              ? "No trades match your search."
-              : "No whale trades yet…"}
-          </div>
+          <div style={{ padding: 14, opacity: 0.7 }}>{rows.length === 0 ? "Loading…" : "No results."}</div>
         ) : (
-          filteredRows.map((r, i) => (
-            <div
-              key={`${r.marketId}-${r.ts}-${i}`}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "120px 140px 1fr 140px 90px",
-                padding: "10px 12px",
-                borderTop: "1px solid rgba(255,255,255,.06)",
-                alignItems: "center",
-              }}
-            >
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <span
-                  style={{
-                    color: String(r.side).toLowerCase().includes("sell") ? "#ff6b6b" : "#35d07f",
-                    fontWeight: 800,
-                  }}
-                >
-                  {String(r.side).toLowerCase().includes("sell") ? "Sell" : "Buy"}
-                </span>
-                <span style={{ opacity: 0.7, fontSize: 12 }}>{timeAgo(r.ts)}</span>
+          filteredRows.map((r, i) => {
+            const isSell = String(r.side).toLowerCase().includes("sell");
+            const outcome = String(r.outcome || "").toUpperCase();
+            const isNO = outcome === "NO";
+
+            const thumbUrl = r?.thumbnailUrl || r?.market?.thumbnailUrl || (r?.marketId ? thumbById.get(r.marketId) : null);
+
+            return (
+              <div
+                key={`${r.marketId}-${r.ts}-${i}`}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "120px 140px 1fr 140px 90px",
+                  padding: "10px 12px",
+                  borderTop: "1px solid rgba(255,255,255,.06)",
+                  alignItems: "center",
+                }}
+              >
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span style={{ color: isSell ? "#ff6b6b" : "#35d07f", fontWeight: 800 }}>
+                    {isSell ? "Sell" : "Buy"}
+                  </span>
+                  <span style={{ opacity: 0.7, fontSize: 12 }}>{timeAgo(r.ts)}</span>
+                </div>
+
+                <div style={{ fontWeight: 800 }}>${fmtUsd(r.amount)}</div>
+
+                {/* ✅ Market cell: thumbnail 20px + title (ellipsis) */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                  <MarketThumbnailSM url={thumbUrl} size={20} />
+                  <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {r.marketTitle || r.marketId}
+                  </div>
+                </div>
+
+                <div>
+                  <span
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: 10,
+                      background: isNO ? "rgba(239,68,68,.15)" : "rgba(53,208,127,.15)",
+                      color: isNO ? "#ff6b6b" : "#35d07f",
+                      fontWeight: 800,
+                      fontSize: 12,
+                    }}
+                  >
+                    {outcome || "—"}
+                  </span>
+                </div>
+
+                <div style={{ opacity: 0.9 }}>{r.price || ""}</div>
               </div>
-
-              <div style={{ fontWeight: 800 }}>${fmtUsd(r.amount)}</div>
-
-              <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {r.marketTitle || r.marketId}
-              </div>
-
-              <div>
-                <span
-                  style={{
-                    padding: "4px 10px",
-                    borderRadius: 10,
-                    background: "rgba(53,208,127,.15)",
-                    color: "#35d07f",
-                    fontWeight: 800,
-                    fontSize: 12,
-                  }}
-                >
-                  {r.outcome || "—"}
-                </span>
-              </div>
-
-              <div style={{ opacity: 0.9 }}>{r.price || ""}</div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -378,7 +403,6 @@ export default function SmartMoneyPage() {
                 border: "1px solid rgba(255,255,255,.10)",
                 background: "rgba(255,255,255,.03)",
                 color: "#fff",
-                outline: "none",
               }}
               placeholder="e.g. 2500"
             />
