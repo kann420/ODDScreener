@@ -233,7 +233,7 @@ export default async function Home() {
   console.log(`[Discover] Showing ${filtered.length}/${merged.length} markets after fast filter`);
 
   return (
-    <div className="col" style={{ gap: 12 }}>
+    <div className="col" style={{ gap: 12, paddingBottom: 72 }}>
       {/* HEADER PANEL: replace Discover/Showing text with News bar */}
       <DiscoverNewsBar initialMarkets={filtered} />
 
