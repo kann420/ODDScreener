@@ -16,20 +16,16 @@ function MarketThumbnailSM({ url, size = 20, radius = 5 }) {
         height: size,
         borderRadius: radius,
         overflow: "hidden",
-        background: "rgba(255,255,255,.10)",
+        background: "rgba(255,255,255,.06)",
+        border: "1px solid rgba(255,255,255,.08)",
         flex: "0 0 auto",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
       }}
-      aria-hidden="true"
+      title={url ? "Market thumbnail" : "No thumbnail"}
     >
       {showImg ? (
         <img
           src={url}
           alt=""
-          width={size}
-          height={size}
           loading="lazy"
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           onError={() => setErrored(true)}
@@ -46,27 +42,14 @@ function timeAgo(ts) {
   const m = Math.floor(s / 60);
   if (m < 60) return `${m}m ago`;
   const h = Math.floor(m / 60);
-  return `${h}h ago`;
+  if (h < 48) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
 }
 
 function fmtUsd(n) {
-  const x = Number(n);
-  if (!Number.isFinite(x)) return "";
+  const x = Number(n || 0);
   return x.toLocaleString(undefined, { maximumFractionDigits: 0 });
-}
-
-// tiny concurrency helper (avoid TPS spike)
-async function runWithLimit(tasks, limit = 6) {
-  let idx = 0;
-  async function worker() {
-    while (idx < tasks.length) {
-      const cur = idx++;
-      try {
-        await tasks[cur]();
-      } catch {}
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, () => worker()));
 }
 
 export default function SmartMoneyPage() {
@@ -78,113 +61,95 @@ export default function SmartMoneyPage() {
   // ✅ restore Search by Market Title
   const [query, setQuery] = useState("");
 
-  // ✅ cache thumbnailUrl by marketId
-  const [thumbById, setThumbById] = useState(() => new Map());
-  const inflightThumbRef = useRef(new Set()); // marketIds currently fetching
-  const thumbTimerRef = useRef(null);
+  // ✅ Sorting (Trade / Amount / Outcome)
+  const [sort, setSort] = useState({ key: null, dir: "asc" });
 
-  const chips = useMemo(
-    () => [
-      { label: "200", value: 200 },
-      { label: "500", value: 500 },
-      { label: "1000", value: 1000 },
-    ],
-    []
-  );
+  // ✅ Pagination (UI only)
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    setRows([]);
-    const es = new EventSource(`/api/smart-money/stream?minAmount=${encodeURIComponent(minAmount)}`);
+  const toggleSort = (key) => {
+    setSort((prev) => {
+      if (prev.key !== key) return { key, dir: "asc" };
+      // cycle: asc -> desc -> none
+      if (prev.dir === "asc") return { key, dir: "desc" };
+      return { key: null, dir: "asc" };
+    });
+  };
 
-    es.addEventListener("snapshot", (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        setRows(data);
-      } catch {}
+  const sortIcon = (key) => {
+    if (sort.key !== key) return "↕";
+    return sort.dir === "asc" ? "↑" : "↓";
+  };
+
+  // marketId -> thumbnailUrl cache
+  const thumbByIdRef = useRef(new Map());
+
+  // keep a stable interval ref
+  const pollRef = useRef(null);
+
+  async function fetchThumb(marketId) {
+    try {
+      const res = await fetch(`/api/opinion/market/${marketId}`, { cache: "no-store" });
+      const json = await res.json();
+      const url = json?.result?.data?.thumbnailUrl || "";
+      thumbByIdRef.current.set(Number(marketId), url);
+      return url;
+    } catch {
+      thumbByIdRef.current.set(Number(marketId), "");
+      return "";
+    }
+  }
+
+  async function ensureThumbs(trades) {
+    // Only fetch missing thumbs (very light)
+    const ids = new Set(
+      (trades || [])
+        .map((t) => Number(t?.marketId))
+        .filter((x) => Number.isFinite(x) && x > 0)
+    );
+
+    const missing = [];
+    ids.forEach((id) => {
+      if (!thumbByIdRef.current.has(id)) missing.push(id);
     });
 
-    es.addEventListener("trade", (e) => {
-      try {
-        const obj = JSON.parse(e.data);
-        setRows((prev) => [obj, ...prev].slice(0, 200));
-      } catch {}
-    });
+    // Fetch sequentially to be gentle
+    for (const id of missing.slice(0, 25)) {
+      // cap per refresh
+      // eslint-disable-next-line no-await-in-loop
+      await fetchThumb(id);
+    }
+  }
 
-    es.onerror = () => {
-      // EventSource auto-retry
-    };
-
-    return () => es.close();
-  }, [minAmount]);
-
-  // ✅ Enrich thumbnails for current rows (marketId -> /api/opinion/market/:id)
-  useEffect(() => {
-    if (!rows || rows.length === 0) return;
-
-    if (thumbTimerRef.current) clearTimeout(thumbTimerRef.current);
-
-    // debounce a bit so streaming doesn't spam
-    thumbTimerRef.current = setTimeout(async () => {
-      const need = [];
-      for (const r of rows) {
-        const id = r?.marketId;
-        if (!id) continue;
-
-        // if stream ever includes thumbnailUrl in future, cache it immediately
-        const direct = r?.thumbnailUrl || r?.market?.thumbnailUrl;
-        if (direct) {
-          setThumbById((prev) => {
-            if (prev.get(id) === direct) return prev;
-            const next = new Map(prev);
-            next.set(id, direct);
-            return next;
-          });
-          continue;
-        }
-
-        if (thumbById.get(id)) continue;
-        if (inflightThumbRef.current.has(id)) continue;
-
-        inflightThumbRef.current.add(id);
-        need.push(id);
-      }
-
-      if (need.length === 0) return;
-
-      // limit batch size per wave
-      const batch = need.slice(0, 60);
-
-      const tasks = batch.map((id) => async () => {
-        try {
-          const res = await fetch(`/api/opinion/market/${encodeURIComponent(id)}`, { cache: "no-store" });
-          const j = await res.json();
-          const data = j?.result?.data || j?.result || j?.data || null;
-          const url = data?.thumbnailUrl || data?.coverUrl || null;
-
-          if (url) {
-            setThumbById((prev) => {
-              const next = new Map(prev);
-              next.set(id, url);
-              return next;
-            });
-          }
-        } catch {
-          // ignore
-        } finally {
-          inflightThumbRef.current.delete(id);
-        }
+  async function refresh() {
+    try {
+      const res = await fetch(`/api/smart-money/history?hours=24&minAmount=${minAmount}&limit=200`, {
+        cache: "no-store",
       });
+      const json = await res.json();
+      const data = json?.rows || [];
+      setRows(data);
+      await ensureThumbs(data);
+    } catch {
+      // ignore
+    }
+  }
 
-      await runWithLimit(tasks, 6);
-    }, 250);
+  useEffect(() => {
+    refresh();
+
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(refresh, 12_000);
 
     return () => {
-      if (thumbTimerRef.current) clearTimeout(thumbTimerRef.current);
+      if (pollRef.current) clearInterval(pollRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows]);
+  }, [minAmount]);
 
-  // ✅ filter rows by market title (and marketId)
+  const thumbById = thumbByIdRef.current;
+
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return rows;
@@ -195,8 +160,121 @@ export default function SmartMoneyPage() {
     });
   }, [rows, query]);
 
+  const displayedRows = useMemo(() => {
+    const arr = [...filteredRows];
+
+    if (!sort.key) return arr;
+
+    const normSide = (v) => {
+      const s = String(v || "").toLowerCase();
+      if (s.includes("sell")) return 1;
+      if (s.includes("buy")) return 0;
+      return 2;
+    };
+
+    const normOutcome = (v) => {
+      const o = String(v || "").toLowerCase();
+      if (o === "no" || o.includes("no")) return 1;
+      if (o === "yes" || o.includes("yes")) return 0;
+      return 2;
+    };
+
+    arr.sort((a, b) => {
+      let av = 0;
+      let bv = 0;
+
+      if (sort.key === "trade") {
+        av = normSide(a.side);
+        bv = normSide(b.side);
+      } else if (sort.key === "amount") {
+        av = Number(a.amount || 0);
+        bv = Number(b.amount || 0);
+      } else if (sort.key === "outcome") {
+        av = normOutcome(a.outcome);
+        bv = normOutcome(b.outcome);
+      }
+
+      if (av < bv) return sort.dir === "asc" ? -1 : 1;
+      if (av > bv) return sort.dir === "asc" ? 1 : -1;
+
+      // tie-breaker: newest first
+      return Number(b.ts || 0) - Number(a.ts || 0);
+    });
+
+    return arr;
+  }, [filteredRows, sort]);
+
+  // ✅ Pagination derived state (UI only)
+  const totalPages = useMemo(() => {
+    return Math.max(1, Math.ceil((displayedRows?.length || 0) / PAGE_SIZE));
+  }, [displayedRows, PAGE_SIZE]);
+
+  // Keep page within bounds when filters/sorts change
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+    if (page < 1) setPage(1);
+  }, [page, totalPages]);
+
+  // Optional: when user changes query/minAmount, go back to page 1 to avoid confusion
+  useEffect(() => {
+    setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, minAmount, sort.key, sort.dir]);
+
+  const pagedRows = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return displayedRows.slice(start, start + PAGE_SIZE);
+  }, [displayedRows, page, PAGE_SIZE]);
+
+  // Page number window (1..N but show compact around current)
+  const pageNums = useMemo(() => {
+    const max = totalPages;
+    const cur = page;
+    const windowSize = 7; // show up to 7 numbers
+    let start = Math.max(1, cur - Math.floor(windowSize / 2));
+    let end = Math.min(max, start + windowSize - 1);
+    start = Math.max(1, end - windowSize + 1);
+
+    const arr = [];
+    for (let i = start; i <= end; i++) arr.push(i);
+    return arr;
+  }, [page, totalPages]);
+
+  const rangeText = useMemo(() => {
+    const total = displayedRows.length;
+    if (total === 0) return "Showing 0 of 0 trades";
+    const from = (page - 1) * PAGE_SIZE + 1;
+    const to = Math.min(page * PAGE_SIZE, total);
+    return `Showing ${from}-${to} of ${total} trades`;
+  }, [displayedRows.length, page, PAGE_SIZE]);
+
+  const PagerButton = ({ children, onClick, disabled, active }) => (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        height: 30,
+        padding: "0 10px",
+        borderRadius: 999,
+        border: "1px solid rgba(255,255,255,.12)",
+        background: active ? "rgba(255,255,255,.14)" : "rgba(0,0,0,.18)",
+        color: "#fff",
+        cursor: disabled ? "not-allowed" : "pointer",
+        fontWeight: active ? 900 : 800,
+        opacity: disabled ? 0.45 : 0.95,
+        userSelect: "none",
+      }}
+    >
+      {children}
+    </button>
+  );
+
   return (
     <div style={{ padding: 18 }}>
+      <div style={{ opacity: 0.8, marginBottom: 10, fontSize: 13, color: "#f1c964" }}>
+        Note: This feature shows trades from the last 24 hours. Currently tracking top 33 markets by volume.
+      </div>
+
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
         <div style={{ flex: 1, display: "flex", gap: 10 }}>
           {/* ✅ Search restored */}
@@ -207,82 +285,81 @@ export default function SmartMoneyPage() {
             style={{
               flex: 1,
               padding: "12px 12px",
-              borderRadius: 12,
-              border: "1px solid rgba(255,255,255,.10)",
-              background: "rgba(255,255,255,.03)",
+              borderRadius: 14,
+              border: "1px solid rgba(255,255,255,.1)",
+              background: "rgba(0,0,0,.25)",
               color: "#fff",
               outline: "none",
             }}
           />
-
-          <div style={{ display: "flex", gap: 10 }}>
-            {/* Top PNL (disabled / coming later) */}
-            <button
-              type="button"
-              disabled
-              style={{
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: "1px solid rgba(255,255,255,.10)",
-                background: "rgba(255,255,255,.02)",
-                color: "rgba(255,255,255,.45)",
-                cursor: "not-allowed",
-                opacity: 0.75,
-              }}
-              title="Coming soon (API not available yet)"
-            >
-              Top PNL
-            </button>
-
-            {/* Volume (active/highlight) */}
-            <button
-              type="button"
-              style={{
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: "1px solid rgba(255,255,255,.14)",
-                background: "rgba(255,255,255,.10)",
-                color: "#fff",
-                cursor: "default",
-                fontWeight: 700,
-              }}
-              aria-current="true"
-            >
-              Volume
-            </button>
-          </div>
         </div>
 
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <div style={{ opacity: 0.75, fontSize: 12 }}>Min Trade Size</div>
-          {chips.map((c) => (
-            <button
-              key={c.value}
-              onClick={() => setMinAmount(c.value)}
-              style={{
-                padding: "6px 10px",
-                borderRadius: 10,
-                border: "1px solid rgba(255,255,255,.10)",
-                background: minAmount === c.value ? "rgba(255,255,255,.10)" : "rgba(255,255,255,.03)",
-                color: "#fff",
-                cursor: "pointer",
-              }}
-            >
-              ${c.label}
-            </button>
-          ))}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "10px 12px",
+            borderRadius: 14,
+            border: "1px solid rgba(255,255,255,.1)",
+            background: "rgba(0,0,0,.25)",
+          }}
+        >
+          <div style={{ opacity: 0.8, fontSize: 13 }}>Min Trade Size</div>
+
           <button
-            onClick={() => {
-              setCustomVal(String(minAmount));
-              setCustomOpen(true);
-            }}
+            onClick={() => setMinAmount(200)}
             style={{
-              padding: "6px 10px",
-              borderRadius: 10,
-              border: "1px solid rgba(255,255,255,.10)",
-              background: "rgba(255,255,255,.03)",
+              padding: "6px 12px",
+              borderRadius: 999,
+              border: "1px solid rgba(255,255,255,.12)",
+              background: minAmount === 200 ? "rgba(255,255,255,.12)" : "transparent",
               color: "#fff",
               cursor: "pointer",
+              fontWeight: 800,
+            }}
+          >
+            $200
+          </button>
+          <button
+            onClick={() => setMinAmount(500)}
+            style={{
+              padding: "6px 12px",
+              borderRadius: 999,
+              border: "1px solid rgba(255,255,255,.12)",
+              background: minAmount === 500 ? "rgba(255,255,255,.12)" : "transparent",
+              color: "#fff",
+              cursor: "pointer",
+              fontWeight: 800,
+            }}
+          >
+            $500
+          </button>
+          <button
+            onClick={() => setMinAmount(1000)}
+            style={{
+              padding: "6px 12px",
+              borderRadius: 999,
+              border: "1px solid rgba(255,255,255,.12)",
+              background: minAmount === 1000 ? "rgba(255,255,255,.12)" : "transparent",
+              color: "#fff",
+              cursor: "pointer",
+              fontWeight: 800,
+            }}
+          >
+            $1000
+          </button>
+
+          <button
+            onClick={() => setCustomOpen(true)}
+            style={{
+              padding: "6px 12px",
+              borderRadius: 999,
+              border: "1px solid rgba(255,255,255,.12)",
+              background: "transparent",
+              color: "#fff",
+              cursor: "pointer",
+              fontWeight: 800,
             }}
           >
             Edit
@@ -290,8 +367,61 @@ export default function SmartMoneyPage() {
         </div>
       </div>
 
-      {/* table */}
-      <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 14, overflow: "hidden" }}>
+      {/* ✅ Pager (top) */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          marginBottom: 10,
+        }}
+      >
+        <div style={{ opacity: 0.8, fontSize: 12 }}>{rangeText}</div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <PagerButton onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+            ← Prev
+          </PagerButton>
+
+          {pageNums[0] > 1 && (
+            <>
+              <PagerButton onClick={() => setPage(1)} active={page === 1}>
+                1
+              </PagerButton>
+              {pageNums[0] > 2 && <span style={{ opacity: 0.6, fontSize: 12 }}>…</span>}
+            </>
+          )}
+
+          {pageNums.map((p) => (
+            <PagerButton key={p} onClick={() => setPage(p)} active={p === page}>
+              {p}
+            </PagerButton>
+          ))}
+
+          {pageNums[pageNums.length - 1] < totalPages && (
+            <>
+              {pageNums[pageNums.length - 1] < totalPages - 1 && <span style={{ opacity: 0.6, fontSize: 12 }}>…</span>}
+              <PagerButton onClick={() => setPage(totalPages)} active={page === totalPages}>
+                {totalPages}
+              </PagerButton>
+            </>
+          )}
+
+          <PagerButton onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
+            Next →
+          </PagerButton>
+        </div>
+      </div>
+
+      <div
+        style={{
+          border: "1px solid rgba(255,255,255,.08)",
+          borderRadius: 18,
+          overflow: "hidden",
+          background: "rgba(0,0,0,.25)",
+        }}
+      >
         <div
           style={{
             display: "grid",
@@ -302,22 +432,44 @@ export default function SmartMoneyPage() {
             opacity: 0.8,
           }}
         >
-          <div>Trade</div>
-          <div>Amount</div>
+          <div
+            onClick={() => toggleSort("trade")}
+            style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 6 }}
+            title="Sort by Trade (Buy/Sell)"
+          >
+            Trade <span style={{ opacity: 0.7 }}>{sortIcon("trade")}</span>
+          </div>
+          <div
+            onClick={() => toggleSort("amount")}
+            style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 6 }}
+            title="Sort by Amount"
+          >
+            Amount <span style={{ opacity: 0.7 }}>{sortIcon("amount")}</span>
+          </div>
           <div>Market</div>
-          <div>Outcome</div>
+          <div
+            onClick={() => toggleSort("outcome")}
+            style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 6 }}
+            title="Sort by Outcome (YES/NO)"
+          >
+            Outcome <span style={{ opacity: 0.7 }}>{sortIcon("outcome")}</span>
+          </div>
           <div>Price</div>
         </div>
 
-        {filteredRows.length === 0 ? (
+        {displayedRows.length === 0 ? (
           <div style={{ padding: 14, opacity: 0.7 }}>{rows.length === 0 ? "Loading…" : "No results."}</div>
         ) : (
-          filteredRows.map((r, i) => {
+          pagedRows.map((r, i) => {
             const isSell = String(r.side).toLowerCase().includes("sell");
             const outcome = String(r.outcome || "").toUpperCase();
-            const isNO = outcome === "NO";
+            const isNO = outcome.includes("NO");
 
-            const thumbUrl = r?.thumbnailUrl || r?.market?.thumbnailUrl || (r?.marketId ? thumbById.get(r.marketId) : null);
+            const thumbUrl =
+              r?.market?.thumbnailUrl ||
+              r?.market?.coverUrl ||
+              r?.thumbnailUrl ||
+              (r?.marketId ? thumbById.get(r.marketId) : "");
 
             return (
               <div
@@ -339,7 +491,7 @@ export default function SmartMoneyPage() {
 
                 <div style={{ fontWeight: 800 }}>${fmtUsd(r.amount)}</div>
 
-                {/* ✅ Market cell: thumbnail 20px + title (ellipsis) */}
+                {/* ✅ Market cell: thumbnail 20px + title */}
                 <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                   <MarketThumbnailSM url={thumbUrl} size={20} />
                   <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -369,6 +521,23 @@ export default function SmartMoneyPage() {
         )}
       </div>
 
+      {/* ✅ Pager (bottom) */}
+      {displayedRows.length > 0 && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <PagerButton onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+              ← Prev
+            </PagerButton>
+            <div style={{ opacity: 0.85, fontSize: 12 }}>
+              Page <b>{page}</b> / {totalPages}
+            </div>
+            <PagerButton onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
+              Next →
+            </PagerButton>
+          </div>
+        </div>
+      )}
+
       {/* custom modal (simple) */}
       {customOpen && (
         <div
@@ -377,62 +546,67 @@ export default function SmartMoneyPage() {
             position: "fixed",
             inset: 0,
             background: "rgba(0,0,0,.55)",
-            display: "grid",
-            placeItems: "center",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
             zIndex: 50,
           }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              width: 360,
-              borderRadius: 14,
+              width: 380,
+              borderRadius: 16,
               border: "1px solid rgba(255,255,255,.12)",
-              background: "rgba(15,15,15,.95)",
+              background: "rgba(10,14,18,.95)",
               padding: 14,
             }}
           >
-            <div style={{ fontWeight: 900, marginBottom: 10 }}>Set Min Trade Size</div>
+            <div style={{ fontWeight: 900, marginBottom: 10 }}>Custom Min Trade Size</div>
             <input
               value={customVal}
-              onChange={(e) => setCustomVal(e.target.value.replace(/[^\d]/g, ""))}
+              onChange={(e) => setCustomVal(e.target.value)}
+              placeholder="e.g. 1500"
               style={{
                 width: "100%",
-                padding: "10px 12px",
+                padding: "12px 12px",
                 borderRadius: 12,
-                border: "1px solid rgba(255,255,255,.10)",
-                background: "rgba(255,255,255,.03)",
+                border: "1px solid rgba(255,255,255,.12)",
+                background: "rgba(0,0,0,.25)",
                 color: "#fff",
+                outline: "none",
+                marginBottom: 12,
               }}
-              placeholder="e.g. 2500"
             />
-            <div style={{ display: "flex", gap: 8, marginTop: 10, justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button
                 onClick={() => setCustomOpen(false)}
                 style={{
-                  padding: "8px 12px",
-                  borderRadius: 10,
-                  border: "1px solid rgba(255,255,255,.10)",
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,255,255,.12)",
                   background: "transparent",
                   color: "#fff",
                   cursor: "pointer",
+                  fontWeight: 800,
                 }}
               >
                 Cancel
               </button>
               <button
                 onClick={() => {
-                  const v = Math.max(1, Number(customVal || 1000));
-                  setMinAmount(v);
+                  const v = Math.max(0, Number(customVal || 0));
+                  if (v > 0) setMinAmount(v);
                   setCustomOpen(false);
                 }}
                 style={{
-                  padding: "8px 12px",
-                  borderRadius: 10,
-                  border: "1px solid rgba(255,255,255,.10)",
-                  background: "rgba(255,255,255,.10)",
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,255,255,.12)",
+                  background: "rgba(255,255,255,.12)",
                   color: "#fff",
                   cursor: "pointer",
+                  fontWeight: 900,
                 }}
               >
                 Apply
