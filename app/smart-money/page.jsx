@@ -64,9 +64,11 @@ export default function SmartMoneyPage() {
   // ✅ Sorting (Trade / Amount / Outcome)
   const [sort, setSort] = useState({ key: null, dir: "asc" });
 
-  // ✅ Pagination (UI only)
+  // ✅ Pagination (server-driven)
   const PAGE_SIZE = 50;
   const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalTrades, setTotalTrades] = useState(0);
 
   const toggleSort = (key) => {
     setSort((prev) => {
@@ -102,7 +104,6 @@ export default function SmartMoneyPage() {
   }
 
   async function ensureThumbs(trades) {
-    // Only fetch missing thumbs (very light)
     const ids = new Set(
       (trades || [])
         .map((t) => Number(t?.marketId))
@@ -116,37 +117,55 @@ export default function SmartMoneyPage() {
 
     // Fetch sequentially to be gentle
     for (const id of missing.slice(0, 25)) {
-      // cap per refresh
       // eslint-disable-next-line no-await-in-loop
       await fetchThumb(id);
     }
   }
 
-  async function refresh() {
+  async function refresh({ targetPage = page } = {}) {
     try {
-      const res = await fetch(`/api/smart-money/history?hours=24&minAmount=${minAmount}&limit=200`, {
-        cache: "no-store",
-      });
+      const res = await fetch(
+        `/api/smart-money/history?hours=24&minAmount=${minAmount}&page=${targetPage}&pageSize=${PAGE_SIZE}`,
+        { cache: "no-store" }
+      );
       const json = await res.json();
+
       const data = json?.rows || [];
       setRows(data);
+
+      // ✅ server tells us total pages (dynamic, not limited)
+      setTotalPages(Number(json?.totalPages || 1));
+      setTotalTrades(Number(json?.total || 0));
+
       await ensureThumbs(data);
     } catch {
       // ignore
     }
   }
 
+  // initial + whenever minAmount changes => reset to page 1
   useEffect(() => {
-    refresh();
+    setPage(1);
+    refresh({ targetPage: 1 });
 
     if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(refresh, 12_000);
+
+    // ✅ auto-refresh only when user is on page 1 (realtime view)
+    pollRef.current = setInterval(() => {
+      if (page === 1) refresh({ targetPage: 1 });
+    }, 12_000);
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [minAmount]);
+
+  // When page changes, fetch that page (no waiting)
+  useEffect(() => {
+    refresh({ targetPage: page });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
   const thumbById = thumbByIdRef.current;
 
@@ -204,33 +223,24 @@ export default function SmartMoneyPage() {
     return arr;
   }, [filteredRows, sort]);
 
-  // ✅ Pagination derived state (UI only)
-  const totalPages = useMemo(() => {
-    return Math.max(1, Math.ceil((displayedRows?.length || 0) / PAGE_SIZE));
-  }, [displayedRows, PAGE_SIZE]);
-
-  // Keep page within bounds when filters/sorts change
+  // Keep page within bounds when totalPages changes
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
     if (page < 1) setPage(1);
   }, [page, totalPages]);
 
-  // Optional: when user changes query/minAmount, go back to page 1 to avoid confusion
+  // Optional: when user changes query/sort, go back to page 1
+  // (because search/sort applies only to current page rows)
   useEffect(() => {
     setPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, minAmount, sort.key, sort.dir]);
+  }, [query, sort.key, sort.dir]);
 
-  const pagedRows = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return displayedRows.slice(start, start + PAGE_SIZE);
-  }, [displayedRows, page, PAGE_SIZE]);
-
-  // Page number window (1..N but show compact around current)
+  // Page number window (compact around current)
   const pageNums = useMemo(() => {
     const max = totalPages;
     const cur = page;
-    const windowSize = 7; // show up to 7 numbers
+    const windowSize = 7;
     let start = Math.max(1, cur - Math.floor(windowSize / 2));
     let end = Math.min(max, start + windowSize - 1);
     start = Math.max(1, end - windowSize + 1);
@@ -241,12 +251,11 @@ export default function SmartMoneyPage() {
   }, [page, totalPages]);
 
   const rangeText = useMemo(() => {
-    const total = displayedRows.length;
-    if (total === 0) return "Showing 0 of 0 trades";
+    if (totalTrades === 0) return "Showing 0 of 0 trades";
     const from = (page - 1) * PAGE_SIZE + 1;
-    const to = Math.min(page * PAGE_SIZE, total);
-    return `Showing ${from}-${to} of ${total} trades`;
-  }, [displayedRows.length, page, PAGE_SIZE]);
+    const to = Math.min(page * PAGE_SIZE, totalTrades);
+    return `Showing ${from}-${to} of ${totalTrades} trades`;
+  }, [totalTrades, page, PAGE_SIZE]);
 
   const PagerButton = ({ children, onClick, disabled, active }) => (
     <button
@@ -272,12 +281,11 @@ export default function SmartMoneyPage() {
   return (
     <div style={{ padding: 18 }}>
       <div style={{ opacity: 0.8, marginBottom: 10, fontSize: 13, color: "#f1c964" }}>
-        Note: This feature shows trades from the last 24 hours. Currently tracking top 33 markets by volume.
+        Note: Last 24h trades only. Tracking up to 100 markets with recent smart flow (refreshed hourly).
       </div>
 
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
         <div style={{ flex: 1, display: "flex", gap: 10 }}>
-          {/* ✅ Search restored */}
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -401,7 +409,9 @@ export default function SmartMoneyPage() {
 
           {pageNums[pageNums.length - 1] < totalPages && (
             <>
-              {pageNums[pageNums.length - 1] < totalPages - 1 && <span style={{ opacity: 0.6, fontSize: 12 }}>…</span>}
+              {pageNums[pageNums.length - 1] < totalPages - 1 && (
+                <span style={{ opacity: 0.6, fontSize: 12 }}>…</span>
+              )}
               <PagerButton onClick={() => setPage(totalPages)} active={page === totalPages}>
                 {totalPages}
               </PagerButton>
@@ -460,7 +470,7 @@ export default function SmartMoneyPage() {
         {displayedRows.length === 0 ? (
           <div style={{ padding: 14, opacity: 0.7 }}>{rows.length === 0 ? "Loading…" : "No results."}</div>
         ) : (
-          pagedRows.map((r, i) => {
+          displayedRows.map((r, i) => {
             const isSell = String(r.side).toLowerCase().includes("sell");
             const outcome = String(r.outcome || "").toUpperCase();
             const isNO = outcome.includes("NO");
@@ -491,13 +501,62 @@ export default function SmartMoneyPage() {
 
                 <div style={{ fontWeight: 800 }}>${fmtUsd(r.amount)}</div>
 
-                {/* ✅ Market cell: thumbnail 20px + title */}
                 <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                  <MarketThumbnailSM url={thumbUrl} size={20} />
-                  <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {r.marketTitle || r.marketId}
-                  </div>
-                </div>
+  <MarketThumbnailSM url={thumbUrl} size={20} />
+
+  <a
+    href={`/market/${r.marketId}`}
+    target="_blank"
+    rel="noopener noreferrer"
+    title="Open market in new tab"
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      minWidth: 0,
+      overflow: "hidden",
+      textDecoration: "none",
+      color: "rgba(255,255,255,.95)",
+      fontWeight: 800,
+      cursor: "pointer",
+    }}
+  >
+    <span
+      style={{
+        minWidth: 0,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {r.marketTitle || r.marketId}
+    </span>
+
+    {/* icon báo hiệu mở tab mới */}
+    <svg
+  aria-hidden
+  width="14"
+  height="14"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  strokeWidth="2"
+  strokeLinecap="round"
+  strokeLinejoin="round"
+  style={{
+    flex: "0 0 auto",
+    opacity: 0.75,
+  }}
+>
+  <path d="M14 3h7v7" />
+  <path d="M10 14L21 3" />
+  <path d="M21 14v7h-7" />
+  <path d="M3 10V3h7" />
+</svg>
+
+  </a>
+</div>
+
 
                 <div>
                   <span

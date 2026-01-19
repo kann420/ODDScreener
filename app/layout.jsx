@@ -43,6 +43,18 @@ export default function RootLayout({ children }) {
         {/* Smart Money hub warm-up (server-side safe) */}
         <img src="/api/smart-money/warm" alt="" style={{ display: "none" }} />
 
+        {/* Notification Banner */}
+        <div style={{
+          background: 'linear-gradient(90deg, #1a1a1a 0%, #2d2d2d 100%)',
+          padding: '8px 0',
+          textAlign: 'center',
+          fontSize: '13px',
+          color: '#e0e0e0',
+          lineHeight: '1.5'
+        }}>
+          ODDScreeners is currently in early beta. We're shipping daily updates to improve your experience. Use code <strong>8YfTc9</strong> on Opinion to get up to 10% fee discount. Follow us on <a href="https://x.com/ODDScreeners" target="_blank" rel="noopener noreferrer" style={{ color: '#e0e0e0', textDecoration: 'underline' }}>X</a>.
+        </div>
+
         {/* Topbar */}
         <div className="topbar">
           <div className="container">
@@ -75,9 +87,52 @@ export default function RootLayout({ children }) {
 
               <div style={{ flex: 1 }} />
 
-              {/* RIGHT: search */}
-              <div className="search" style={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <GlobalMarketSearchInput />
+              {/* RIGHT: Platform logos */}
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <a href="https://app.opinion.trade?code=8YfTc9" target="_blank" rel="noopener noreferrer" title="Opinion">
+                  <img
+                    src="/logo-opinion.svg"
+                    alt="Opinion"
+                    style={{
+                      height: 42,
+                      width: "auto",
+                      display: "block",
+                    }}
+                  />
+                </a>
+                <img
+                  src="/polymarket_600.svg"
+                  alt="Polymarket"
+                  title="Polymarket - Coming Soon"
+                  style={{
+                    height: 42,
+                    width: "auto",
+                    display: "block",
+                    filter: "grayscale(100%) opacity(0.4)",
+                  }}
+                />
+                <img
+                  src="/kalshi.svg"
+                  alt="Kalshi"
+                  title="Kalshi - Coming Soon"
+                  style={{
+                    height: 42,
+                    width: "auto",
+                    display: "block",
+                    filter: "grayscale(100%) opacity(0.4)",
+                  }}
+                />
+                <img
+                  src="/proable.svg"
+                  alt="Proable"
+                  title="Proable - Coming Soon"
+                  style={{
+                    height: 42,
+                    width: "auto",
+                    display: "block",
+                    filter: "grayscale(100%) opacity(0.4)",
+                  }}
+                />
               </div>
             </div>
           </div>
@@ -87,7 +142,7 @@ export default function RootLayout({ children }) {
         <div className="container">{children}</div>
 
         {/* New Premium Footer Bar (replaces old bottom-left & bottom-right footers) */}
-        <FooterBar version="1.1.2" live />
+        <FooterBar version="1.1.3" live />
       </body>
     </html>
   );

@@ -14,7 +14,7 @@ export default function FooterBar({ version = "1.1.1", live = true }) {
           <span className="odds-footer-pill">
             <span className={`odds-footer-dot ${live ? "is-live" : ""}`} />
             <span className="odds-footer-text">
-              {live ? "Live" : "Offline"} <span className="odds-footer-muted">version {version}</span>
+              {live ? "Live" : "Offline"} &nbsp;<span className="odds-footer-muted" style={{ fontStyle: "italic" }}>version {version}</span>
             </span>
           </span>
         </div>
