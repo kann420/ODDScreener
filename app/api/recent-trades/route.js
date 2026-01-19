@@ -7,10 +7,7 @@ export async function GET(req) {
     const marketId = searchParams.get("marketId");
 
     if (!marketId) {
-      return NextResponse.json(
-        { ok: false, error: "missing marketId" },
-        { status: 400 }
-      );
+      return NextResponse.json({ ok: false, error: "missing marketId" }, { status: 400 });
     }
 
     const trades = queryRecentTradesForMarket({ marketId: Number(marketId) });
@@ -21,9 +18,6 @@ export async function GET(req) {
       trades,
     });
   } catch (err) {
-    return NextResponse.json(
-      { ok: false, error: String(err) },
-      { status: 500 }
-    );
+    return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
   }
 }
