@@ -2,131 +2,232 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 
-const MAX_TRADES = 500; // Keep last 500 trades for scrolling
+const MAX_TRADES = 500;
+const HYDRATE_LIMIT = 200;
 
-/**
- * Custom hook to subscribe to real-time market trades via SSE
- * Uses server-side proxy to keep API key secure
- * @param {string|number} marketId - The market ID to subscribe to
- * @returns {{ trades: Array, connected: boolean, error: string|null }}
- */
+// SSE endpoint - API key stays on server side, never exposed to client
+const SSE_ENDPOINT = "/api/opinion/token/trades/stream";
+
+function normalizeTrade(t) {
+  // DB rows hoặc SSE msg đều đưa về shape thống nhất
+  const price = t?.price != null ? Number(t.price) : null;
+  const shares = t?.shares != null ? Number(t.shares) : null;
+  const amount = t?.amount != null ? Number(t.amount) : null;
+
+  return {
+    ...t,
+    ts: t?.ts ?? t?.timestamp != null ? Number(t.ts ?? t.timestamp) : Date.now(),
+    marketId: t?.marketId != null ? Number(t.marketId) : null,
+    rootMarketId: t?.rootMarketId != null ? Number(t.rootMarketId) : null,
+    outcomeSide: t?.outcomeSide != null ? Number(t.outcomeSide) : null,
+    price,
+    shares,
+    amount,
+  };
+}
+
+// de-dupe by a simple fingerprint
+function tradeKey(t) {
+  return [
+    t.ts,
+    t.marketId ?? "",
+    t.rootMarketId ?? "",
+    t.tokenId ?? "",
+    t.side ?? "",
+    t.outcomeSide ?? "",
+    t.price ?? "",
+    t.shares ?? "",
+    t.amount ?? "",
+  ].join("|");
+}
+
 export default function useMarketTrades(marketId) {
   const [trades, setTrades] = useState([]);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState(null);
-  
+
   const eventSourceRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const reconnectAttempts = useRef(0);
-  const maxReconnectAttempts = 5;
 
-  const connect = useCallback(() => {
-    if (!marketId) {
-      return;
-    }
+  const maxReconnectAttempts = 8;
 
-    // Clean up existing connection
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-
-    try {
-      // Connect to SSE endpoint - API key stays on server
-      const sseUrl = `/api/opinion/token/trades/stream?marketId=${marketId}`;
-      const eventSource = new EventSource(sseUrl);
-      eventSourceRef.current = eventSource;
-
-      eventSource.onopen = () => {
-        console.log("[SSE] Connected to trades stream for market", marketId);
-        setConnected(true);
-        setError(null);
-        reconnectAttempts.current = 0;
-      };
-
-      // Handle initial snapshot
-      eventSource.addEventListener("snapshot", (event) => {
-        try {
-          const snapshot = JSON.parse(event.data);
-          if (Array.isArray(snapshot)) {
-            setTrades(snapshot.slice(0, MAX_TRADES));
-            console.log("[SSE] Received snapshot with", snapshot.length, "trades");
-          }
-        } catch (e) {
-          console.warn("[SSE] Failed to parse snapshot:", e);
-        }
-      });
-
-      // Handle new trades
-      eventSource.addEventListener("trade", (event) => {
-        try {
-          const trade = JSON.parse(event.data);
-          setTrades(prev => {
-            const newTrades = [trade, ...prev];
-            return newTrades.slice(0, MAX_TRADES);
-          });
-        } catch (e) {
-          console.warn("[SSE] Failed to parse trade:", e);
-        }
-      });
-
-      eventSource.onerror = (event) => {
-        console.error("[SSE] Connection error:", event);
-        setConnected(false);
-        
-        // EventSource will auto-reconnect, but we track attempts
-        if (eventSource.readyState === EventSource.CLOSED) {
-          setError("Connection lost");
-          
-          // Attempt manual reconnection with backoff
-          if (reconnectAttempts.current < maxReconnectAttempts) {
-            reconnectAttempts.current++;
-            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
-            console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current})`);
-            
-            reconnectTimeoutRef.current = setTimeout(() => {
-              connect();
-            }, delay);
-          }
-        }
-      };
-
-    } catch (e) {
-      console.error("[SSE] Failed to create EventSource:", e);
-      setError("Failed to connect to trades stream");
-    }
-  }, [marketId]);
-
-  const disconnect = useCallback(() => {
-    // Clear reconnect timeout
+  const cleanup = useCallback(() => {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
 
-    // Close EventSource
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
+    const es = eventSourceRef.current;
+    eventSourceRef.current = null;
+
+    if (es) {
+      try {
+        es.close();
+      } catch {}
     }
 
     setConnected(false);
   }, []);
 
-  // Connect on mount, disconnect on unmount
-  useEffect(() => {
-    if (marketId) {
-      connect();
+  const scheduleReconnect = useCallback((reason) => {
+    if (reconnectAttempts.current >= maxReconnectAttempts) {
+      setError(reason || "Connection lost");
+      return;
     }
 
-    return () => {
-      disconnect();
-    };
-  }, [marketId, connect, disconnect]);
+    reconnectAttempts.current += 1;
+    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
 
-  // Clear trades when marketId changes
+    reconnectTimeoutRef.current = setTimeout(() => {
+      connect();
+    }, delay);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const hydrateFromDb = useCallback(async () => {
+    if (!marketId) return;
+
+    try {
+      let url = `/api/recent-trades/recent?limit=${HYDRATE_LIMIT}`;
+
+      const raw = String(marketId);
+      if (raw.startsWith("root:")) {
+        const rid = Number(raw.replace("root:", ""));
+        url += `&rootMarketId=${encodeURIComponent(String(rid))}`;
+      } else {
+        url += `&marketId=${encodeURIComponent(String(Number(raw)))}`;
+      }
+
+      const res = await fetch(url, { method: "GET" });
+      if (!res.ok) return;
+
+      const data = await res.json();
+      const rows = Array.isArray(data?.rows) ? data.rows : [];
+
+      if (rows.length === 0) return;
+
+      const normalized = rows.map(normalizeTrade);
+
+      // merge -> keep newest first, dedupe
+      setTrades((prev) => {
+        const map = new Map();
+        for (const t of normalized) map.set(tradeKey(t), t);
+        for (const t of prev) map.set(tradeKey(normalizeTrade(t)), normalizeTrade(t));
+
+        const merged = Array.from(map.values()).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+        return merged.slice(0, MAX_TRADES);
+      });
+    } catch {
+      // ignore hydrate errors
+    }
+  }, [marketId]);
+
+  function connect() {
+    if (!marketId) return;
+
+    // avoid dev double-connect
+    const cur = eventSourceRef.current;
+    if (cur && cur.readyState !== EventSource.CLOSED) {
+      return;
+    }
+
+    cleanup();
+    setError(null);
+
+    // Build SSE URL - no API key needed, it's handled server-side
+    const raw = String(marketId);
+    let sseUrl;
+    if (raw.startsWith("root:")) {
+      // For root markets, use the numeric rootMarketId
+      const rid = Number(raw.replace("root:", ""));
+      sseUrl = `${SSE_ENDPOINT}?marketId=${rid}`;
+    } else {
+      sseUrl = `${SSE_ENDPOINT}?marketId=${Number(raw)}`;
+    }
+
+    let es;
+    try {
+      es = new EventSource(sseUrl);
+    } catch {
+      setError("Failed to create SSE connection");
+      return;
+    }
+
+    eventSourceRef.current = es;
+
+    es.onopen = () => {
+      setConnected(true);
+      setError(null);
+      reconnectAttempts.current = 0;
+    };
+
+    // Handle snapshot event (initial batch of trades)
+    es.addEventListener("snapshot", (evt) => {
+      try {
+        const snapshot = JSON.parse(evt.data);
+        if (!Array.isArray(snapshot)) return;
+
+        const normalized = snapshot.map(normalizeTrade);
+
+        setTrades((prev) => {
+          const map = new Map();
+          for (const t of normalized) map.set(tradeKey(t), t);
+          for (const t of prev) map.set(tradeKey(normalizeTrade(t)), normalizeTrade(t));
+
+          const merged = Array.from(map.values()).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+          return merged.slice(0, MAX_TRADES);
+        });
+      } catch {
+        // ignore parse errors
+      }
+    });
+
+    // Handle individual trade events
+    es.addEventListener("trade", (evt) => {
+      try {
+        const tradeRaw = JSON.parse(evt.data);
+        if (!tradeRaw || typeof tradeRaw !== "object") return;
+
+        const trade = normalizeTrade(tradeRaw);
+
+        const looksLikeTrade =
+          trade?.price != null &&
+          (trade?.shares != null || trade?.amount != null) &&
+          (trade?.outcomeSide != null || trade?.tokenId != null);
+
+        if (!looksLikeTrade) return;
+
+        setTrades((prev) => {
+          const map = new Map();
+          map.set(tradeKey(trade), trade);
+          for (const t of prev) map.set(tradeKey(normalizeTrade(t)), normalizeTrade(t));
+          const merged = Array.from(map.values()).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+          return merged.slice(0, MAX_TRADES);
+        });
+      } catch {
+        // ignore parse errors
+      }
+    });
+
+    es.onerror = () => {
+      setConnected(false);
+      // EventSource auto-reconnects, but we handle it manually for better control
+      cleanup();
+      scheduleReconnect("Connection lost");
+    };
+  }
+
+  // When marketId changes: clear -> hydrate -> connect SSE
   useEffect(() => {
+    if (!marketId) return;
+
     setTrades([]);
+    hydrateFromDb();
+    connect();
+
+    return () => cleanup();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [marketId]);
 
   return { trades, connected, error };

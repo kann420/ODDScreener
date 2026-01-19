@@ -84,6 +84,25 @@ function num(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function timeAgo(timestampMs) {
+  if (!timestampMs) return "--:--:--";
+  const now = Date.now();
+  const diffMs = now - timestampMs;
+  if (diffMs < 0) return "just now";
+  
+  const seconds = Math.floor(diffMs / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 function fmtQty(v) {
   const n = num(v);
   if (n === 0) return "0";
@@ -455,8 +474,18 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
 
   const [showRules, setShowRules] = useState(false);
 
+  // ✅ FIX: categorical markets need rootMarketId for market.last.trade
+  const rootMarketId =
+    marketData.rootMarketId ||
+    marketData.root_market_id ||
+    marketData.rootId ||
+    marketData.root_id ||
+    null;
+
+  const tradeSubId = rootMarketId ? `root:${rootMarketId}` : marketId;
+
   // Recent trades via WebSocket
-  const { trades: recentTrades, connected: wsConnected, error: wsError } = useMarketTrades(marketId);
+  const { trades: recentTrades, connected: wsConnected, error: wsError } = useMarketTrades(tradeSubId);
 
   const abortRef = useRef(null);
   const asksScrollRef = useRef(null);
@@ -613,7 +642,7 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
   const selectedCents = Number.isFinite(selectedPrice) ? selectedPrice * 100 : null;
 
   return (
-    <div className="col" style={{ gap: 12 }}>
+    <div className="col" style={{ gap: 12, paddingBottom: 120 }}>
       <div className="panel" style={{ padding: "14px 16px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           {/* LEFT BLOCK (unchanged content, just insert thumbnail) */}
@@ -641,7 +670,6 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
 
           {/* RIGHT BLOCK (unchanged) */}
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span className="tag"><span className="dot"></span>LIVE</span>
           </div>
         </div>
 
@@ -760,13 +788,15 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                       <th style={{ padding: "10px 12px", fontWeight: 700 }}>Type</th>
                       <th style={{ padding: "10px 12px", fontWeight: 700 }}>Price</th>
                       <th style={{ padding: "10px 12px", fontWeight: 700 }}>Amount</th>
-                      <th style={{ padding: "10px 0 10px 12px", fontWeight: 700, textAlign: "right" }}>Total USD</th>
+                      <th style={{ padding: "10px 12px", fontWeight: 700 }}>Total USD</th>
+                      <th style={{ padding: "10px 12px", fontWeight: 700 }}>Trader</th>
                     </tr>
                   </thead>
+
                   <tbody>
                     {recentTrades.length === 0 ? (
                       <tr>
-                        <td colSpan={6} style={{
+                        <td colSpan={7} style={{
                           textAlign: "center",
                           padding: "24px 0",
                           color: "rgba(148,163,184,0.6)",
@@ -781,21 +811,51 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                       </tr>
                     ) : (
                       recentTrades.map((trade) => {
-                        const isBuy = trade.side === "Buy";
-                        const outcomeLabel = trade.outcomeSide === 1 ? "YES" : "NO";
-                        const timeStr = new Date(trade.timestamp).toISOString().slice(11, 19);
-                        const priceCents = (trade.price * 100).toFixed(1).replace(/\.0$/, "");
-                        const amount = trade.shares >= 1000
-                          ? (trade.shares / 1000).toFixed(1) + "K"
-                          : Math.round(trade.shares).toLocaleString();
-                        const totalUsd = trade.price * trade.shares;
-                        const totalStr = totalUsd >= 1000
-                          ? "$" + (totalUsd / 1000).toFixed(1) + "K"
-                          : "$" + Math.round(totalUsd).toLocaleString();
+                        // ---- SAFE NORMALIZATION (only for render; does not change logic elsewhere)
+                        const sideRaw = String(trade?.side ?? trade?.type ?? "").toLowerCase();
+                        const isBuy = sideRaw === "buy" || sideRaw === "b" || sideRaw === "long";
+
+                        const outcomeSideRaw = trade?.outcomeSide ?? trade?.outcome_side ?? trade?.outcome;
+                        const outcomeLabel = Number(outcomeSideRaw) === 1 || String(outcomeSideRaw).toUpperCase() === "YES"
+                          ? "YES"
+                          : "NO";
+
+                        const price = Number(trade?.price ?? 0);
+                        const shares = Number(trade?.shares ?? trade?.size ?? 0);
+
+                        const tRaw =
+                          trade?.timestamp ??
+                          trade?.ts ??
+                          trade?.time ??
+                          trade?.createdAt ??
+                          trade?.created_at ??
+                          trade?.receivedAt ??
+                          0;
+
+                        const tNum = Number(tRaw);
+                        const tMs =
+                          !tNum ? 0 :
+                          tNum > 1e12 ? tNum :
+                          tNum > 1e10 ? tNum :
+                          tNum * 1000;
+
+                        const timeStr = timeAgo(tMs);
+                        const priceCents = (price * 100).toFixed(1).replace(/\.0$/, "");
+
+                        const amount = Math.round(shares).toLocaleString();
+
+                        const totalUsd = price * shares;
+                        const totalStr = "$" + Math.round(totalUsd).toLocaleString();
+
+                        const rowKey =
+                          trade?.id ??
+                          trade?.txHash ??
+                          trade?.hash ??
+                          `${tMs}-${trade?.tokenId ?? ""}-${trade?.price ?? ""}-${trade?.shares ?? ""}`;
 
                         return (
                           <tr
-                            key={trade.id}
+                            key={rowKey}
                             style={{
                               borderBottom: "1px solid rgba(255,255,255,0.04)",
                               animation: "fadeIn 0.3s ease"
@@ -808,15 +868,17 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                             }}>
                               {timeStr}
                             </td>
+
                             <td style={{ padding: "12px" }}>
                               <span style={{
                                 fontSize: 13,
                                 fontWeight: 600,
-                                color: trade.outcomeSide === 1 ? "#22d3ee" : "#a855f7"
+                                color: outcomeLabel === "YES" ? "#22d3ee" : "#a855f7"
                               }}>
                                 {outcomeLabel}
                               </span>
                             </td>
+
                             <td style={{ padding: "12px" }}>
                               <span style={{
                                 color: isBuy ? "#22c55e" : "#ef4444",
@@ -826,25 +888,34 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                                 {isBuy ? "BUY" : "SELL"}
                               </span>
                             </td>
+
                             <td className="mono" style={{
                               padding: "12px",
                               fontWeight: 500
                             }}>
                               {priceCents}¢
                             </td>
+
                             <td className="mono" style={{
                               padding: "12px",
                               fontWeight: 500
                             }}>
                               {amount}
                             </td>
+
                             <td className="mono" style={{
-                              padding: "12px 0 12px 12px",
-                              textAlign: "right",
+                              padding: "12px",
                               color: isBuy ? "#22c55e" : "#ef4444",
                               fontWeight: 600
                             }}>
                               {totalStr}
+                            </td>
+
+                            <td className="mono muted" style={{
+                              padding: "12px",
+                              fontSize: 13
+                            }}>
+                              -
                             </td>
                           </tr>
                         );

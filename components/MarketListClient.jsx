@@ -6,7 +6,7 @@ import MarketRowV2 from "@/components/MarketRowV2";
 const ITEMS_PER_PAGE = 10;
 const TRENDING_COUNT = 20;
 
-const NEW_LIMIT = 30; // ✅ top 30 newest active markets
+const NEW_LIMIT = 100; // ✅ top 100 newest active markets
 const HOT_LIMIT = 20; // ✅ top 20 hot markets
 const HOT_POOL = 150; // take top 150 newest active -> then rank by 24h vol
 
@@ -85,6 +85,9 @@ function maybeBumpYearIfTooOld(testDate, yearProvided) {
 function extractExpiresFromTitle(title) {
   if (!title) return 0;
   const str = String(title).trim();
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
 
   const months = {
     january: 0, jan: 0,
@@ -101,87 +104,118 @@ function extractExpiresFromTitle(title) {
     december: 11, dec: 11,
   };
 
-  // Month Day [Year]
-  const pattern1 =
-    /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?\b/i;
+  // Helper: create timestamp from date
+  const toTimestamp = (year, month, day) => {
+    return Math.floor(new Date(year, month, day, 23, 59, 59).getTime() / 1000);
+  };
 
+  // Helper: guess year for month without explicit year
+  const guessYear = (month) => {
+    if (month <= currentMonth) {
+      return currentYear; // past or current month = this year
+    }
+    // Future month - if > 6 months ahead, might be previous year
+    if (month - currentMonth > 6) {
+      return currentYear - 1;
+    }
+    return currentYear;
+  };
+
+  // Pattern 1: "Month Day, Year" or "Month Day Year" (e.g., "December 31, 2025")
+  const pattern1 =
+    /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})\b/i;
   const match1 = str.match(pattern1);
   if (match1) {
     const month = months[match1[1].toLowerCase()];
     const day = parseInt(match1[2], 10);
-    const yearProvided = !!match1[3];
-    let year = yearProvided ? parseInt(match1[3], 10) : new Date().getFullYear();
-
+    const year = parseInt(match1[3], 10);
     if (month !== undefined && day >= 1 && day <= 31 && year >= 2020 && year <= 2035) {
-      let testDate = new Date(year, month, day);
-      testDate = maybeBumpYearIfTooOld(testDate, yearProvided);
-
-      return Math.floor(
-        new Date(testDate.getFullYear(), testDate.getMonth(), testDate.getDate(), 23, 59, 59).getTime() / 1000
-      );
+      return toTimestamp(year, month, day);
     }
   }
 
-  // "in January [Year]" -> end of month
+  // Pattern 2: "by/before/on/until Month Day" without year
   const pattern2 =
-    /\bin\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)(?:\s+(\d{4}))?\b/i;
-
+    /\b(?:by|before|on|until)\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i;
   const match2 = str.match(pattern2);
   if (match2) {
     const month = months[match2[1].toLowerCase()];
-    const yearProvided = !!match2[2];
-    let year = yearProvided ? parseInt(match2[2], 10) : new Date().getFullYear();
-
-    if (month !== undefined && year >= 2020 && year <= 2035) {
-      const lastDay = new Date(year, month + 1, 0).getDate();
-      let testDate = new Date(year, month, lastDay);
-      testDate = maybeBumpYearIfTooOld(testDate, yearProvided);
-
-      return Math.floor(
-        new Date(testDate.getFullYear(), testDate.getMonth(), testDate.getDate(), 23, 59, 59).getTime() / 1000
-      );
+    const day = parseInt(match2[2], 10);
+    if (month !== undefined && day >= 1 && day <= 31) {
+      const year = guessYear(month);
+      return toTimestamp(year, month, day);
     }
   }
 
-  // "by Month Day [Year]"
+  // Pattern 3: "Month Day" at end of string (e.g., "...January 1?", "...January 1")
   const pattern3 =
-    /\bby\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?\b/i;
-
+    /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s*\?)?$/i;
   const match3 = str.match(pattern3);
   if (match3) {
     const month = months[match3[1].toLowerCase()];
     const day = parseInt(match3[2], 10);
-    const yearProvided = !!match3[3];
-    let year = yearProvided ? parseInt(match3[3], 10) : new Date().getFullYear();
-
-    if (month !== undefined && day >= 1 && day <= 31 && year >= 2020 && year <= 2035) {
-      let testDate = new Date(year, month, day);
-      testDate = maybeBumpYearIfTooOld(testDate, yearProvided);
-
-      return Math.floor(
-        new Date(testDate.getFullYear(), testDate.getMonth(), testDate.getDate(), 23, 59, 59).getTime() / 1000
-      );
+    if (month !== undefined && day >= 1 && day <= 31) {
+      const year = guessYear(month);
+      return toTimestamp(year, month, day);
     }
   }
 
-  // "on Month Day"
+  // Pattern 4: "in Month [Year]" -> end of month
   const pattern4 =
-    /\bon\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i;
-
+    /\bin\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)(?:\s+(\d{4}))?\b/i;
   const match4 = str.match(pattern4);
   if (match4) {
     const month = months[match4[1].toLowerCase()];
-    const day = parseInt(match4[2], 10);
-    const yearProvided = false;
-    let year = new Date().getFullYear();
+    const year = match4[2] ? parseInt(match4[2], 10) : guessYear(month);
+    if (month !== undefined && year >= 2020 && year <= 2035) {
+      const lastDay = new Date(year, month + 1, 0).getDate();
+      return toTimestamp(year, month, lastDay);
+    }
+  }
 
+  // Pattern 5: Standalone year at end (e.g., "...2025?", "...2025")
+  const pattern5 = /\b(202[0-5])\s*\??$/;
+  const match5 = str.match(pattern5);
+  if (match5) {
+    const year = parseInt(match5[1], 10);
+    return toTimestamp(year, 11, 31); // End of year
+  }
+
+  // Pattern 6: Q1/Q2/Q3/Q4 Year
+  const pattern6 = /\bQ([1-4])\s*(\d{4})\b/i;
+  const match6 = str.match(pattern6);
+  if (match6) {
+    const quarter = parseInt(match6[1], 10);
+    const year = parseInt(match6[2], 10);
+    const endMonth = quarter * 3 - 1;
+    const lastDay = new Date(year, endMonth + 1, 0).getDate();
+    return toTimestamp(year, endMonth, lastDay);
+  }
+
+  // Pattern 7: Numeric date "M/D" or "MM/DD" (e.g., "1/15", "01/15")
+  const pattern7 = /\b(?:on|by|before|until)?\s*(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s*(?:\?|$)/i;
+  const match7 = str.match(pattern7);
+  if (match7) {
+    const monthNum = parseInt(match7[1], 10) - 1;
+    const day = parseInt(match7[2], 10);
+    let year = match7[3] ? parseInt(match7[3], 10) : guessYear(monthNum);
+    if (year < 100) year += 2000;
+    
+    if (monthNum >= 0 && monthNum <= 11 && day >= 1 && day <= 31 && year >= 2020 && year <= 2035) {
+      return toTimestamp(year, monthNum, day);
+    }
+  }
+
+  // Pattern 8: "Month Day" anywhere in string (more aggressive fallback)
+  const pattern8 =
+    /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i;
+  const match8 = str.match(pattern8);
+  if (match8) {
+    const month = months[match8[1].toLowerCase()];
+    const day = parseInt(match8[2], 10);
     if (month !== undefined && day >= 1 && day <= 31) {
-      let testDate = new Date(year, month, day);
-      testDate = maybeBumpYearIfTooOld(testDate, yearProvided);
-
-      return Math.floor(
-        new Date(testDate.getFullYear(), testDate.getMonth(), testDate.getDate(), 23, 59, 59).getTime() / 1000
-      );
+      const year = guessYear(month);
+      return toTimestamp(year, month, day);
     }
   }
 
@@ -201,15 +235,44 @@ function getExpiresTimestamp(m) {
   return extractExpiresFromTitle(m.title);
 }
 
+/**
+ * ✅ Opinion `status` is usually a NUMBER:
+ * 1=Created, 2=Activated, 3=Resolving, 4=Resolved, 5=Failed, 6=Deleted
+ */
 function isResolvedByStatus(m) {
-  const s = String(m?.status ?? "").toLowerCase();
+  const statusRaw = m?.status;
+  
+  // Direct check for status = 4 (RESOLVED) - most reliable
+  if (statusRaw === 4 || statusRaw === "4") return true;
+  if (statusRaw === 3 || statusRaw === "3") return true; // RESOLVING
+  if (statusRaw === 5 || statusRaw === "5") return true; // FAILED  
+  if (statusRaw === 6 || statusRaw === "6") return true; // DELETED
+  
+  // Also check as number
+  const stNum = Number(statusRaw);
+  if (Number.isFinite(stNum) && stNum >= 3 && stNum !== 2) {
+    return true; // Any status >= 3 (except 2=ACTIVATED) is resolved/expired
+  }
+
+  // Check statusEnum - case insensitive, partial match
+  const se = String(m?.statusEnum ?? m?.status_enum ?? "").toLowerCase();
+  if (se.includes("resolved") || se.includes("resolving") || 
+      se.includes("failed") || se.includes("deleted") ||
+      se.includes("settled") || se.includes("closed")) {
+    return true;
+  }
+
+  // Check status as string
+  const s = String(statusRaw ?? "").toLowerCase();
   return (
-    s === "resolved" ||
-    s === "closed" ||
-    s === "settled" ||
-    s === "finalized" ||
-    s === "cancelled" ||
-    s === "canceled"
+    s.includes("resolved") ||
+    s.includes("closed") ||
+    s.includes("settled") ||
+    s.includes("finalized") ||
+    s.includes("cancelled") ||
+    s.includes("canceled") ||
+    s.includes("failed") ||
+    s.includes("deleted")
   );
 }
 
@@ -223,10 +286,30 @@ function isExpiredMarket(m, nowSec) {
 function isActiveNotExpired(m, nowMs) {
   if (!m) return false;
 
+  // 1) Check resolved by status (number or string)
   if (isResolvedByStatus(m)) return false;
-  if (m?.resolvedAt && m.resolvedAt > 0) return false;
+  
+  // 2) Check resolvedAt - đáo hạn nếu khác 0/null/undefined
+  const resolvedAt = m?.resolvedAt ?? m?.resolved_at;
+  if (resolvedAt !== null && resolvedAt !== undefined && resolvedAt !== 0 && resolvedAt !== "") {
+    const resolvedNum = Number(resolvedAt);
+    if (Number.isFinite(resolvedNum) && resolvedNum > 0) return false;
+  }
+  
+  // 3) Check resultTokenId - market đã có kết quả
+  const resultTokenId = m?.resultTokenId ?? m?.result_token_id;
+  if (resultTokenId !== null && resultTokenId !== undefined && resultTokenId !== "" && resultTokenId !== 0) {
+    return false;
+  }
 
+  // 4) Check cutoffAt - đã hết hạn đặt cược
   const nowSec = Math.floor(nowMs / 1000);
+  const cutoffAt = m?.cutoffAt ?? m?.cutoff_at ?? 0;
+  if (cutoffAt && Number(cutoffAt) > 0 && Number(cutoffAt) <= nowSec) {
+    return false;
+  }
+
+  // 5) Check by expiry from title or other fields
   if (isExpiredMarket(m, nowSec)) return false;
 
   return true;
@@ -234,9 +317,6 @@ function isActiveNotExpired(m, nowMs) {
 
 /**
  * Recency key for NEW sorting (DESC):
- * 1) createdAt / created_at
- * 2) openTime / listedAt / createdTime
- * 3) marketId fallback  [Chưa xác minh]
  */
 function recencyKey(m) {
   if (!m) return 0;
@@ -289,8 +369,9 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
   const [volMode, setVolMode] = useState("24h"); // "24h" | "all"
   const [currentPage, setCurrentPage] = useState(1);
   const [visible, setVisible] = useState(6);
-
-  const [sortConfig, setSortConfig] = useState({ key: "volume", direction: "desc" });
+  const [refreshTick, setRefreshTick] = useState(0); // auto refresh trigger (no refetch)
+  
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
 
   const [chanceMap, setChanceMap] = useState({});
   const [volumeMap, setVolumeMap] = useState({});
@@ -300,16 +381,42 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
   const [bonusLoading, setBonusLoading] = useState(!initialBonusIds || initialBonusIds.length === 0);
   const bonusSet = useMemo(() => new Set((bonusIds || []).map((x) => String(x))), [bonusIds]);
 
-
   const [allTabLoaded, setAllTabLoaded] = useState(false);
   const initTrendingDoneRef = useRef(false);
   const hotPrefetchDoneRef = useRef(false);
+    // ✅ Auto refresh by tab (NO refetch). Visibility-guarded to save TPS/CPU.
+  // NEW: 6h/lần | HOT/TRENDING: 1h/lần
+  useEffect(() => {
+    let hours = 0;
+
+    if (activeTab === "new") hours = 6;
+    else if (activeTab === "hot" || activeTab === "trending") hours = 1;
+    else return; // other tabs: no auto refresh
+
+    const intervalMs = hours * 60 * 60 * 1000;
+
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        
+        
+        setRefreshTick((t) => t + 1);
+      }
+    }, intervalMs);
+
+    return () => clearInterval(timer);
+  }, [activeTab]);
+
   const bonusScanDoneRef = useRef(false);
+
+  // ✅ Central active list to avoid showing/processing expired/resolved markets in Discover
+  const activeMarkets = useMemo(() => {
+    const nowMs = Date.now();
+    return (markets || []).filter((m) => isActiveNotExpired(m, nowMs));
+  }, [markets, refreshTick]);
 
   // Detect bonus markets from list data first (if incentiveFactor exists in list)
   // Fallback to API if list doesn't have incentiveFactor info
   useEffect(() => {
-    // If we already have initialBonusIds from server, use them
     if (initialBonusIds && initialBonusIds.length > 0) {
       setBonusIds(initialBonusIds);
       setBonusLoading(false);
@@ -317,21 +424,18 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     }
 
     let alive = true;
-    
-    // First: check if markets already have hasBonus flag from list API
+
     const localBonusIds = (markets || [])
       .filter((m) => m?.hasBonus === true)
       .map((m) => m?.marketId)
       .filter(Boolean);
 
     if (localBonusIds.length > 0) {
-      // Use local data - no API call needed
       setBonusIds(localBonusIds);
       setBonusLoading(false);
       return;
     }
 
-    // Fallback: fetch from API (scans market details)
     (async () => {
       try {
         const r = await fetch(`/api/opinion/bonus-markets?limit=1000`, { cache: "no-store" });
@@ -344,27 +448,27 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
         if (alive) setBonusLoading(false);
       }
     })();
+
     return () => {
       alive = false;
     };
   }, [markets, initialBonusIds]);
 
-  // PRE-SCAN: Fetch detail for ALL markets to detect bonus on page load
+  // PRE-SCAN: Fetch detail for ACTIVE markets only (avoid wasting on resolved/expired)
   useEffect(() => {
     if (bonusScanDoneRef.current) return;
-    if (!markets || markets.length === 0) return;
-    
+    if (!activeMarkets || activeMarkets.length === 0) return;
+
     bonusScanDoneRef.current = true;
-    
+
     const scanBonusMarkets = async () => {
       const detectedBonusIds = [];
-      const marketIds = markets.map((m) => m?.marketId).filter(Boolean);
-      
-      // Scan in batches with concurrency
+      const marketIds = activeMarkets.map((m) => m?.marketId).filter(Boolean);
+
       const batchSize = 10;
       for (let i = 0; i < marketIds.length; i += batchSize) {
         const batch = marketIds.slice(i, i + batchSize);
-        
+
         const results = await Promise.allSettled(
           batch.map(async (marketId) => {
             try {
@@ -372,25 +476,19 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
               if (!res.ok) return null;
               const j = await safeReadJson(res);
               const data = j?.result?.data ?? j?.result ?? j?.data ?? j ?? {};
-              
-              // Check if incentiveFactor exists in detail
-              if ("incentiveFactor" in data) {
-                return marketId;
-              }
+
+              if ("incentiveFactor" in data) return marketId;
               return null;
             } catch {
               return null;
             }
           })
         );
-        
+
         for (const r of results) {
-          if (r.status === "fulfilled" && r.value) {
-            detectedBonusIds.push(r.value);
-          }
+          if (r.status === "fulfilled" && r.value) detectedBonusIds.push(r.value);
         }
-        
-        // Update bonusIds progressively
+
         if (detectedBonusIds.length > 0) {
           setBonusIds((prev) => {
             const newIds = detectedBonusIds.filter((id) => !prev.includes(id) && !prev.includes(String(id)));
@@ -398,17 +496,16 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
             return [...prev, ...newIds];
           });
         }
-        
-        // Small delay between batches to not overwhelm
+
         await sleep(50);
       }
-      
+
       setBonusLoading(false);
       console.log(`[Bonus] Pre-scan complete: found ${detectedBonusIds.length} bonus markets`);
     };
-    
+
     scanBonusMarkets();
-  }, [markets]);
+  }, [activeMarkets]);
 
   const handleChanceLoaded = (marketId, chance) => {
     setChanceMap((prev) => (prev[marketId] === chance ? prev : { ...prev, [marketId]: chance }));
@@ -427,7 +524,6 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     });
   };
 
-  // Handle bonus detection from MarketRowV2
   const handleBonusDetected = (marketId) => {
     if (!marketId) return;
     setBonusIds((prev) => {
@@ -437,21 +533,12 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     });
   };
 
-  // Current volume mode for display:
-  // - TRENDING: always 24h
-  // - HOT: always 24h
-  // - ALL: user selectable (24h/all)
-  // - NEW: show 24h (consistent)
-  const displayVolMode =
-    activeTab === "all" ? volMode : "24h";
+  const displayVolMode = activeTab === "all" ? volMode : "24h";
 
-  // ✅ NEW: top 30 newest ACTIVE markets
+  // ✅ NEW: newest ACTIVE markets (from activeMarkets)
   const newestPool = useMemo(() => {
-    const nowMs = Date.now();
-    return [...markets]
-      .filter((m) => isActiveNotExpired(m, nowMs))
-      .sort((a, b) => recencyKey(b) - recencyKey(a));
-  }, [markets]);
+    return [...activeMarkets].sort((a, b) => recencyKey(b) - recencyKey(a));
+  }, [activeMarkets]);
 
   const newMarkets = useMemo(() => {
     return newestPool.slice(0, NEW_LIMIT);
@@ -472,9 +559,9 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     return ranked.slice(0, HOT_LIMIT);
   }, [newestPool, volumeMap]);
 
-  // Trending markets (top 20 by 24h vol)
+  // ✅ TRENDING: top 20 by 24h vol, but ONLY ACTIVE markets
   const trendingMarkets = useMemo(() => {
-    const arr = [...markets];
+    const arr = [...activeMarkets];
     arr.sort((a, b) => {
       const aOv = volumeMap[String(a.marketId)];
       const bOv = volumeMap[String(b.marketId)];
@@ -483,41 +570,45 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
       return bVal - aVal;
     });
     return arr.slice(0, TRENDING_COUNT);
-  }, [markets, volumeMap]);
+  }, [activeMarkets, volumeMap]);
 
-  
+  // ✅ BONUS: only ACTIVE bonus markets
   const bonusMarkets = useMemo(() => {
-    if (!markets || markets.length === 0) return [];
-    // A market is BONUS if its detail JSON contains 'incentiveFactor' (gift icon on Opinion).
-    return markets.filter((m) => bonusSet.has(String(m?.marketId)));
-  }, [markets, bonusSet]);
+    if (!activeMarkets || activeMarkets.length === 0) return [];
+    return activeMarkets.filter((m) => bonusSet.has(String(m?.marketId)));
+  }, [activeMarkets, bonusSet]);
 
-const currentTabMarkets = useMemo(() => {
+  // ✅ ALL: only ACTIVE markets (this is what drops 922 -> smaller)
+  const allMarkets = useMemo(() => {
+    return activeMarkets;
+  }, [activeMarkets]);
+
+  const currentTabMarkets = useMemo(() => {
     if (activeTab === "new") return newMarkets;
     if (activeTab === "hot") return hotMarkets;
     if (activeTab === "trending") return trendingMarkets;
     if (activeTab === "bonus") return bonusMarkets;
-    return markets;
-  }, [activeTab, newMarkets, hotMarkets, trendingMarkets, bonusMarkets, markets]);
+    return allMarkets;
+  }, [activeTab, newMarkets, hotMarkets, trendingMarkets, bonusMarkets, allMarkets]);
 
   const filteredMarkets = useMemo(() => {
-  const s = search.trim().toLowerCase();
-  if (!s) return currentTabMarkets;
-  return currentTabMarkets.filter((m) => {
-    const title = String(m?.title ?? m?.marketTitle ?? "").toLowerCase();
-    const id = String(m?.marketId ?? "");
-    return title.includes(s) || id.includes(s);
-  });
-}, [currentTabMarkets, search]);
+    const s = search.trim().toLowerCase();
+    if (!s) return currentTabMarkets;
+    return currentTabMarkets.filter((m) => {
+      const title = String(m?.title ?? m?.marketTitle ?? "").toLowerCase();
+      const id = String(m?.marketId ?? "");
+      return title.includes(s) || id.includes(s);
+    });
+  }, [currentTabMarkets, search]);
 
-  // Prefetch for trending (top 30 by estimated 24h vol from list)
+  // Prefetch for trending (top 30 by estimated 24h vol from LIST, but only ACTIVE)
   useEffect(() => {
     if (initTrendingDoneRef.current) return;
-    if (!markets || markets.length === 0) return;
+    if (!activeMarkets || activeMarkets.length === 0) return;
 
     initTrendingDoneRef.current = true;
 
-    const sortedByVol = [...markets].sort((a, b) => getVolumeValue(b, "24h") - getVolumeValue(a, "24h"));
+    const sortedByVol = [...activeMarkets].sort((a, b) => getVolumeValue(b, "24h") - getVolumeValue(a, "24h"));
 
     const ids = sortedByVol
       .map((m) => String(m.marketId))
@@ -555,7 +646,7 @@ const currentTabMarkets = useMemo(() => {
 
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [markets]);
+  }, [activeMarkets]);
 
   // ✅ Prefetch volumes for HOT when user opens HOT (for accuracy)
   useEffect(() => {
@@ -573,7 +664,7 @@ const currentTabMarkets = useMemo(() => {
         const ov = volumeMap[id];
         return !ov || (ov.volume24h <= 0 && ov.volume <= 0);
       })
-      .slice(0, 120); // cap
+      .slice(0, 120);
 
     if (idsNeed.length === 0) return;
 
@@ -607,15 +698,15 @@ const currentTabMarkets = useMemo(() => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, newestPool]);
 
-  // Prefetch volumes when ALL tab is activated
+  // Prefetch volumes when ALL tab is activated (only ACTIVE markets)
   useEffect(() => {
     if (activeTab !== "all") return;
     if (allTabLoaded) return;
-    if (!markets || markets.length === 0) return;
+    if (!allMarkets || allMarkets.length === 0) return;
 
     setAllTabLoaded(true);
 
-    const idsNeed = markets
+    const idsNeed = allMarkets
       .map((m) => String(m.marketId))
       .filter(Boolean)
       .filter((id) => {
@@ -654,7 +745,7 @@ const currentTabMarkets = useMemo(() => {
 
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, markets]);
+  }, [activeTab, allMarkets]);
 
   // ===== sort =====
   const sortedMarkets = useMemo(() => {
@@ -737,7 +828,6 @@ const currentTabMarkets = useMemo(() => {
     setActiveTab(tab);
     setCurrentPage(1);
     setSearch("");
-    // keep existing sort; user can click to change
   };
 
   return (
@@ -798,8 +888,7 @@ const currentTabMarkets = useMemo(() => {
               padding: "10px 18px",
               borderRadius: 8,
               border: "1px solid",
-              borderColor:
-                activeTab === "trending" ? "rgba(0, 255, 136, 0.5)" : "rgba(255,255,255,0.12)",
+              borderColor: activeTab === "trending" ? "rgba(0, 255, 136, 0.5)" : "rgba(255,255,255,0.12)",
               background: activeTab === "trending" ? "rgba(0, 255, 136, 0.15)" : "transparent",
               color: activeTab === "trending" ? "#00ff88" : "#fff",
               cursor: "pointer",
@@ -811,6 +900,7 @@ const currentTabMarkets = useMemo(() => {
           >
             TRENDING
           </button>
+
           <button
             onClick={() => handleTabChange("bonus")}
             style={{
@@ -829,7 +919,6 @@ const currentTabMarkets = useMemo(() => {
           >
             BONUS
           </button>
-
 
           <button
             onClick={() => handleTabChange("all")}
@@ -947,7 +1036,16 @@ const currentTabMarkets = useMemo(() => {
 
           <div
             className="muted"
-            onClick={() => handleSort("chance")}
+            onClick={() => {
+              setSortConfig((prev) => {
+                if (prev.key === "chance") {
+                  if (prev.direction === "desc") return { key: "chance", direction: "asc" };
+                  if (prev.direction === "asc") return { key: null, direction: null };
+                }
+                return { key: "chance", direction: "desc" };
+              });
+              setCurrentPage(1);
+            }}
             style={{
               cursor: "pointer",
               userSelect: "none",
@@ -964,7 +1062,16 @@ const currentTabMarkets = useMemo(() => {
 
           <div
             className="muted"
-            onClick={() => handleSort("volume")}
+            onClick={() => {
+              setSortConfig((prev) => {
+                if (prev.key === "volume") {
+                  if (prev.direction === "desc") return { key: "volume", direction: "asc" };
+                  if (prev.direction === "asc") return { key: null, direction: null };
+                }
+                return { key: "volume", direction: "desc" };
+              });
+              setCurrentPage(1);
+            }}
             style={{
               cursor: "pointer",
               userSelect: "none",
@@ -981,7 +1088,16 @@ const currentTabMarkets = useMemo(() => {
 
           <div
             className="muted"
-            onClick={() => handleSort("expires")}
+            onClick={() => {
+              setSortConfig((prev) => {
+                if (prev.key === "expires") {
+                  if (prev.direction === "desc") return { key: "expires", direction: "asc" };
+                  if (prev.direction === "asc") return { key: null, direction: null };
+                }
+                return { key: "expires", direction: "desc" };
+              });
+              setCurrentPage(1);
+            }}
             style={{
               cursor: "pointer",
               userSelect: "none",
@@ -1007,7 +1123,7 @@ const currentTabMarkets = useMemo(() => {
               : search
               ? "No markets found"
               : activeTab === "bonus"
-              ? "No bonus markets available"
+              ? "Loading..."
               : "Loading..."}
           </div>
         ) : (
@@ -1015,7 +1131,7 @@ const currentTabMarkets = useMemo(() => {
             <MarketRowV2
               key={m.marketId}
               market={m}
-              volMode={"24h"}
+              volMode={displayVolMode}
               volumeOverride={volumeMap[String(m.marketId)]}
               priority={idx < 6}
               onChanceLoaded={handleChanceLoaded}
@@ -1064,7 +1180,7 @@ const currentTabMarkets = useMemo(() => {
           : activeTab === "trending"
           ? `Top ${Math.min(TRENDING_COUNT, sortedMarkets.length)} markets by 24h volume`
           : activeTab === "bonus"
-          ? bonusLoading 
+          ? bonusLoading
             ? `Scanning... Found ${sortedMarkets.length} bonus markets so far`
             : `${sortedMarkets.length} bonus markets`
           : `${sortedMarkets.length} markets total`}
