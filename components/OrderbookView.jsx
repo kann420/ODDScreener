@@ -2,7 +2,7 @@
 
 import ChartViewV2 from "./ChartViewV2";
 import { useEffect, useMemo, useRef, useState } from "react";
-import useMarketTrades from "./hooks/useMarketTrades";
+import { useMarketTrades } from "@/components/hooks/useMarketTrades";
 
 /* =========================
    NEW: Thumbnail (Detail)
