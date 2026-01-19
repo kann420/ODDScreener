@@ -13,7 +13,7 @@ export async function GET(req) {
   const warm = searchParams.get("warm");
   if (warm === "1" || warm === "true") {
     return new Response("ok", {
-      status: 204,
+      status: 200,
       headers: { "Cache-Control": "no-store" },
     });
   }
