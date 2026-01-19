@@ -6,7 +6,7 @@ export async function GET() {
   // Start WS hub as early as possible (triggered by a tiny hidden image request)
   startSmartMoneyHub();
   return new Response(null, {
-    status: 204,
+    status: 200,
     headers: { "Cache-Control": "no-store" },
   });
 }
