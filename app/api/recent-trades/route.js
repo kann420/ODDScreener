@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getRecentTradesForMarket } from "@/lib/recentTradesDb";
+import { queryRecentTradesForMarket } from "@/lib/recentTradesDb";
 
 export async function GET(req) {
   try {
@@ -13,7 +13,7 @@ export async function GET(req) {
       );
     }
 
-    const trades = await getRecentTradesForMarket(Number(marketId));
+    const trades = queryRecentTradesForMarket({ marketId: Number(marketId) });
 
     return NextResponse.json({
       ok: true,
