@@ -7,8 +7,12 @@ import FooterBar from "../components/FooterBar";
 const GA_MEASUREMENT_ID = "G-P1NXMB82YZ";
 
 export const metadata = {
-  title: "ODDScreeners - Opinion Markets Explorer",
-  description: "Demo UI for Opinion explorer + embedded chart service",
+  title: "ODDScreeners - Prediction Markets Explorer",
+  description: "Realtime price charts and trading history on Opinion, Polymarket, Kalshi, and more.",
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({ children }) {
@@ -37,6 +41,9 @@ export default function RootLayout({ children }) {
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
           rel="stylesheet"
         />
+
+        {/* Favicon */}
+        <link rel="icon" href="/favicon.ico" sizes="any" />
       </head>
 
       <body>
