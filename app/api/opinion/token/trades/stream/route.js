@@ -30,39 +30,53 @@ export async function GET(req) {
 
   const stream = new ReadableStream({
     start(controller) {
-      // Initial snapshot
-      const snapshot = getMarketTrades(sub).slice(0, 100);
-      controller.enqueue(
-        encoder.encode(`event: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`)
-      );
+      let remove = () => {};
+      let pingTimer = null;
 
-      const client = {
-        push: (trade) => {
-          try {
-            controller.enqueue(
-              encoder.encode(`event: trade\ndata: ${JSON.stringify(trade)}\n\n`)
-            );
-          } catch {
-            // client disconnected
-          }
-        },
+      const send = (str) => {
+        controller.enqueue(encoder.encode(str));
       };
 
-      let remove = () => {};
       try {
+        // Initial snapshot
+        const snapshot = getMarketTrades(sub).slice(0, 100);
+        send(`event: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`);
+
+        const client = {
+          push: (trade) => {
+            try {
+              send(`event: trade\ndata: ${JSON.stringify(trade)}\n\n`);
+            } catch {
+              // ignore
+            }
+          },
+        };
+
         remove = addMarketClient(sub, client);
+
+        // ✅ Keep-alive ping (prevents some proxies from closing idle SSE)
+        pingTimer = setInterval(() => {
+          try {
+            send(`event: ping\ndata: ${Date.now()}\n\n`);
+          } catch {
+            // ignore
+          }
+        }, 15000);
       } catch (e) {
-        controller.enqueue(
-          encoder.encode(
-            `event: error\ndata: ${JSON.stringify({ error: String(e?.message || e) })}\n\n`
-          )
-        );
+        try {
+          send(`event: error\ndata: ${JSON.stringify({ error: String(e?.message || e) })}\n\n`);
+        } catch {}
+        try { controller.close(); } catch {}
+        return;
       }
 
-      req.signal.addEventListener("abort", () => {
+      const cleanup = () => {
+        try { if (pingTimer) clearInterval(pingTimer); } catch {}
         try { remove(); } catch {}
         try { controller.close(); } catch {}
-      });
+      };
+
+      req.signal.addEventListener("abort", cleanup);
     },
   });
 
@@ -71,7 +85,6 @@ export async function GET(req) {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
-      // Helps avoid buffering on some proxies
       "X-Accel-Buffering": "no",
     },
   });
