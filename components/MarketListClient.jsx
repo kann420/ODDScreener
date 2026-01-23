@@ -384,6 +384,57 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
   const [allTabLoaded, setAllTabLoaded] = useState(false);
   const initTrendingDoneRef = useRef(false);
   const hotPrefetchDoneRef = useRef(false);
+
+  // ✅ NEW: State to hold freshly fetched new markets (merged with initial)
+  const [freshNewMarkets, setFreshNewMarkets] = useState([]);
+  const newMarketsPollRef = useRef(false);
+
+  // ✅ Poll NEW markets every 2 minutes when on "new" tab (to catch recently created markets quickly)
+  useEffect(() => {
+    if (activeTab !== "new") return;
+    if (newMarketsPollRef.current) return; // Already started polling
+
+    newMarketsPollRef.current = true;
+
+    const pollNewMarkets = async () => {
+      try {
+        const res = await fetch(`/api/opinion/new-markets?limit=50`, { cache: "no-store" });
+        if (!res.ok) return;
+        const json = await res.json();
+        const list = json?.result?.list ?? [];
+        if (Array.isArray(list) && list.length > 0) {
+          setFreshNewMarkets((prev) => {
+            // Merge new markets, dedup by marketId
+            const byId = new Map();
+            for (const m of [...prev, ...list]) {
+              const id = String(m?.marketId);
+              if (id && !byId.has(id)) byId.set(id, m);
+            }
+            return Array.from(byId.values());
+          });
+          console.log(`[NewTab] Polled ${list.length} newest markets`);
+        }
+      } catch (e) {
+        console.error("[NewTab] Poll failed:", e);
+      }
+    };
+
+    // Initial poll
+    pollNewMarkets();
+
+    // Poll every 2 minutes
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        pollNewMarkets();
+      }
+    }, 2 * 60 * 1000);
+
+    return () => {
+      clearInterval(timer);
+      newMarketsPollRef.current = false;
+    };
+  }, [activeTab]);
+
     // ✅ Auto refresh by tab (NO refetch). Visibility-guarded to save TPS/CPU.
   // NEW: 6h/lần | HOT/TRENDING: 1h/lần
   useEffect(() => {
@@ -409,10 +460,21 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
   const bonusScanDoneRef = useRef(false);
 
   // ✅ Central active list to avoid showing/processing expired/resolved markets in Discover
+  // Also merge freshNewMarkets for "new" tab
   const activeMarkets = useMemo(() => {
     const nowMs = Date.now();
-    return (markets || []).filter((m) => isActiveNotExpired(m, nowMs));
-  }, [markets, refreshTick]);
+    // Merge initial markets with freshly polled new markets
+    const combined = [...markets];
+    if (freshNewMarkets.length > 0) {
+      const existingIds = new Set(markets.map((m) => String(m?.marketId)));
+      for (const m of freshNewMarkets) {
+        if (!existingIds.has(String(m?.marketId))) {
+          combined.push(m);
+        }
+      }
+    }
+    return combined.filter((m) => isActiveNotExpired(m, nowMs));
+  }, [markets, freshNewMarkets, refreshTick]);
 
   // Detect bonus markets from list data first (if incentiveFactor exists in list)
   // Fallback to API if list doesn't have incentiveFactor info

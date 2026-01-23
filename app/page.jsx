@@ -236,19 +236,31 @@ function isExpiredFast(market) {
 export default async function Home() {
   const startTime = Date.now();
 
-  // Fetch both APIs in parallel - NO detail fetches
-  const [opinionResult, analyticsResult] = await Promise.all([
+  // Fetch multiple APIs in parallel:
+  // 1) sortBy=5 (volume) - for trending/hot markets with high volume
+  // 2) sortBy=1 (new) - for newest markets (mới tạo) to fix delay issue
+  // 3) multi-outcome markets
+  const [opinionByVolume, opinionByNew, analyticsResult] = await Promise.all([
     opinionFetch("/market", {
       // Higher limit so BONUS markets are reliably included.
       // (Bonus markets are sparse and can be missed in a small top-N fetch.)
-      params: { status: "activated", sortBy: 5, limit: 500 },
+      params: { status: "activated", sortBy: 5, limit: 500, marketType: 2 },
+    }),
+    opinionFetch("/market", {
+      // ✅ NEW: Fetch newest markets (sortBy=1) to ensure recently created markets appear quickly
+      // Without this, new markets with low volume would be missed in sortBy=5 results
+      params: { status: "activated", sortBy: 1, limit: 100, marketType: 2 },
     }),
     getMultiOutcomeMarkets(),
   ]);
 
   console.log(`[Discover] API fetch took ${Date.now() - startTime}ms`);
 
-  if (opinionResult?.errno !== 0) {
+  // Check if at least one Opinion API call succeeded
+  const volumeOk = opinionByVolume?.errno === 0;
+  const newOk = opinionByNew?.errno === 0;
+  
+  if (!volumeOk && !newOk) {
     return (
       <div className="panel" style={{ padding: 14 }}>
         <p className="muted" style={{ marginTop: 8 }}>
@@ -258,14 +270,21 @@ export default async function Home() {
     );
   }
 
-  const { total, list: opinionList } = normalizeMarketList(opinionResult);
+  // Normalize both market lists
+  const { list: volumeList } = volumeOk ? normalizeMarketList(opinionByVolume) : { list: [] };
+  const { list: newList } = newOk ? normalizeMarketList(opinionByNew) : { list: [] };
   const multiOutcomeList = analyticsResult.success ? analyticsResult.data : [];
+
+  // ✅ Merge: volumeList + newList + multiOutcome, dedup by marketId
+  // newList is added AFTER volumeList so newer markets that might have low volume are included
+  const opinionList = [...volumeList, ...newList];
 
   // Detect bonus markets from list data (check hasBonus flag)
   const bonusIdsFromList = opinionList
     .filter((m) => m.hasBonus === true)
     .map((m) => m.marketId);
   
+  console.log(`[Discover] Fetched: ${volumeList.length} by volume, ${newList.length} by new`);
   console.log(`[Discover] Found ${bonusIdsFromList.length} bonus markets in list data`);
 
   // Merge list + multi-outcome, dedup by marketId
