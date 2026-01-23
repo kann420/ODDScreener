@@ -300,8 +300,23 @@ export default async function Home() {
 
   const merged = Array.from(byId.values());
 
+  // ✅ Filter out ROOT/PARENT markets (marketType=1)
+  // These are categorical parent markets that don't have trading functionality
+  // Only child markets (binary or categorical children) should be shown
+  const withoutRootMarkets = merged.filter((m) => {
+    const mType = m?.marketType ?? m?.market_type;
+    // marketType=1 means categorical PARENT (root market) - filter these out
+    if (mType === 1 || mType === "1") return false;
+    return true;
+  });
+
+  const rootMarketsFiltered = merged.length - withoutRootMarkets.length;
+  if (rootMarketsFiltered > 0) {
+    console.log(`[Discover] Filtered OUT ${rootMarketsFiltered} root/parent markets (marketType=1)`);
+  }
+
   // FAST filter - no API calls, just use existing data + title extraction
-  const filtered = merged.filter((m) => !isExpiredFast(m));
+  const filtered = withoutRootMarkets.filter((m) => !isExpiredFast(m));
 
   // Debug: Log some filtered out markets to understand why they were kept or removed
   const filteredOut = merged.filter((m) => isExpiredFast(m));

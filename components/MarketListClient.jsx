@@ -403,16 +403,22 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
         const json = await res.json();
         const list = json?.result?.list ?? [];
         if (Array.isArray(list) && list.length > 0) {
+          // ✅ Filter out root/parent markets (marketType=1)
+          const filteredList = list.filter((m) => {
+            const mType = m?.marketType ?? m?.market_type;
+            return mType !== 1 && mType !== "1";
+          });
+          
           setFreshNewMarkets((prev) => {
             // Merge new markets, dedup by marketId
             const byId = new Map();
-            for (const m of [...prev, ...list]) {
+            for (const m of [...prev, ...filteredList]) {
               const id = String(m?.marketId);
               if (id && !byId.has(id)) byId.set(id, m);
             }
             return Array.from(byId.values());
           });
-          console.log(`[NewTab] Polled ${list.length} newest markets`);
+          console.log(`[NewTab] Polled ${filteredList.length} newest markets (filtered from ${list.length})`);
         }
       } catch (e) {
         console.error("[NewTab] Poll failed:", e);
@@ -461,6 +467,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
 
   // ✅ Central active list to avoid showing/processing expired/resolved markets in Discover
   // Also merge freshNewMarkets for "new" tab
+  // Filter out root/parent markets (marketType=1)
   const activeMarkets = useMemo(() => {
     const nowMs = Date.now();
     // Merge initial markets with freshly polled new markets
@@ -473,7 +480,13 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
         }
       }
     }
-    return combined.filter((m) => isActiveNotExpired(m, nowMs));
+    return combined.filter((m) => {
+      // ✅ Filter out root/parent markets (marketType=1)
+      const mType = m?.marketType ?? m?.market_type;
+      if (mType === 1 || mType === "1") return false;
+      
+      return isActiveNotExpired(m, nowMs);
+    });
   }, [markets, freshNewMarkets, refreshTick]);
 
   // Detect bonus markets from list data first (if incentiveFactor exists in list)
