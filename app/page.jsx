@@ -350,9 +350,9 @@ export default async function Home() {
   console.log(`[Discover] Found ${bonusIdsFromList.length} bonus markets in list data`);
 
   // Merge all sources, dedup by marketId
-  // Order: multiOutcome (Analytics) -> categoricalChildren (Opinion) -> opinionList (binary)
-  // This prioritizes multi-outcome data from Analytics if available
-  const baseList = [...(multiOutcomeList || []), ...(categoricalChildren || []), ...(opinionList || [])];
+  // Order: categoricalChildren (with volume) -> opinionList (binary) -> multiOutcome (Analytics fallback)
+  // Categorical children have the highest volumes, so they should be prioritized
+  const baseList = [...(categoricalChildren || []), ...(opinionList || []), ...(multiOutcomeList || [])];
 
   const byId = new Map();
   for (const m of baseList) {

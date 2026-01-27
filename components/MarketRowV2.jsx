@@ -488,10 +488,10 @@ export default function MarketRowV2({
 
         if (detailThumb) setThumbUrl(detailThumb);
 
-        // Load volume if not already available
+        // Load volume if volume24h not already available
+        // NOTE: Categorical children only have total volume from list API, need to fetch volume24h
         const current24h = Number(volumeOverride?.volume24h ?? market?.volume24h ?? 0);
-        const currentAll = Number(volumeOverride?.volume ?? market?.volume ?? 0);
-        if (current24h <= 0 && currentAll <= 0) {
+        if (current24h <= 0) {
           const vAll = Number(data?.volume ?? 0) || 0;
           const v24h = Number(data?.volume24h ?? 0) || 0;
           if ((vAll > 0 || v24h > 0) && onVolumeLoaded) onVolumeLoaded(marketId, { volume: vAll, volume24h: v24h });

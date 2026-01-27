@@ -365,13 +365,13 @@ async function runWithConcurrency(items, worker, concurrency = 2) {
 export default function MarketListClient({ initialMarkets, markets: marketsProp, initialBonusIds }) {
   const markets = (initialMarkets && Array.isArray(initialMarkets) ? initialMarkets : marketsProp) || [];
 
-  const [activeTab, setActiveTab] = useState("trending"); // "new" | "hot" | "trending" | "bonus" | "all"
+  const [activeTab, setActiveTab] = useState("all"); // "new" | "hot" | "trending" | "bonus" | "all"
   const [volMode, setVolMode] = useState("24h"); // "24h" | "all"
   const [currentPage, setCurrentPage] = useState(1);
   const [visible, setVisible] = useState(6);
   const [refreshTick, setRefreshTick] = useState(0); // auto refresh trigger (no refetch)
   
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
+  const [sortConfig, setSortConfig] = useState({ key: "volume", direction: "desc" });
 
   const [chanceMap, setChanceMap] = useState({});
   const [volumeMap, setVolumeMap] = useState({});
@@ -384,6 +384,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
   const [allTabLoaded, setAllTabLoaded] = useState(false);
   const initTrendingDoneRef = useRef(false);
   const hotPrefetchDoneRef = useRef(false);
+  const trendingPrefetchDoneRef = useRef(false);
 
   // ✅ NEW: State to hold freshly fetched new markets (merged with initial)
   const [freshNewMarkets, setFreshNewMarkets] = useState([]);
@@ -620,28 +621,31 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
   }, [newestPool]);
 
   // ✅ HOT: from newestPool (top 150 newest active), rank by 24h vol, take top 20
+  // Fallback to total volume for categorical children that don't have volume24h
   const hotMarkets = useMemo(() => {
     const pool = newestPool.slice(0, HOT_POOL);
 
     const ranked = [...pool].sort((a, b) => {
       const aOv = volumeMap[String(a.marketId)];
       const bOv = volumeMap[String(b.marketId)];
-      const aVal = (aOv?.volume24h ?? 0) || getVolumeValue(a, "24h");
-      const bVal = (bOv?.volume24h ?? 0) || getVolumeValue(b, "24h");
+      const aVal = (aOv?.volume24h ?? 0) || getVolumeValue(a, "24h") || getVolumeValue(a, "total");
+      const bVal = (bOv?.volume24h ?? 0) || getVolumeValue(b, "24h") || getVolumeValue(b, "total");
       return bVal - aVal;
     });
 
     return ranked.slice(0, HOT_LIMIT);
   }, [newestPool, volumeMap]);
 
-  // ✅ TRENDING: top 20 by 24h vol, but ONLY ACTIVE markets
+  // ✅ TRENDING: top 20 by volume (24h), use same logic as ALL tab sort
+  // Uses volumeMap (from API fetch) for accurate volume24h data
   const trendingMarkets = useMemo(() => {
     const arr = [...activeMarkets];
     arr.sort((a, b) => {
+      // Same logic as ALL tab sort - use volumeMap first for accurate volume24h
       const aOv = volumeMap[String(a.marketId)];
       const bOv = volumeMap[String(b.marketId)];
-      const aVal = (aOv?.volume24h ?? 0) || getVolumeValue(a, "24h");
-      const bVal = (bOv?.volume24h ?? 0) || getVolumeValue(b, "24h");
+      const aVal = (aOv?.volume24h ?? 0) || getVolumeValue(a, "24h") || getVolumeValue(a, "total");
+      const bVal = (bOv?.volume24h ?? 0) || getVolumeValue(b, "24h") || getVolumeValue(b, "total");
       return bVal - aVal;
     });
     return arr.slice(0, TRENDING_COUNT);
@@ -676,52 +680,54 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     });
   }, [currentTabMarkets, search]);
 
-  // Prefetch for trending (top 30 by estimated 24h vol from LIST, but only ACTIVE)
+  // ✅ Prefetch volumes for TRENDING when user opens it (fast - only top 50, high concurrency)
   useEffect(() => {
-    if (initTrendingDoneRef.current) return;
+    if (activeTab !== "trending") return;
+    if (trendingPrefetchDoneRef.current) return;
     if (!activeMarkets || activeMarkets.length === 0) return;
 
-    initTrendingDoneRef.current = true;
+    trendingPrefetchDoneRef.current = true;
 
-    const sortedByVol = [...activeMarkets].sort((a, b) => getVolumeValue(b, "24h") - getVolumeValue(a, "24h"));
+    // Sort by what we know to get likely top volume markets first
+    const sorted = [...activeMarkets].sort((a, b) => {
+      const aVal = getVolumeValue(a, "24h") || getVolumeValue(a, "total");
+      const bVal = getVolumeValue(b, "24h") || getVolumeValue(b, "total");
+      return bVal - aVal;
+    });
 
-    const ids = sortedByVol
+    const idsNeed = sorted
+      .slice(0, 50) // Only top 50, not 200
       .map((m) => String(m.marketId))
       .filter(Boolean)
-      .slice(0, 30);
+      .filter((id) => {
+        const ov = volumeMap[id];
+        return !ov || (ov.volume24h <= 0 && ov.volume <= 0);
+      });
+
+    if (idsNeed.length === 0) return;
 
     const run = async () => {
       await runWithConcurrency(
-        ids,
+        idsNeed,
         async (id) => {
           try {
-            const ov = volumeMap[id];
-            if (ov && ov.volume24h > 0) return;
-
             const res = await fetch(`/api/opinion/market/${encodeURIComponent(id)}`, { cache: "no-store" });
             if (!res.ok) return;
-
             const j = await safeReadJson(res);
             if (!j) return;
-
             const data = j?.result?.data ?? j?.result ?? j?.data ?? j ?? {};
             const vAll = Number(data?.volume ?? 0) || 0;
             const v24h = Number(data?.volume24h ?? 0) || 0;
-
             if (vAll > 0 || v24h > 0) handleVolumeLoaded(id, { volume: vAll, volume24h: v24h });
-          } catch {
-            // ignore
-          } finally {
-            await sleep(25);
-          }
+          } catch { /* ignore */ }
         },
-        3
+        8 // Higher concurrency for faster load
       );
     };
 
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeMarkets]);
+  }, [activeTab, activeMarkets]);
 
   // ✅ Prefetch volumes for HOT when user opens HOT (for accuracy)
   useEffect(() => {
@@ -835,6 +841,12 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
       effectiveSortDir = "desc";
     }
 
+    // NEW tab: always show newest first, ignore volume sort
+    // Only allow chance/expires sort, not volume
+    if (activeTab === "new" && effectiveSortKey === "volume") {
+      return arr; // Keep original order (newest first from newMarkets)
+    }
+
     if (!effectiveSortKey) return arr;
 
     arr.sort((a, b) => {
@@ -903,6 +915,8 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     setActiveTab(tab);
     setCurrentPage(1);
     setSearch("");
+    // Reset sort when changing tabs (each tab has its own default order)
+    setSortConfig({ key: null, direction: null });
   };
 
   return (
@@ -1194,7 +1208,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
         {pageList.length === 0 ? (
           <div className="muted" style={{ textAlign: "center", padding: 20 }}>
             {activeTab === "bonus" && bonusLoading
-              ? "Scanning for bonus markets... Please wait."
+              ? "Scanning for bonus markets... Up to ~30s to fully load."
               : search
               ? "No markets found"
               : activeTab === "bonus"

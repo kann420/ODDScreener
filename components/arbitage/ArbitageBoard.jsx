@@ -57,7 +57,10 @@ export default function ArbitageBoard() {
   // Filter settings
   const [minArbPct, setMinArbPct] = useState(0.1); // Min arb percentage
   const [minShares, setMinShares] = useState(0); // Min shares on orderbook
-  const [showFilters, setShowFilters] = useState(false); // Toggle filter panel
+  const [showFilters, setShowFilters] = useState(true); // Toggle filter panel - default open
+  
+  // Track if user has ever scanned
+  const [hasScanned, setHasScanned] = useState(false);
   
   // Calculator modal
   const [calculatorRow, setCalculatorRow] = useState(null); // Row to show in calculator
@@ -82,11 +85,13 @@ export default function ArbitageBoard() {
       setLastScanTime(cached.timestamp);
       setLoading(false);
       setInitialized(true);
+      setHasScanned(true); // Cache exists = user has scanned before
     } else {
-      // No cache, need to scan
+      // No cache, wait for user to scan
       setRows([]);
       setLastScanTime(null);
       setInitialized(true);
+      setHasScanned(false); // Reset hasScanned when switching to mode without cache
     }
   }, [priceMode]);
 
@@ -233,18 +238,9 @@ export default function ArbitageBoard() {
 
   function handleRefresh() {
     // Use streaming by default
+    setHasScanned(true);
     loadDataStreaming();
   }
-
-  // Auto-scan on first load if no cache
-  useEffect(() => {
-    if (!initialized) return;
-    const cache = getCache();
-    const cached = cache[priceMode];
-    if (!cached?.rows || cached.rows.length === 0) {
-      loadDataStreaming();
-    }
-  }, [priceMode, loadDataStreaming, initialized]);
 
   // Display rows: show streaming rows while loading, otherwise show cached rows
   const displayRows = loading && streamingRows.length > 0 ? streamingRows : rows;
@@ -319,23 +315,21 @@ export default function ArbitageBoard() {
           </div>
 
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            {/* Filter toggle - only show in Asks mode (market buy needs liquidity check) */}
-            {priceMode === "asks" && (
-              <button
-                type="button"
-                onClick={() => setShowFilters((v) => !v)}
-                className="btn ghost"
-                style={{
-                  padding: "6px 12px",
-                  fontSize: 12,
-                  fontWeight: 800,
-                  background: showFilters ? "rgba(255,180,50,0.15)" : "transparent",
-                  border: showFilters ? "1px solid rgba(255,180,50,0.4)" : "1px solid rgba(255,255,255,0.1)",
-                }}
-              >
-                ⚙️ Filters
-              </button>
-            )}
+            {/* Filter toggle */}
+            <button
+              type="button"
+              onClick={() => setShowFilters((v) => !v)}
+              className="btn ghost"
+              style={{
+                padding: "6px 12px",
+                fontSize: 12,
+                fontWeight: 800,
+                background: showFilters ? "rgba(255,180,50,0.15)" : "transparent",
+                border: showFilters ? "1px solid rgba(255,180,50,0.4)" : "1px solid rgba(255,255,255,0.1)",
+              }}
+            >
+              ⚙️ Filters
+            </button>
             {/* Price Mode Toggle */}
             <div style={{ display: "flex", gap: 4, background: "rgba(255,255,255,0.05)", borderRadius: 8, padding: 3 }}>
               <button
@@ -375,7 +369,7 @@ export default function ArbitageBoard() {
               Min Arb: <b>{minArbPct.toFixed(2)}%</b>
               {minShares > 0 && <> • Min: <b>{minShares}</b> shares</>}
             </div>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
               <button 
                 className="btn ghost" 
                 type="button" 
@@ -394,8 +388,8 @@ export default function ArbitageBoard() {
           </div>
         </div>
 
-        {/* Filter Panel (Collapsible) - only in Asks mode */}
-        {showFilters && priceMode === "asks" && (
+        {/* Filter Panel (Collapsible) */}
+        {showFilters && (
           <div style={{ 
             marginTop: 14, 
             padding: 14, 
@@ -455,35 +449,6 @@ export default function ArbitageBoard() {
                     outline: "none",
                   }}
                 />
-              </div>
-
-              {/* Quick presets for Min Arb % */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <label style={{ fontSize: 11, fontWeight: 800, color: "rgba(233,238,245,0.6)" }}>
-                  QUICK SET
-                </label>
-                <div style={{ display: "flex", gap: 6, height: 36, alignItems: "center" }}>
-                  {[0.5, 1, 2, 5].map((pct) => (
-                    <button
-                      key={pct}
-                      type="button"
-                      onClick={() => setMinArbPct(pct)}
-                      style={{
-                        padding: "0 12px",
-                        height: 36,
-                        fontSize: 12,
-                        fontWeight: 700,
-                        borderRadius: 6,
-                        border: minArbPct === pct ? "1px solid rgba(255,180,50,0.6)" : "1px solid rgba(255,255,255,0.1)",
-                        background: minArbPct === pct ? "rgba(255,180,50,0.15)" : "rgba(255,255,255,0.05)",
-                        color: minArbPct === pct ? "rgba(255,180,50,1)" : "rgba(233,238,245,0.7)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      {pct}%
-                    </button>
-                  ))}
-                </div>
               </div>
             </div>
           </div>
@@ -583,6 +548,17 @@ export default function ArbitageBoard() {
 
       {loading && sorted.length === 0 ? (
         <SkeletonRows />
+      ) : !hasScanned && sorted.length === 0 ? (
+        /* User hasn't scanned yet - show prompt */
+        <div className="panel" style={{ padding: "60px 20px", textAlign: "center" }}>
+          <div style={{ fontSize: 42, marginBottom: 16, opacity: 0.4 }}>🔍</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "rgba(233,238,245,0.85)", marginBottom: 8 }}>
+            Press "<span style={{ color: "rgba(255,180,50,1)" }}>Scan Now</span>" to find Arbitrage Opportunities
+          </div>
+          <div className="muted" style={{ fontSize: 12, maxWidth: 400, margin: "0 auto" }}>
+            It may take up to 30 seconds to fully load.
+          </div>
+        </div>
       ) : sorted.length === 0 && !loading ? (
         <div className="panel" style={{ padding: 14 }}>
           <div className="muted" style={{ fontSize: 13, fontWeight: 800 }}>
