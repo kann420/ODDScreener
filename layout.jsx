@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Opinion GMGN Clone (Demo)",
-  description: "Demo UI for Opinion explorer + embedded chart service"
+  title: "ODDScreeners - Prediction Markets Explorer",
+  description: "Realtime price charts and trading history on Opinion, Polymarket, Kalshi, and more."
 };
 
 export default function RootLayout({ children }) {

@@ -1,4 +1,4 @@
-import { opinionFetch, normalizeMarketList } from "@/lib/opinion";
+import { opinionFetch, opinionFetchAllMarkets, opinionFetchCategoricalChildren, normalizeMarketList } from "@/lib/opinion";
 import { getMultiOutcomeMarkets } from "@/lib/opinionAnalytics";
 import MarketListClient from "@/components/MarketListClient";
 import DiscoverNewsBar from "@/components/DiscoverNewsBar";
@@ -237,20 +237,33 @@ export default async function Home() {
   const startTime = Date.now();
 
   // Fetch multiple APIs in parallel:
-  // 1) sortBy=5 (volume) - for trending/hot markets with high volume
-  // 2) sortBy=1 (new) - for newest markets (mới tạo) to fix delay issue
-  // 3) multi-outcome markets
-  const [opinionByVolume, opinionByNew, analyticsResult] = await Promise.all([
-    opinionFetch("/market", {
-      // Higher limit so BONUS markets are reliably included.
-      // (Bonus markets are sparse and can be missed in a small top-N fetch.)
-      params: { status: "activated", sortBy: 5, limit: 500, marketType: 2 },
+  // 1) Binary markets by volume (sortBy=5)
+  // 2) Binary markets by newest (sortBy=1)
+  // 3) Categorical children markets (via Opinion API /market/categorical/{id})
+  // 4) Multi-outcome markets from Analytics API (fallback, may be unavailable)
+  //
+  // NOTE: marketType=0 for binary markets, marketType=1 for categorical parents
+  // Categorical children are fetched by getting parents first, then their children
+  const [opinionByVolume, opinionByNew, categoricalResult, analyticsResult] = await Promise.all([
+    opinionFetchAllMarkets({
+      status: "activated",
+      sortBy: 5,
+      marketType: 0,
+      maxPages: 10, // Up to 200 binary markets by volume
     }),
-    opinionFetch("/market", {
-      // ✅ NEW: Fetch newest markets (sortBy=1) to ensure recently created markets appear quickly
-      // Without this, new markets with low volume would be missed in sortBy=5 results
-      params: { status: "activated", sortBy: 1, limit: 100, marketType: 2 },
+    opinionFetchAllMarkets({
+      status: "activated",
+      sortBy: 1,
+      marketType: 0,
+      maxPages: 5, // Up to 100 newest binary markets
     }),
+    // Fetch ALL categorical children from Opinion API directly
+    // Using high maxParents to get all ~140 parents and their ~600+ children
+    opinionFetchCategoricalChildren({
+      maxParents: 200,        // Fetch all available parents (currently ~140)
+      maxChildrenPerParent: 50, // Up to 50 children each (most have ~5-10)
+    }),
+    // Also try Analytics API as fallback (may be unavailable)
     getMultiOutcomeMarkets(),
   ]);
 
@@ -259,6 +272,15 @@ export default async function Home() {
   // Check if at least one Opinion API call succeeded
   const volumeOk = opinionByVolume?.errno === 0;
   const newOk = opinionByNew?.errno === 0;
+  const categoricalOk = categoricalResult?.errno === 0;
+  
+  // Log API status
+  if (!analyticsResult.success) {
+    console.warn(`[Discover] Analytics API unavailable - using Opinion API for categorical markets`);
+  }
+  if (categoricalOk) {
+    console.log(`[Discover] Fetched ${categoricalResult.result?.list?.length || 0} categorical children from ${categoricalResult.result?.parentCount || 0} parents`);
+  }
   
   if (!volumeOk && !newOk) {
     return (
@@ -273,9 +295,49 @@ export default async function Home() {
   // Normalize both market lists
   const { list: volumeList } = volumeOk ? normalizeMarketList(opinionByVolume) : { list: [] };
   const { list: newList } = newOk ? normalizeMarketList(opinionByNew) : { list: [] };
+  
+  // Categorical children from Opinion API (primary source)
+  const categoricalChildrenRaw = categoricalOk ? (categoricalResult.result?.list || []) : [];
+  
+  // Normalize categorical children to match our format
+  const categoricalChildren = categoricalChildrenRaw.map(child => {
+    // Build title: parent title + child outcome
+    const parentTitle = child.parentEventTitle || "";
+    const outcomeName = child.marketTitle || child.tittle || child.title || child.outcome || "";
+    let title = outcomeName;
+    if (parentTitle && outcomeName) {
+      // Format: "Parent Title - Outcome"
+      title = `${parentTitle} - ${outcomeName}`;
+    } else if (parentTitle) {
+      title = parentTitle;
+    }
+    
+    return {
+      marketId: child.marketId,
+      title: title,
+      status: child.status,
+      statusEnum: child.statusEnum || "",
+      marketType: child.marketType,
+      volume24h: Number(child.volume24h || child.vol24h || 0),
+      volume: Number(child.volume || child.volTotal || 0),
+      createdAt: child.createdAt || child.created_at || null,
+      cutoffAt: child.cutoffAt || child.cutoff_at || null,
+      resolvedAt: child.resolvedAt || child.resolved_at || null,
+      resultTokenId: child.resultTokenId || null,
+      yesTokenId: child.yesTokenId || null,
+      noTokenId: child.noTokenId || null,
+      hasBonus: false,
+      // Multi-outcome markers
+      isMultiOutcome: true,
+      parentEventId: child.parentEventId,
+      parentEventTitle: parentTitle,
+    };
+  });
+  
+  // Multi-outcome from Analytics API (fallback, may be empty if API is down)
   const multiOutcomeList = analyticsResult.success ? analyticsResult.data : [];
 
-  // ✅ Merge: volumeList + newList + multiOutcome, dedup by marketId
+  // ✅ Merge: volumeList + newList + categoricalChildren + multiOutcome, dedup by marketId
   // newList is added AFTER volumeList so newer markets that might have low volume are included
   const opinionList = [...volumeList, ...newList];
 
@@ -284,11 +346,13 @@ export default async function Home() {
     .filter((m) => m.hasBonus === true)
     .map((m) => m.marketId);
   
-  console.log(`[Discover] Fetched: ${volumeList.length} by volume, ${newList.length} by new`);
+  console.log(`[Discover] Fetched: ${volumeList.length} by volume, ${newList.length} by new, ${categoricalChildren.length} categorical children`);
   console.log(`[Discover] Found ${bonusIdsFromList.length} bonus markets in list data`);
 
-  // Merge list + multi-outcome, dedup by marketId
-  const baseList = [...(multiOutcomeList || []), ...(opinionList || [])];
+  // Merge all sources, dedup by marketId
+  // Order: multiOutcome (Analytics) -> categoricalChildren (Opinion) -> opinionList (binary)
+  // This prioritizes multi-outcome data from Analytics if available
+  const baseList = [...(multiOutcomeList || []), ...(categoricalChildren || []), ...(opinionList || [])];
 
   const byId = new Map();
   for (const m of baseList) {

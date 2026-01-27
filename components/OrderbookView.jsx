@@ -439,7 +439,7 @@ function extractExpiresFromTitle(title) {
   return 0;
 }
 
-export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, marketData = {} }) {
+export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, marketData = {}, hasBonus = false }) {
   const [outcome, setOutcome] = useState(yesTokenId ? "YES" : "NO");
   const tokenId = outcome === "YES" ? yesTokenId : noTokenId;
 
@@ -664,6 +664,15 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                   <img src="/opinion-logo.svg" alt="Opinion" width="16" height="16" />
                   View on Opinion
                 </a>
+                {/* ✅ Bonus Icon - positioned after View on Opinion button */}
+                {hasBonus && (
+                  <img 
+                    src="/gift_icon_24.svg" 
+                    alt="Bonus" 
+                    title="Bonus market"
+                    style={{ width: 40, height: 40, flexShrink: 0 }} 
+                  />
+                )}
               </div>
             </div>
           </div>

@@ -43,10 +43,13 @@ export default function NavLinks() {
         <span className="coming-soon">coming soon</span>
       </span>
 
-      <span className="nav-disabled">
-        Arbitage
-        <span className="coming-soon">coming soon</span>
-      </span>
+      <Link
+  href="/arbitage"
+  className={isActive("/arbitage") ? "nav-smart active" : "nav-smart"}
+>
+  <span className="nav-smart-title">Arbitrage</span>
+  <span className="nav-smart-badge">EARLY ACCESS</span>
+</Link>
     </div>
   );
 }

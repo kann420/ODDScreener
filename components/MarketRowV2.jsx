@@ -523,9 +523,15 @@ export default function MarketRowV2({
   if (!expiresTimestamp || expiresTimestamp === 0) expiresTimestamp = extractExpiresFromTitle(marketTitle) || 0;
   const expiresText = fmtExpires(expiresTimestamp);
 
+  // Build detail URL with parentEventTitle in query params for categorical children
+  const parentEventTitle = market?.parentEventTitle || "";
+  const detailUrl = parentEventTitle 
+    ? `/market/${market?.marketId}?parentTitle=${encodeURIComponent(parentEventTitle)}`
+    : `/market/${market?.marketId}`;
+
   return (
     <Link
-      href={`/market/${market?.marketId}`}
+      href={detailUrl}
       prefetch={false}
       className="panel"
       style={{
