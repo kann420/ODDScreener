@@ -51,9 +51,9 @@ export default function RootLayout({ children }) {
         <img src="/api/smart-money/warm" alt="" style={{ display: "none" }} />
 
         {/* Notification Banner */}
-        <div style={{
+        <div className="notification-banner" style={{
           background: 'linear-gradient(90deg, #1a1a1a 0%, #2d2d2d 100%)',
-          padding: '8px 0',
+          padding: '8px 12px',
           textAlign: 'center',
           fontSize: '13px',
           color: '#e0e0e0',
@@ -95,7 +95,7 @@ export default function RootLayout({ children }) {
               <div style={{ flex: 1 }} />
 
               {/* RIGHT: Platform logos */}
-              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <div className="platform-logos" style={{ display: "flex", alignItems: "center", gap: 16 }}>
                 <a href="https://app.opinion.trade?code=8YfTc9" target="_blank" rel="noopener noreferrer" title="Opinion">
                   <img
                     src="/logo-opinion.svg"

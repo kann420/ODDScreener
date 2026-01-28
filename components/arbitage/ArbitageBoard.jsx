@@ -300,8 +300,8 @@ export default function ArbitageBoard() {
             <div style={{ fontSize: 22, fontWeight: 900 }}>Arbitrage</div>
             <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
               {priceMode === "bids" 
-                ? <>Using best <b>BID</b> prices from both venues.</>
-                : <>Using best <b>ASK</b> prices from both venues.</>
+                ? <>Using best <b>BID</b> prices from Opinion & Polymarket.</>
+                : <>Using best <b>ASK</b> prices from Opinion & Polymarket.</>
               }
               {loading && progress?.message && (
                 <span style={{ marginLeft: 8, color: "rgba(255,180,50,0.9)" }}>

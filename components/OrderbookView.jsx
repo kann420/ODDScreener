@@ -644,15 +644,15 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
   return (
     <div className="col" style={{ gap: 12, paddingBottom: 120 }}>
       <div className="panel" style={{ padding: "14px 16px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div className="detail-header">
           {/* LEFT BLOCK (unchanged content, just insert thumbnail) */}
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div className="detail-header-left">
             {/* NEW: thumbnail at the exact left spot you marked */}
             <MarketThumbnailDetail url={thumbnailUrl} size={100} radius={14} />
 
             <div>
               <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>Market #{marketId}</div>
-              <div style={{ fontWeight: 900, fontSize: 16, display: "flex", alignItems: "center", gap: 12 }}>
+              <div className="detail-title" style={{ fontWeight: 900, fontSize: 16, display: "flex", alignItems: "center", gap: 12 }}>
                 {title || "Market"}
                 <a
                   href={`https://app.opinion.trade/detail?topicId=${marketId}`}
@@ -683,14 +683,7 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
         </div>
 
         {/* EVERYTHING BELOW: unchanged */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 24,
-          marginTop: 14,
-          flexWrap: "wrap",
-          fontSize: 12
-        }}>
+        <div className="detail-stats">
           <div>
             <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Chance</div>
             <div style={{ fontWeight: 700, color: "#fff" }}>{mid ? (mid * 100).toFixed(1) + "%" : "-"}</div>
@@ -725,7 +718,7 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
             <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Volatility</div>
             <div style={{ fontWeight: 700 }}>-</div>
           </div>
-          <div style={{ marginLeft: "auto" }}>
+          <div className="detail-rules-btn" style={{ marginLeft: "auto" }}>
             <button
               className="btn"
               style={{ fontSize: 11, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}
@@ -760,7 +753,7 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
         )}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 12 }}>
+      <div className="detail-grid">
         <div className="col" style={{ gap: 12 }}>
           <ChartViewV2
             key={yesTokenId}
@@ -779,8 +772,8 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
             </div>
 
             <div style={{ padding: "12px 16px" }}>
-              <div style={{ maxHeight: 500, overflowY: "auto", overflowX: "auto" }}>
-                <table style={{
+              <div className="trades-table-wrap">
+                <table className="trades-table" style={{
                   width: "100%",
                   borderCollapse: "collapse",
                   fontSize: 13
@@ -937,7 +930,7 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
           </div>
         </div>
 
-        <div className="panel" style={{ padding: 10, height: "fit-content" }}>
+        <div className="panel orderbook-panel">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ fontWeight: 900, fontSize: 13 }}>Order Book</div>
             <div style={{ display: "flex", gap: 4 }}>

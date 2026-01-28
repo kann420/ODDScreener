@@ -151,7 +151,7 @@ export default function DiscoverNewsBar({ initialMarkets = [] }) {
   };
 
   return (
-    <div className="panel" style={{ padding: 12, position: "relative" }}>
+    <div className="panel discover-news-bar" style={{ padding: 12, position: "relative" }}>
       {/* arrows outside the panel */}
       <button
         type="button"

@@ -533,7 +533,7 @@ export default function MarketRowV2({
     <Link
       href={detailUrl}
       prefetch={false}
-      className="panel"
+      className="panel market-row"
       style={{
         padding: "8px 12px",
         cursor: "pointer",
@@ -550,8 +550,10 @@ export default function MarketRowV2({
       }}
       title="Open market"
     >
+      {/* Desktop Layout */}
       <div
         ref={rowRef}
+        className="market-row-desktop"
         style={{
           display: "grid",
           gridTemplateColumns: "minmax(320px, 1.6fr) 140px 110px 140px 130px",
@@ -614,6 +616,130 @@ export default function MarketRowV2({
         <div className="mono">{volText}</div>
 
         <div className="mono muted">{expiresText}</div>
+      </div>
+
+      {/* Mobile Layout - Chance Style Card */}
+      <div
+        className="market-row-mobile"
+        style={{
+          display: "none",
+        }}
+      >
+        {/* Header: Thumbnail + Title */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+          <MarketThumbnail url={thumbUrl} size={56} radius={12} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {/* Bonus badge */}
+            {(isBonus || detectedBonus) && (
+              <div style={{ 
+                display: "inline-flex", 
+                alignItems: "center", 
+                gap: 4,
+                marginBottom: 4,
+                padding: "2px 8px",
+                background: "rgba(245, 200, 75, 0.15)",
+                borderRadius: 4,
+                fontSize: 10,
+                fontWeight: 700,
+                color: "#F5C84B"
+              }}>
+                <img src="/gift_icon_24.svg" alt="" style={{ width: 12, height: 12 }} />
+                BONUS
+              </div>
+            )}
+            <div
+              style={{
+                fontWeight: 700,
+                fontSize: 15,
+                lineHeight: 1.3,
+                color: "#fff",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+              }}
+            >
+              {title}
+            </div>
+          </div>
+        </div>
+
+        {/* Outcome Row - Yes/No with Chance */}
+        <div style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          justifyContent: "space-between",
+          marginTop: 14,
+          padding: "10px 12px",
+          background: "rgba(255,255,255,0.03)",
+          borderRadius: 10,
+          border: "1px solid rgba(255,255,255,0.06)"
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {/* Mini Chart */}
+            <div style={{ width: 50, height: 24 }}>
+              {loading ? (
+                <div className="skeleton" style={{ width: 50, height: 24, borderRadius: 4 }} />
+              ) : (
+                <MiniSparkline points={sparkPts} width={50} height={24} />
+              )}
+            </div>
+            {/* Chance */}
+            <span className="mono" style={{ fontWeight: 900, fontSize: 16, color: "#22d3ee" }}>
+              {loading ? <span style={{ color: "rgba(255,255,255,0.3)" }}>--</span> : chanceText}
+            </span>
+          </div>
+          
+          {/* Yes/No Buttons */}
+          <div style={{ display: "flex", gap: 6 }}>
+            <span style={{
+              padding: "6px 14px",
+              borderRadius: 6,
+              background: "rgba(34, 197, 94, 0.15)",
+              border: "1px solid rgba(34, 197, 94, 0.3)",
+              color: "#22c55e",
+              fontSize: 12,
+              fontWeight: 700,
+            }}>
+              Yes
+            </span>
+            <span style={{
+              padding: "6px 14px",
+              borderRadius: 6,
+              background: "rgba(239, 68, 68, 0.15)",
+              border: "1px solid rgba(239, 68, 68, 0.3)",
+              color: "#ef4444",
+              fontSize: 12,
+              fontWeight: 700,
+            }}>
+              No
+            </span>
+          </div>
+        </div>
+
+        {/* Footer: Volume + Date */}
+        <div style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          justifyContent: "space-between",
+          marginTop: 10,
+          paddingTop: 10,
+          borderTop: "1px solid rgba(255,255,255,0.06)",
+          fontSize: 12,
+          color: "rgba(148,163,184,0.8)"
+        }}>
+          <span className="mono" style={{ fontWeight: 600 }}>{volText} Vol.</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12,6 12,12 16,14"/>
+              </svg>
+              {expiresText}
+            </span>
+          </div>
+        </div>
       </div>
     </Link>
   );

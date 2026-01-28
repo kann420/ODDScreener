@@ -7,7 +7,7 @@ function num(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-export default function MiniSparkline({ points }) {
+export default function MiniSparkline({ points, width = 120, height = 36 }) {
   const { path, up } = useMemo(() => {
     const pts = (points || []).map((p) => num(p.p));
     if (pts.length < 2) return { path: "", up: true };
@@ -22,8 +22,8 @@ export default function MiniSparkline({ points }) {
     const last = pts[pts.length - 1];
     const isUp = last >= first;
 
-    const W = 120;
-    const H = 36;
+    const W = width;
+    const H = height;
     const pad = 2;
     const span = Math.max(1e-9, max - min);
 
@@ -36,11 +36,11 @@ export default function MiniSparkline({ points }) {
     }
 
     return { path: d, up: isUp };
-  }, [points]);
+  }, [points, width, height]);
 
   return (
-    <svg width="120" height="36" viewBox="0 0 120 36" style={{ display: "block" }}>
-      <path d="M 2 34 L 118 34" stroke="rgba(255,255,255,0.08)" strokeWidth="1" fill="none" />
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>
+      <path d={`M 2 ${height - 2} L ${width - 2} ${height - 2}`} stroke="rgba(255,255,255,0.08)" strokeWidth="1" fill="none" />
       {path ? (
         <path
           d={path}
@@ -51,7 +51,7 @@ export default function MiniSparkline({ points }) {
           strokeLinecap="round"
         />
       ) : (
-        <text x="0" y="22" fill="rgba(255,255,255,0.35)" fontSize="12">
+        <text x="0" y={height / 2 + 4} fill="rgba(255,255,255,0.35)" fontSize="12">
           —
         </text>
       )}

@@ -365,7 +365,7 @@ async function runWithConcurrency(items, worker, concurrency = 2) {
 export default function MarketListClient({ initialMarkets, markets: marketsProp, initialBonusIds }) {
   const markets = (initialMarkets && Array.isArray(initialMarkets) ? initialMarkets : marketsProp) || [];
 
-  const [activeTab, setActiveTab] = useState("all"); // "new" | "hot" | "trending" | "bonus" | "all"
+  const [activeTab, setActiveTab] = useState("bonus"); // "new" | "hot" | "trending" | "bonus" | "all"
   const [volMode, setVolMode] = useState("24h"); // "24h" | "all"
   const [currentPage, setCurrentPage] = useState(1);
   const [visible, setVisible] = useState(6);
@@ -920,19 +920,11 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
   };
 
   return (
-    <div className="panel" style={{ padding: 12 }}>
+    <div className="panel market-list-panel" style={{ padding: 12 }}>
       {/* Top Bar: Tabs + Search + Volume Mode */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-          marginBottom: 10,
-        }}
-      >
+      <div className="market-topbar">
         {/* Tabs: NEW | HOT | TRENDING | BONUS | ALL */}
-        <div style={{ display: "flex", gap: 4 }}>
+        <div className="market-tabs">
           <button
             onClick={() => handleTabChange("new")}
             style={{
@@ -1030,7 +1022,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
         </div>
 
         {/* Search */}
-        <div style={{ flex: 1, minWidth: 200 }}>
+        <div className="market-search-wrap">
           <input
             type="text"
             placeholder={`Search in ${
@@ -1066,8 +1058,8 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
 
         {/* Volume mode toggle - only show in ALL tab */}
         {activeTab === "all" && (
-          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-            <span className="muted" style={{ fontSize: 12, marginRight: 4 }}>
+          <div className="volume-toggle">
+            <span className="muted volume-label" style={{ fontSize: 12, marginRight: 4 }}>
               Volume:
             </span>
             <button
@@ -1100,6 +1092,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
 
       {/* Header */}
       <div
+        className="market-list-header"
         style={{
           position: "sticky",
           top: 64,
@@ -1204,7 +1197,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
       </div>
 
       {/* List */}
-      <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div className="market-list-container" style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
         {pageList.length === 0 ? (
           <div className="muted" style={{ textAlign: "center", padding: 20 }}>
             {activeTab === "bonus" && bonusLoading
@@ -1235,7 +1228,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 16 }}>
+        <div className="market-pagination">
           <button
             className="btn ghost"
             onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
@@ -1245,7 +1238,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
             ←
           </button>
 
-          <div className="muted" style={{ paddingTop: 8 }}>
+          <div className="muted" style={{ paddingTop: 8, fontSize: 13 }}>
             Page {currentPage} / {totalPages}
           </div>
 
