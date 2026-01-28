@@ -19,9 +19,12 @@ body{
               radial-gradient(900px 600px at 75% 20%, rgba(34,197,94,0.10), transparent 55%),
               var(--bg);
   color: var(--text);
+  /* Google Fonts CDN - exact original rendering */
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   padding-bottom: 200px;
 }
 a{ color:inherit; text-decoration:none; }
@@ -860,7 +863,26 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   /* Hide desktop nav on mobile */
   .nav-desktop { display: none !important; }
   
-  /* Show hamburger button */
+  /* Mobile topbar layout - hamburger on left of logo */
+  .topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 0.1px !important;
+  }
+  
+  /* Logo adjustments for mobile - smaller and centered vertically */
+  .topbar-left .brand {
+    display: flex;
+    align-items: center;
+    order: 2; /* Logo goes after hamburger */
+  }
+  
+  .topbar-left .brand img {
+    height: 140px !important;
+    width: auto !important;
+  }
+  
+  /* Show hamburger button - positioned before logo */
   .mobile-menu-btn {
     display: flex;
     align-items: center;
@@ -873,7 +895,9 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
     color: #fff;
     cursor: pointer;
     transition: all 0.2s;
-    margin-left: 8px;
+    margin-left: 0;
+    flex-shrink: 0;
+    order: 1; /* Hamburger goes first */
   }
   
   .mobile-menu-btn:hover {
@@ -979,3 +1003,25 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   }
 }
 /* ===== END NAVIGATION MOBILE ===== */
+
+/* ===== SKELETON PULSE ANIMATION ===== */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.skeleton-box {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.04) 25%,
+    rgba(255,255,255,0.08) 50%,
+    rgba(255,255,255,0.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.skeleton-row {
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+/* ===== END SKELETON PULSE ANIMATION =====*/

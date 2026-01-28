@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import MarketRowV2 from "@/components/MarketRowV2";
+import { getDiscoverCache, setDiscoverCache, getBonusCache, setBonusCache } from "@/lib/clientCache";
 
 const ITEMS_PER_PAGE = 10;
 const TRENDING_COUNT = 20;
@@ -365,30 +366,76 @@ async function runWithConcurrency(items, worker, concurrency = 2) {
 export default function MarketListClient({ initialMarkets, markets: marketsProp, initialBonusIds }) {
   const markets = (initialMarkets && Array.isArray(initialMarkets) ? initialMarkets : marketsProp) || [];
 
-  const [activeTab, setActiveTab] = useState("bonus"); // "new" | "hot" | "trending" | "bonus" | "all"
-  const [volMode, setVolMode] = useState("24h"); // "24h" | "all"
-  const [currentPage, setCurrentPage] = useState(1);
-  const [visible, setVisible] = useState(6);
+  // ===== RESTORE FROM CACHE ON MOUNT =====
+  const cachedState = useRef(null);
+  if (cachedState.current === null) {
+    // Only run once on mount (not on re-renders)
+    cachedState.current = getDiscoverCache() || {};
+    if (Object.keys(cachedState.current).length > 0) {
+      console.log("[MarketListClient] Restoring from cache");
+    }
+  }
+  const cached = cachedState.current;
+
+  // Restore cached bonusIds if available - now returns { ids: [], loaded: true } or null
+  const cachedBonus = getBonusCache();
+  const hasCachedBonus = cachedBonus?.loaded === true;
+
+  const [activeTab, setActiveTab] = useState(cached.activeTab || "bonus"); // "new" | "hot" | "trending" | "bonus" | "all"
+  const [volMode, setVolMode] = useState(cached.volMode || "24h"); // "24h" | "all"
+  const [currentPage, setCurrentPage] = useState(cached.currentPage || 1);
+  const [visible, setVisible] = useState(cached.visible || 6);
   const [refreshTick, setRefreshTick] = useState(0); // auto refresh trigger (no refetch)
   
-  const [sortConfig, setSortConfig] = useState({ key: "volume", direction: "desc" });
+  const [sortConfig, setSortConfig] = useState(cached.sortConfig || { key: "volume", direction: "desc" });
 
-  const [chanceMap, setChanceMap] = useState({});
-  const [volumeMap, setVolumeMap] = useState({});
-  const [search, setSearch] = useState("");
+  const [chanceMap, setChanceMap] = useState(cached.chanceMap || {});
+  const [volumeMap, setVolumeMap] = useState(cached.volumeMap || {});
+  const [search, setSearch] = useState(cached.search || "");
 
-  const [bonusIds, setBonusIds] = useState(initialBonusIds || []);
-  const [bonusLoading, setBonusLoading] = useState(!initialBonusIds || initialBonusIds.length === 0);
+  // Use cached bonusIds if available (even if empty), otherwise use initialBonusIds
+  const [bonusIds, setBonusIds] = useState(
+    hasCachedBonus ? cachedBonus.ids : (initialBonusIds || [])
+  );
+  // bonusLoading = false if we have cached data (even empty) or initialBonusIds
+  const [bonusLoading, setBonusLoading] = useState(
+    !hasCachedBonus && (!initialBonusIds || initialBonusIds.length === 0)
+  );
   const bonusSet = useMemo(() => new Set((bonusIds || []).map((x) => String(x))), [bonusIds]);
 
-  const [allTabLoaded, setAllTabLoaded] = useState(false);
+  const [allTabLoaded, setAllTabLoaded] = useState(cached.allTabLoaded || false);
   const initTrendingDoneRef = useRef(false);
   const hotPrefetchDoneRef = useRef(false);
   const trendingPrefetchDoneRef = useRef(false);
 
   // ✅ NEW: State to hold freshly fetched new markets (merged with initial)
-  const [freshNewMarkets, setFreshNewMarkets] = useState([]);
+  const [freshNewMarkets, setFreshNewMarkets] = useState(cached.freshNewMarkets || []);
   const newMarketsPollRef = useRef(false);
+
+  // ===== SAVE STATE TO CACHE ON CHANGE =====
+  const saveTimeoutRef = useRef(null);
+  useEffect(() => {
+    // Debounce saving to avoid excessive writes
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      setDiscoverCache({
+        activeTab,
+        volMode,
+        currentPage,
+        visible,
+        sortConfig,
+        chanceMap,
+        volumeMap,
+        search,
+        allTabLoaded,
+        freshNewMarkets,
+      });
+    }, 500);
+
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [activeTab, volMode, currentPage, visible, sortConfig, chanceMap, volumeMap, search, allTabLoaded, freshNewMarkets]);
 
   // ✅ Poll NEW markets every 2 minutes when on "new" tab (to catch recently created markets quickly)
   useEffect(() => {
@@ -493,8 +540,16 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
   // Detect bonus markets from list data first (if incentiveFactor exists in list)
   // Fallback to API if list doesn't have incentiveFactor info
   useEffect(() => {
+    // Skip if already have cached bonus data (even if empty array!)
+    if (hasCachedBonus) {
+      console.log("[Bonus] Using cached bonus IDs:", cachedBonus.ids?.length || 0);
+      setBonusLoading(false);
+      return;
+    }
+    
     if (initialBonusIds && initialBonusIds.length > 0) {
       setBonusIds(initialBonusIds);
+      setBonusCache(initialBonusIds); // Save to cache
       setBonusLoading(false);
       return;
     }
@@ -508,6 +563,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
 
     if (localBonusIds.length > 0) {
       setBonusIds(localBonusIds);
+      setBonusCache(localBonusIds); // Save to cache
       setBonusLoading(false);
       return;
     }
@@ -517,7 +573,10 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
         const r = await fetch(`/api/opinion/bonus-markets?limit=1000`, { cache: "no-store" });
         const j = await r.json();
         const ids = j?.ids || j?.result?.ids || [];
-        if (alive && Array.isArray(ids)) setBonusIds(ids);
+        if (alive && Array.isArray(ids)) {
+          setBonusIds(ids);
+          setBonusCache(ids); // Save to cache
+        }
       } catch (e) {
         console.error("[Bonus] API fetch failed:", e);
       } finally {
@@ -528,7 +587,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     return () => {
       alive = false;
     };
-  }, [markets, initialBonusIds]);
+  }, [markets, initialBonusIds, hasCachedBonus]);
 
   // PRE-SCAN: Fetch detail for ACTIVE markets only (avoid wasting on resolved/expired)
   useEffect(() => {

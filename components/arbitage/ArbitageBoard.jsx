@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import ArbCalculatorModal from "./ArbCalculatorModal";
+import { getOptimizedImageUrl } from "@/components/OptimizedImage";
 
 // Cache key for sessionStorage
 const CACHE_KEY = "arbitrage_cache";
@@ -630,7 +631,13 @@ function Row({ r, priceMode, onCalculatorClick }) {
           >
             {r.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={r.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              <img 
+                src={getOptimizedImageUrl(r.imageUrl, 240, 80)} 
+                alt="" 
+                loading="lazy"
+                decoding="async"
+                style={{ width: "100%", height: "100%", objectFit: "cover" }} 
+              />
             ) : (
               <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
                 Image
@@ -755,7 +762,15 @@ function VenueLine({ logoSrc, label, url }) {
       title={url || ""}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={logoSrc} alt="" style={{ width: 18, height: 18, borderRadius: 4, opacity: 0.95 }} />
+      <img 
+        src={logoSrc} 
+        alt="" 
+        width={18}
+        height={18}
+        loading="lazy"
+        decoding="async"
+        style={{ width: 18, height: 18, borderRadius: 4, opacity: 0.95 }} 
+      />
       <span style={{ fontSize: 13, fontWeight: 900, color: "rgba(233,238,245,0.92)" }}>{label}</span>
       
       {/* External link icon box */}

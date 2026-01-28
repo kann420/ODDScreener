@@ -3,15 +3,23 @@
 import ChartViewV2 from "./ChartViewV2";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMarketTrades } from "@/components/hooks/useMarketTrades";
+import { getOptimizedImageUrl } from "@/components/OptimizedImage";
 
 /* =========================
    NEW: Thumbnail (Detail)
    - Fixed size box so it never misaligns
    - Uses marketData.thumbnailUrl / coverUrl
+   - Optimized via wsrv.nl (WebP, resize)
 ========================= */
 function MarketThumbnailDetail({ url, size = 100, radius = 14 }) {
   const [errored, setErrored] = useState(false);
   const showImg = Boolean(url) && !errored;
+
+  // Optimize external images via wsrv.nl (2x for retina)
+  const optimizedUrl = useMemo(() => {
+    if (!url || errored) return null;
+    return getOptimizedImageUrl(url, size * 2, 85);
+  }, [url, size, errored]);
 
   return (
     <div
@@ -28,13 +36,14 @@ function MarketThumbnailDetail({ url, size = 100, radius = 14 }) {
         justifyContent: "center",
       }}
     >
-      {showImg ? (
+      {showImg && optimizedUrl ? (
         <img
-          src={url}
+          src={optimizedUrl}
           alt=""
           width={size}
           height={size}
           loading="lazy"
+          decoding="async"
           style={{
             width: "100%",
             height: "100%",

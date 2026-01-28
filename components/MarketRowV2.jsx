@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import MiniSparkline from "@/components/MiniSparkline";
+import { getOptimizedImageUrl } from "@/components/OptimizedImage";
 
 import useInView from "@/components/hooks/useInView";
 import { withConcurrency } from "@/lib/concurrency";
@@ -33,10 +34,17 @@ function fmtChanceFromPrice01(p01) {
 /**
  * ✅ FIXED Thumbnail: always renders a fixed box (prevents vertical misalignment)
  * size = 45 (your chosen size)
+ * Uses wsrv.nl for optimized external images (WebP, resize)
  */
 function MarketThumbnail({ url, size = 45, radius = 10 }) {
   const [errored, setErrored] = useState(false);
   const showImg = Boolean(url) && !errored;
+
+  // Optimize external images via wsrv.nl (2x for retina)
+  const optimizedUrl = useMemo(() => {
+    if (!url || errored) return null;
+    return getOptimizedImageUrl(url, size * 2, 80);
+  }, [url, size, errored]);
 
   return (
     <div
@@ -53,13 +61,14 @@ function MarketThumbnail({ url, size = 45, radius = 10 }) {
         justifyContent: "center",
       }}
     >
-      {showImg ? (
+      {showImg && optimizedUrl ? (
         <img
-          src={url}
+          src={optimizedUrl}
           alt=""
           width={size}
           height={size}
           loading="lazy"
+          decoding="async"
           style={{
             width: "100%",
             height: "100%",

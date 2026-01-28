@@ -4,6 +4,10 @@ import NavLinks from "../components/NavLinks";
 import GlobalMarketSearchInput from "../components/GlobalMarketSearchInput";
 import FooterBar from "../components/FooterBar";
 
+// ===== GOOGLE FONTS CDN =====
+// Using Google Fonts CDN directly for exact rendering match
+// Optimized with preconnect for fast loading
+
 const GA_MEASUREMENT_ID = "G-P1NXMB82YZ";
 
 export const metadata = {
@@ -15,11 +19,67 @@ export const metadata = {
   },
 };
 
+// ===== Viewport config for mobile optimization =====
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#0b0d10',
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <head>
-        {/* Google Analytics */}
+        {/* ===== Google Fonts with preconnect for fast loading ===== */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link 
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" 
+          rel="stylesheet" 
+        />
+
+        {/* ===== Preload critical images ===== */}
+        <link rel="preload" href="/2logonewest.svg" as="image" />
+        <link rel="preload" href="/logo-opinion.svg" as="image" />
+
+        {/* Favicon */}
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+
+        {/* ===== CRITICAL CSS: Inline above-the-fold styles ===== */}
+        <style dangerouslySetInnerHTML={{ __html: `
+          /* Critical CSS for instant render */
+          :root {
+            color-scheme: dark;
+            --bg: #0b0d10;
+            --panel: #12151a;
+            --text: #e9eef5;
+            --muted: #94a3b8;
+            --border: rgba(255,255,255,0.08);
+          }
+          *, *::before, *::after { box-sizing: border-box; }
+          html, body { height: 100%; margin: 0; }
+          body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+          }
+          .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            background: rgba(8,10,12,0.9);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+          }
+          .container { max-width: 1500px; margin: 0 auto; padding: 12px 14px; }
+          /* Skeleton animation */
+          @keyframes skeleton-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+          }
+        `}} />
+
+        {/* ===== Google Analytics - Load after interactive ===== */}
         <Script
           src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
           strategy="afterInteractive"
@@ -34,21 +94,16 @@ export default function RootLayout({ children }) {
             });
           `}
         </Script>
-
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
-          rel="stylesheet"
-        />
-
-        {/* Favicon */}
-        <link rel="icon" href="/favicon.ico" sizes="any" />
       </head>
 
       <body>
-        {/* Smart Money hub warm-up (server-side safe) */}
-        <img src="/api/smart-money/warm" alt="" style={{ display: "none" }} />
+        {/* Smart Money hub warm-up - deferred with lazy loading */}
+        <img 
+          src="/api/smart-money/warm" 
+          alt="" 
+          style={{ display: "none" }} 
+          loading="lazy"
+        />
 
         {/* Notification Banner */}
         <div className="notification-banner" style={{
@@ -74,11 +129,15 @@ export default function RootLayout({ children }) {
               }}
             >
               {/* LEFT: brand + nav */}
-              <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+              <div className="topbar-left" style={{ display: "flex", alignItems: "center", gap: 18 }}>
                 <a className="brand" href="/" aria-label="ODDScreeners">
                   <img
                     src="/2logonewest.svg"
                     alt="ODDScreeners"
+                    width={160}
+                    height={52}
+                    fetchPriority="high"
+                    decoding="async"
                     style={{
                       height: 160,
                       width: "auto",
@@ -100,6 +159,10 @@ export default function RootLayout({ children }) {
                   <img
                     src="/logo-opinion.svg"
                     alt="Opinion"
+                    width={42}
+                    height={42}
+                    loading="lazy"
+                    decoding="async"
                     style={{
                       height: 42,
                       width: "auto",
@@ -111,6 +174,10 @@ export default function RootLayout({ children }) {
                   src="/polymarket_600.svg"
                   alt="Polymarket"
                   title="Polymarket - Coming Soon"
+                  width={42}
+                  height={42}
+                  loading="lazy"
+                  decoding="async"
                   style={{
                     height: 42,
                     width: "auto",
@@ -122,6 +189,10 @@ export default function RootLayout({ children }) {
                   src="/kalshi.svg"
                   alt="Kalshi"
                   title="Kalshi - Coming Soon"
+                  width={42}
+                  height={42}
+                  loading="lazy"
+                  decoding="async"
                   style={{
                     height: 42,
                     width: "auto",
@@ -133,6 +204,10 @@ export default function RootLayout({ children }) {
                   src="/proable.svg"
                   alt="Proable"
                   title="Proable - Coming Soon"
+                  width={42}
+                  height={42}
+                  loading="lazy"
+                  decoding="async"
                   style={{
                     height: 42,
                     width: "auto",
@@ -149,7 +224,7 @@ export default function RootLayout({ children }) {
         <div className="container">{children}</div>
 
         {/* New Premium Footer Bar (replaces old bottom-left & bottom-right footers) */}
-        <FooterBar version="1.2.0" live />
+        <FooterBar version="1.2.1" live />
       </body>
     </html>
   );

@@ -1,23 +1,65 @@
 import { NextResponse } from "next/server";
 import { opinionFetch } from "@/lib/opinion";
+import fs from "fs/promises";
+import path from "path";
 
 /**
  * Bonus markets detection
  * - A market is considered "Bonus" if market detail contains `incentiveFactor`
  * - Binary detail:      GET /market/{marketId}
  * - Categorical detail: GET /market/categorical/{marketId}
+ * - Cache: 12 hours (bonus markets rarely change)
  */
 
 export const runtime = "nodejs";
 
-const CACHE_MS = 2 * 60 * 1000; // 2 min cache
-const STALE_MS = 60 * 1000; // Return stale after 1 min, but refresh in background
+// ===== CACHE CONFIG =====
+const CACHE_MS = 12 * 60 * 60 * 1000; // 12 hours cache (bonus markets don't change often)
+const STALE_MS = 6 * 60 * 60 * 1000;  // Return stale after 6 hours, refresh in background
+const CACHE_FILE = path.join(process.cwd(), "data", "bonus_cache.json");
 
+// In-memory cache
 const cache = {
   ids: [],
   ts: 0,
   refreshing: false,
 };
+
+// ===== FILE CACHE HELPERS =====
+async function loadCacheFromFile() {
+  try {
+    const data = await fs.readFile(CACHE_FILE, "utf-8");
+    const parsed = JSON.parse(data);
+    if (parsed.ids && parsed.ts) {
+      cache.ids = parsed.ids;
+      cache.ts = parsed.ts;
+      console.log(`[Bonus] Loaded ${cache.ids.length} bonus markets from file cache (age: ${Math.round((Date.now() - cache.ts) / 1000 / 60)}min)`);
+      return true;
+    }
+  } catch {
+    // File doesn't exist or invalid - will scan fresh
+  }
+  return false;
+}
+
+async function saveCacheToFile() {
+  try {
+    await fs.mkdir(path.dirname(CACHE_FILE), { recursive: true });
+    await fs.writeFile(CACHE_FILE, JSON.stringify({ ids: cache.ids, ts: cache.ts }), "utf-8");
+    console.log(`[Bonus] Saved ${cache.ids.length} bonus markets to file cache`);
+  } catch (e) {
+    console.error(`[Bonus] Failed to save cache:`, e.message);
+  }
+}
+
+// Load file cache on startup
+let cacheLoaded = false;
+async function ensureCacheLoaded() {
+  if (!cacheLoaded) {
+    cacheLoaded = true;
+    await loadCacheFromFile();
+  }
+}
 
 function hasIncentiveFactor(detail) {
   if (!detail || typeof detail !== "object") return false;
@@ -128,25 +170,40 @@ async function scanBonusMarkets(limit) {
 
 export async function GET(req) {
   try {
+    // Ensure file cache is loaded on first request
+    await ensureCacheLoaded();
+    
     const { searchParams } = new URL(req.url);
     const limit = Math.max(1, Math.min(1000, Number(searchParams.get("limit") || "500")));
     const force = searchParams.get("force") === "1";
 
     const now = Date.now();
     
-    // Return cached data if fresh
-    if (!force && cache.ids.length && now - cache.ts < CACHE_MS) {
-      return NextResponse.json({ ids: cache.ids, cached: true, ts: cache.ts });
+    // Check if cache exists (ts > 0 means we have cached data, even if ids is empty)
+    const hasCachedData = cache.ts > 0;
+    
+    // Return cached data if fresh (within 12 hours) - even if ids is empty!
+    if (!force && hasCachedData && now - cache.ts < CACHE_MS) {
+      const ageHours = Math.round((now - cache.ts) / 1000 / 60 / 60 * 10) / 10;
+      console.log(`[Bonus] Returning cached data (${cache.ids.length} ids, age: ${ageHours}h)`);
+      return NextResponse.json({ 
+        ids: cache.ids, 
+        cached: true, 
+        ts: cache.ts,
+        ageHours,
+        nextRefresh: Math.round((CACHE_MS - (now - cache.ts)) / 1000 / 60 / 60 * 10) / 10 + "h"
+      });
     }
 
-    // If cache is stale but exists, return it immediately and refresh in background
-    if (!force && cache.ids.length && now - cache.ts < CACHE_MS * 2 && !cache.refreshing) {
+    // If cache is stale but exists (6-12h old), return it immediately and refresh in background
+    if (!force && hasCachedData && now - cache.ts < CACHE_MS * 2 && !cache.refreshing) {
       cache.refreshing = true;
       // Fire and forget background refresh
-      scanBonusMarkets(limit).then((result) => {
+      scanBonusMarkets(limit).then(async (result) => {
         cache.ids = result.ids;
         cache.ts = Date.now();
         cache.refreshing = false;
+        await saveCacheToFile(); // Persist to file
       }).catch(() => {
         cache.refreshing = false;
       });
@@ -154,10 +211,14 @@ export async function GET(req) {
     }
 
     // No cache or forced refresh - scan synchronously
+    console.log(`[Bonus] Cache miss or force refresh - scanning...`);
     const result = await scanBonusMarkets(limit);
     
     cache.ids = result.ids;
     cache.ts = now;
+    
+    // Persist to file for next restart
+    await saveCacheToFile();
 
     return NextResponse.json({
       ids: result.ids,
