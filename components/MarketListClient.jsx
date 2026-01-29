@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, useDeferredValue, memo } from "react";
 import MarketRowV2 from "@/components/MarketRowV2";
 import { getDiscoverCache, setDiscoverCache, getBonusCache, setBonusCache } from "@/lib/clientCache";
 
@@ -642,11 +642,12 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     scanBonusMarkets();
   }, [activeMarkets]);
 
-  const handleChanceLoaded = (marketId, chance) => {
+  // ===== OPTIMIZED CALLBACKS (prevent re-renders) =====
+  const handleChanceLoaded = useCallback((marketId, chance) => {
     setChanceMap((prev) => (prev[marketId] === chance ? prev : { ...prev, [marketId]: chance }));
-  };
+  }, []);
 
-  const handleVolumeLoaded = (marketId, vol) => {
+  const handleVolumeLoaded = useCallback((marketId, vol) => {
     if (!marketId || !vol) return;
     setVolumeMap((prev) => {
       const next = {
@@ -657,16 +658,28 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
       if (cur && cur.volume === next.volume && cur.volume24h === next.volume24h) return prev;
       return { ...prev, [marketId]: next };
     });
-  };
+  }, []);
 
-  const handleBonusDetected = (marketId) => {
+  const handleBonusDetected = useCallback((marketId) => {
     if (!marketId) return;
     setBonusIds((prev) => {
       const idStr = String(marketId);
       if (prev.includes(idStr) || prev.includes(marketId)) return prev;
       return [...prev, marketId];
     });
-  };
+  }, []);
+
+  const handleTabChange = useCallback((tab) => {
+    setActiveTab(tab);
+    setCurrentPage(1);
+    setSearch("");
+    // Auto sort by volume desc for Hot/Trending/All tabs
+    if (tab === "hot" || tab === "trending" || tab === "all") {
+      setSortConfig({ key: "volume", direction: "desc" });
+    } else {
+      setSortConfig({ key: null, direction: null });
+    }
+  }, []);
 
   const displayVolMode = activeTab === "all" ? volMode : "24h";
 
@@ -954,7 +967,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     return () => clearInterval(t);
   }, [pageList.length, currentPage]);
 
-  const handleSort = (key) => {
+  const handleSort = useCallback((key) => {
     setSortConfig((prev) => {
       if (prev.key === key) {
         if (prev.direction === "desc") return { key, direction: "asc" };
@@ -963,20 +976,15 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
       return { key, direction: "desc" };
     });
     setCurrentPage(1);
-  };
+  }, []);
 
-  const getSortIcon = (key) => {
+  const getSortIcon = useCallback((key) => {
     if (sortConfig.key !== key) return "↕";
     return sortConfig.direction === "desc" ? "↓" : "↑";
-  };
+  }, [sortConfig.key, sortConfig.direction]);
 
-  const handleTabChange = (tab) => {
-    setActiveTab(tab);
-    setCurrentPage(1);
-    setSearch("");
-    // Reset sort when changing tabs (each tab has its own default order)
-    setSortConfig({ key: null, direction: null });
-  };
+  // Deferred search for smoother typing
+  const deferredSearch = useDeferredValue(search);
 
   return (
     <div className="panel market-list-panel" style={{ padding: 12 }}>

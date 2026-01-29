@@ -323,36 +323,7 @@ export default function SmartMoneyPage() {
           <div className="sm-min-trade-label" style={{ opacity: 0.8, fontSize: 13 }}>Min Trade Size</div>
 
           <button
-            className="sm-btn-200"
-            onClick={() => setMinAmount(200)}
-            style={{
-              padding: "6px 12px",
-              borderRadius: 999,
-              border: "1px solid rgba(255,255,255,.12)",
-              background: minAmount === 200 ? "rgba(255,255,255,.12)" : "transparent",
-              color: "#fff",
-              cursor: "pointer",
-              fontWeight: 800,
-            }}
-          >
-            $200
-          </button>
-          <button
-            className="sm-btn-500"
-            onClick={() => setMinAmount(500)}
-            style={{
-              padding: "6px 12px",
-              borderRadius: 999,
-              border: "1px solid rgba(255,255,255,.12)",
-              background: minAmount === 500 ? "rgba(255,255,255,.12)" : "transparent",
-              color: "#fff",
-              cursor: "pointer",
-              fontWeight: 800,
-            }}
-          >
-            $500
-          </button>
-          <button
+            className={`sm-filter-btn ${minAmount === 1000 ? 'sm-filter-active' : ''}`}
             onClick={() => setMinAmount(1000)}
             style={{
               padding: "6px 12px",
@@ -364,7 +335,37 @@ export default function SmartMoneyPage() {
               fontWeight: 800,
             }}
           >
-            $1000
+            $1,000
+          </button>
+          <button
+            className={`sm-filter-btn ${minAmount === 5000 ? 'sm-filter-active' : ''}`}
+            onClick={() => setMinAmount(5000)}
+            style={{
+              padding: "6px 12px",
+              borderRadius: 999,
+              border: "1px solid rgba(255,255,255,.12)",
+              background: minAmount === 5000 ? "rgba(255,255,255,.12)" : "transparent",
+              color: "#fff",
+              cursor: "pointer",
+              fontWeight: 800,
+            }}
+          >
+            $5,000
+          </button>
+          <button
+            className={`sm-filter-btn ${minAmount === 10000 ? 'sm-filter-active' : ''}`}
+            onClick={() => setMinAmount(10000)}
+            style={{
+              padding: "6px 12px",
+              borderRadius: 999,
+              border: "1px solid rgba(255,255,255,.12)",
+              background: minAmount === 10000 ? "rgba(255,255,255,.12)" : "transparent",
+              color: "#fff",
+              cursor: "pointer",
+              fontWeight: 800,
+            }}
+          >
+            $10,000
           </button>
 
           <button

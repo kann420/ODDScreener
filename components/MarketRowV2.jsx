@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, memo } from "react";
 import MiniSparkline from "@/components/MiniSparkline";
 import { getOptimizedImageUrl } from "@/components/OptimizedImage";
 
@@ -365,7 +365,7 @@ async function fetchMarketDetailCached(marketId) {
   });
 }
 
-export default function MarketRowV2({
+function MarketRowV2({
   market,
   volMode,
   onOpen,
@@ -753,3 +753,16 @@ export default function MarketRowV2({
     </Link>
   );
 }
+
+// Memoize MarketRowV2 to prevent unnecessary re-renders
+export default memo(MarketRowV2, (prevProps, nextProps) => {
+  // Only re-render if these props change
+  return (
+    prevProps.market?.marketId === nextProps.market?.marketId &&
+    prevProps.volMode === nextProps.volMode &&
+    prevProps.isBonus === nextProps.isBonus &&
+    prevProps.priority === nextProps.priority &&
+    prevProps.volumeOverride?.volume === nextProps.volumeOverride?.volume &&
+    prevProps.volumeOverride?.volume24h === nextProps.volumeOverride?.volume24h
+  );
+});

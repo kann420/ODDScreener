@@ -1,7 +1,6 @@
 import "./globals.css";
 import Script from "next/script";
 import NavLinks from "../components/NavLinks";
-import GlobalMarketSearchInput from "../components/GlobalMarketSearchInput";
 import FooterBar from "../components/FooterBar";
 
 // ===== GOOGLE FONTS CDN =====
@@ -38,9 +37,9 @@ export default function RootLayout({ children }) {
         {/* ===== Google Fonts with preconnect for fast loading ===== */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        {/* Optimized: Only load weights actually used (400, 500, 600, 700) */}
+        {/* Optimized: Only load weights actually used (400, 500, 600, 700) with display=optional for better LCP */}
         <link 
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" 
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=optional" 
           rel="stylesheet" 
         />
 
@@ -83,19 +82,40 @@ export default function RootLayout({ children }) {
           }
         `}} />
 
-        {/* ===== Google Analytics - Load lazily to not block interactivity ===== */}
+        {/* ===== Google Analytics - Defer heavily to not block main thread ===== */}
+        {/* Load GA only after page is fully interactive (afterInteractive is too early) */}
         <Script
           src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
           strategy="lazyOnload"
         />
         <Script id="google-analytics" strategy="lazyOnload">
           {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', '${GA_MEASUREMENT_ID}', {
-              page_path: window.location.pathname,
-            });
+            // Defer GA initialization to idle time
+            if ('requestIdleCallback' in window) {
+              requestIdleCallback(function() {
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${GA_MEASUREMENT_ID}', {
+                  page_path: window.location.pathname,
+                  send_page_view: false
+                });
+                // Send page view after a small delay
+                setTimeout(function() {
+                  gtag('event', 'page_view');
+                }, 100);
+              }, { timeout: 3000 });
+            } else {
+              // Fallback for browsers without requestIdleCallback
+              setTimeout(function() {
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${GA_MEASUREMENT_ID}', {
+                  page_path: window.location.pathname,
+                });
+              }, 2000);
+            }
           `}
         </Script>
         

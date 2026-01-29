@@ -1,13 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, memo } from "react";
 
 function num(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
 
-export default function MiniSparkline({ points, width = 120, height = 36 }) {
+function MiniSparkline({ points, width = 120, height = 36 }) {
   const { path, up } = useMemo(() => {
     const pts = (points || []).map((p) => num(p.p));
     if (pts.length < 2) return { path: "", up: true };
@@ -58,3 +58,17 @@ export default function MiniSparkline({ points, width = 120, height = 36 }) {
     </svg>
   );
 }
+
+// Memoize to prevent unnecessary re-renders
+export default memo(MiniSparkline, (prev, next) => {
+  // Only re-render if dimensions or points change
+  if (prev.width !== next.width || prev.height !== next.height) return false;
+  if (prev.points?.length !== next.points?.length) return false;
+  // Quick check first and last point
+  const prevPts = prev.points || [];
+  const nextPts = next.points || [];
+  if (prevPts.length === 0 && nextPts.length === 0) return true;
+  if (prevPts[0]?.p !== nextPts[0]?.p) return false;
+  if (prevPts[prevPts.length - 1]?.p !== nextPts[nextPts.length - 1]?.p) return false;
+  return true;
+});

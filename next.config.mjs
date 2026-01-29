@@ -1,5 +1,25 @@
 /** @type {import('next').NextConfig} */
+
+// Bundle analyzer (run with: npm run analyze)
+import bundleAnalyzer from '@next/bundle-analyzer';
+
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === 'true',
+});
+
 const nextConfig = {
+  // ===== Performance Optimizations =====
+  // Use SWC minifier for faster builds and smaller bundles
+  swcMinify: true,
+  
+  // Compiler optimizations
+  compiler: {
+    // Remove console.log in production
+    removeConsole: process.env.NODE_ENV === 'production' ? {
+      exclude: ['error', 'warn'],
+    } : false,
+  },
+
   // ===== Image Optimization =====
   images: {
     // Enable modern formats (WebP, AVIF)
@@ -41,6 +61,11 @@ const nextConfig = {
       'date-fns',           // If you use date-fns
     ],
   },
+
+  // ===== Module Transpilation for smaller bundles =====
+  transpilePackages: [
+    'lightweight-charts',
+  ],
 
   // ===== Headers for Caching =====
   async headers() {
@@ -84,44 +109,64 @@ const nextConfig = {
     if (!dev && !isServer) {
       config.optimization = {
         ...config.optimization,
+        // Enable module concatenation for smaller bundles
+        concatenateModules: true,
         // Optimize chunk splitting for better caching
         splitChunks: {
           chunks: 'all',
-          minSize: 20000,
-          maxSize: 200000, // Reduced from 244000 for better loading
+          minSize: 15000,    // Reduced from 20000
+          maxSize: 150000,   // Reduced from 200000 for faster parsing
+          minChunks: 1,
+          maxAsyncRequests: 30,
+          maxInitialRequests: 30,
           cacheGroups: {
             default: false,
             vendors: false,
-            // Framework chunk (React, etc.)
+            // React framework - load first, cache separately
             framework: {
               name: 'framework',
               chunks: 'all',
               test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/,
-              priority: 40,
+              priority: 50,
+              enforce: true,
+              reuseExistingChunk: true,
+            },
+            // Large charting libraries - lazy load separately
+            charts: {
+              name: 'charts',
+              test: /[\\/]node_modules[\\/](lightweight-charts|recharts|d3)[\\/]/,
+              chunks: 'async',  // Only load when needed
+              priority: 45,
               enforce: true,
             },
-            // Libraries chunk (large dependencies)
+            // Utility libraries (smaller, used often)
+            utils: {
+              name: 'utils',
+              test: /[\\/]node_modules[\\/](date-fns|lodash|clsx)[\\/]/,
+              chunks: 'all',
+              priority: 40,
+              reuseExistingChunk: true,
+            },
+            // Other vendor libraries
             lib: {
               test: /[\\/]node_modules[\\/]/,
               name(module) {
-                const packageName = module.context.match(
-                  /[\\/]node_modules[\\/](.*?)([\\/]|$)/
-                )?.[1];
-                // Create separate chunks for large libraries
-                if (packageName && ['lightweight-charts', 'recharts', 'd3'].some(lib => packageName.includes(lib))) {
-                  return `lib.${packageName.replace('@', '')}`;
-                }
-                return 'vendors';
+                const match = module.context?.match(/[\\/]node_modules[\\/](.*?)([\\/]|$)/);
+                const packageName = match?.[1] || 'vendors';
+                // Group small packages together
+                return `npm.${packageName.replace('@', '')}`;
               },
               priority: 30,
               chunks: 'all',
+              minChunks: 1,
+              reuseExistingChunk: true,
             },
-            // Common chunk for shared code
+            // Common shared code
             common: {
               name: 'common',
               minChunks: 2,
               chunks: 'all',
-              priority: 10,
+              priority: 20,
               reuseExistingChunk: true,
               enforce: true,
             },
@@ -133,4 +178,4 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default withBundleAnalyzer(nextConfig);

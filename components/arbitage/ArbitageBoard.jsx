@@ -250,13 +250,8 @@ export default function ArbitageBoard() {
   const sorted = useMemo(() => {
     const arr = Array.isArray(displayRows) ? [...displayRows] : [];
     
-    // Sort based on sortField, but always prioritize whitelisted items first
+    // Sort by selected field
     arr.sort((a, b) => {
-      // Whitelisted items always come first
-      if (a.isWhitelisted && !b.isWhitelisted) return -1;
-      if (!a.isWhitelisted && b.isWhitelisted) return 1;
-      
-      // Then sort by selected field
       if (sortField === "endDate") {
         const dateA = a.endDate ? new Date(a.endDate).getTime() : Infinity;
         const dateB = b.endDate ? new Date(b.endDate).getTime() : Infinity;
