@@ -255,15 +255,18 @@ function RowItem({ label, value, copyValue, highlight, bold }) {
   if (highlight === "orange") valueColor = "rgba(255,140,50,1)";
 
   return (
-    <div style={{ 
+    <div className="arb-calc-row" style={{ 
       display: "flex", 
       justifyContent: "space-between", 
-      alignItems: "center",
+      alignItems: "flex-start",
       fontSize: 12,
+      flexWrap: "wrap",
+      gap: 4,
     }}>
       <span style={{ 
         color: highlight ? valueColor : "rgba(255,255,255,0.5)", 
         fontWeight: highlight || bold ? 700 : 400,
+        flexShrink: 0,
       }}>
         {label}
       </span>
@@ -273,6 +276,9 @@ function RowItem({ label, value, copyValue, highlight, bold }) {
         display: "flex",
         alignItems: "center",
         gap: 6,
+        flexWrap: "wrap",
+        justifyContent: "flex-end",
+        textAlign: "right",
       }}>
         {value}
         {copyValue && (
@@ -458,7 +464,7 @@ export default function ArbCalculatorModal({ row, onClose }) {
                 outline: "none",
               }}
             />
-            <div style={{ display: "flex", gap: 4 }}>
+            <div className="arb-calc-fast-filter" style={{ display: "flex", gap: 4 }}>
               {[50, 100, 500, 1000].map((size) => (
                 <button
                   key={size}
@@ -523,7 +529,7 @@ export default function ArbCalculatorModal({ row, onClose }) {
                     value={
                       <>
                         {formatUsd(result.toReturn)} 
-                        <span style={{ color: "rgba(80,200,120,0.9)", marginLeft: 6, fontSize: 12 }}>
+                        <span className="arb-calc-profit" style={{ color: "rgba(80,200,120,0.9)", marginLeft: 6, fontSize: 12 }}>
                           [+{formatUsd(result.toReturn - result.polyTotalCost)}]
                         </span>
                       </>
@@ -537,6 +543,7 @@ export default function ArbCalculatorModal({ row, onClose }) {
                 href={row.poly?.url || "#"}
                 target="_blank"
                 rel="noopener noreferrer"
+                className="arb-calc-link"
                 style={{
                   display: "block",
                   marginTop: 16,
@@ -550,7 +557,7 @@ export default function ArbCalculatorModal({ row, onClose }) {
                   textDecoration: "none",
                 }}
               >
-                GO TO POLYMARKET ↗
+                Polymarket ↗
               </a>
             </div>
 
@@ -579,7 +586,7 @@ export default function ArbCalculatorModal({ row, onClose }) {
                 <RowItem label="AVG SHARE PRICE" value={formatCents(opinionPrice)} />
                 <RowItem label="TOTAL COST" value={formatUsd(result.opinionCost)} copyValue={result.opinionCost.toFixed(2)} />
                 <RowItem 
-                  label={`EST. FEE (~${result.opinionFeePercentage.toFixed(2)}%)${result.isMinimumFeeApplied ? ' min' : ''}${result.isFeeMaxCapped ? ' max' : ''}`} 
+                  label={`EST. FEE (~${result.opinionFeePercentage.toFixed(2)}%)`} 
                   value={`~${formatUsd(result.opinionFee)}`} 
                   highlight="orange" 
                 />
@@ -590,7 +597,7 @@ export default function ArbCalculatorModal({ row, onClose }) {
                     value={
                       <>
                         {formatUsd(result.toReturn)} 
-                        <span style={{ color: "rgba(80,200,120,0.9)", marginLeft: 6, fontSize: 12 }}>
+                        <span className="arb-calc-profit" style={{ color: "rgba(80,200,120,0.9)", marginLeft: 6, fontSize: 12 }}>
                           [+{formatUsd(result.toReturn - result.opinionTotalCost)}]
                         </span>
                       </>
@@ -604,6 +611,7 @@ export default function ArbCalculatorModal({ row, onClose }) {
                 href={row.opinion?.url || "#"}
                 target="_blank"
                 rel="noopener noreferrer"
+                className="arb-calc-link"
                 style={{
                   display: "block",
                   marginTop: 16,
@@ -617,7 +625,7 @@ export default function ArbCalculatorModal({ row, onClose }) {
                   textDecoration: "none",
                 }}
               >
-                GO TO OPINION ↗
+                Opinion ↗
               </a>
             </div>
           </div>
@@ -710,7 +718,7 @@ export default function ArbCalculatorModal({ row, onClose }) {
         </div>
 
         {/* Footer Note */}
-        <div style={{ 
+        <div className="arb-calc-note" style={{ 
           padding: "12px 20px",
           borderTop: "1px solid rgba(255,255,255,0.05)",
           fontSize: 14,

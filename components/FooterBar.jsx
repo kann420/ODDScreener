@@ -220,9 +220,9 @@ export default function FooterBar({ version = "1.1.1", live = true }) {
           .odds-footer-right {
             min-width: auto;
           }
-          .odds-footer-right a:nth-child(2),
-          .odds-footer-right a:nth-child(3) {
-            display: none; /* mobile gọn hơn: ẩn Terms/Privacy */
+          /* Giữ DOCS và X hiển thị trên mobile, chỉ ẩn nếu có link thứ 3+ */
+          .odds-footer-right a:nth-child(n+3) {
+            display: none;
           }
         }
       `}</style>

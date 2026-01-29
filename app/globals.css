@@ -703,6 +703,24 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   gap: 14px;
 }
 
+.detail-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+/* Mobile stats - hidden on desktop */
+.detail-stats-mobile {
+  display: none;
+}
+
 .detail-stats {
   display: flex;
   align-items: center;
@@ -712,9 +730,79 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   font-size: 12px;
 }
 
+/* PC layout - detail-left-col as flex column */
+.detail-left-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Market ID row - default (PC) */
+.detail-market-id-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+/* Hide inline buttons on PC */
+.detail-buttons-inline {
+  display: none;
+}
+
 @media (max-width: 900px) {
   .detail-grid {
     grid-template-columns: 1fr !important;
+    display: flex !important;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  /* Mobile order: chart(1) -> orderbook(2) -> trades(3) */
+  .chart-wrapper {
+    order: 1;
+  }
+  
+  .orderbook-panel {
+    order: 2;
+  }
+  
+  .trades-panel {
+    order: 3;
+    margin-top: 0 !important;
+  }
+  
+  .detail-left-col {
+    display: contents !important;
+  }
+  
+  /* Show inline buttons on mobile, hide regular buttons */
+  .detail-buttons-inline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+  }
+  
+  .detail-buttons {
+    display: none !important;
+  }
+  
+  .btn-small-mobile {
+    font-size: 10px !important;
+    padding: 4px 8px !important;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  
+  .btn-text-mobile {
+    font-size: 10px;
+  }
+  
+  .bonus-icon-mobile {
+    width: 24px !important;
+    height: 24px !important;
   }
   
   .detail-header {
@@ -723,9 +811,10 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   }
   
   .detail-header-left {
-    flex-direction: column;
+    flex-direction: row;
     align-items: flex-start;
-    gap: 10px;
+    gap: 12px;
+    width: 100%;
   }
   
   .detail-thumbnail {
@@ -755,7 +844,19 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
 
 @media (max-width: 600px) {
   .detail-header-left {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 10px;
     width: 100%;
+  }
+  
+  /* Info text container next to thumbnail */
+  .detail-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
   
   .detail-thumbnail {
@@ -768,21 +869,44 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
     line-height: 1.3;
   }
   
-  .detail-stats {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    width: 100%;
+  /* Show mobile stats inline */
+  .detail-stats-mobile {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 11px;
+    margin-top: 4px;
   }
   
-  .detail-stats > div {
-    min-width: 0;
+  .detail-stats-mobile > div {
+    display: flex;
+    gap: 4px;
   }
   
-  .detail-rules-btn {
-    grid-column: 1 / -1;
-    margin-left: 0 !important;
-    justify-content: center;
+  .detail-stats-mobile .muted {
+    font-size: 10px;
+  }
+  
+  /* Buttons below stats on mobile */
+  .detail-buttons {
+    order: 3;
+    margin-top: 8px;
+  }
+  
+  /* Hide desktop stats on mobile */
+  .detail-stats-desktop {
+    display: none !important;
+  }
+  
+  /* Reduce chart height on mobile and pull controls up */
+  .chart-container {
+    height: 180px !important;
+  }
+  
+  .chart-controls {
+    margin-top: -40px !important;
+    position: relative;
+    z-index: 5;
   }
 }
 
@@ -790,12 +914,6 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
 .orderbook-panel {
   padding: 10px;
   height: fit-content;
-}
-
-@media (max-width: 900px) {
-  .orderbook-panel {
-    margin-top: 12px;
-  }
 }
 
 /* Trades table responsive */
@@ -1003,6 +1121,338 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   }
 }
 /* ===== END NAVIGATION MOBILE ===== */
+
+/* ===== SMART MONEY MOBILE ===== */
+/* Hide mobile list on desktop */
+.sm-mobile-list {
+  display: none;
+}
+
+/* Hide mobile title on desktop */
+.sm-mobile-title {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  /* Show mobile title */
+  .sm-mobile-title {
+    display: block !important;
+  }
+  
+  /* Hide note on mobile */
+  .sm-note {
+    display: none !important;
+  }
+  
+  /* Hide "Showing X-Y of Z trades" on mobile */
+  .sm-range-text {
+    display: none !important;
+  }
+  
+  /* Hide top pager on mobile */
+  .sm-pager-top {
+    display: none !important;
+  }
+  
+  /* Simplify min trade label on mobile */
+  .sm-min-trade-label {
+    display: none !important;
+  }
+  
+  /* Adjust controls layout for mobile - filter on top, search below */
+  .sm-controls {
+    flex-direction: column;
+    gap: 10px !important;
+  }
+  
+  /* Filter box first (order 1) */
+  .sm-min-trade-box {
+    order: 1;
+    justify-content: center;
+    padding: 8px 10px !important;
+    gap: 8px !important;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  
+  /* Search box second (order 2) */
+  .sm-search-box {
+    order: 2;
+    width: 100%;
+  }
+  
+  .sm-search-input {
+    width: 100% !important;
+  }
+  
+  /* Show all filter buttons on mobile */
+  .sm-btn-200,
+  .sm-btn-500 {
+    display: inline-flex !important;
+  }
+  
+  /* Hide desktop table on mobile */
+  .sm-desktop-table {
+    display: none !important;
+  }
+  
+  /* Show mobile card list */
+  .sm-mobile-list {
+    display: flex !important;
+    flex-direction: column;
+    gap: 1px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  
+  .sm-mobile-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+    background: rgba(0,0,0,0.3);
+    text-decoration: none;
+    color: #fff;
+    transition: background 0.15s;
+  }
+  
+  .sm-mobile-card:active {
+    background: rgba(255,255,255,0.05);
+  }
+  
+  .sm-mobile-card-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  
+  .sm-mobile-card-title {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: rgba(255,255,255,0.95);
+  }
+  
+  .sm-mobile-card-time {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.5);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  
+  .sm-mobile-card-time svg {
+    opacity: 0.6;
+  }
+  
+  .sm-mobile-card-bottom {
+    font-size: 13px;
+    color: rgba(255,255,255,0.7);
+    padding-left: 42px; /* align with title (32px thumb + 10px gap) */
+  }
+  
+  /* Center pager on mobile */
+  .sm-pager-bottom {
+    justify-content: center !important;
+  }
+}
+/* ===== END SMART MONEY MOBILE ===== */
+
+/* ===== ARBITRAGE MOBILE ===== */
+@media (max-width: 600px) {
+  .arb-header {
+    padding: 12px !important;
+  }
+  
+  .arb-header-top {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+  
+  .arb-title {
+    font-size: 18px !important;
+  }
+  
+  .arb-subtitle {
+    font-size: 11px !important;
+    display: none;
+  }
+  
+  .arb-header-right {
+    width: 100%;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    justify-content: flex-start;
+  }
+  
+  .arb-filter-btn {
+    padding: 5px 10px !important;
+    font-size: 11px !important;
+  }
+  
+  .arb-mode-toggle {
+    flex: 1;
+  }
+  
+  .arb-mode-toggle button {
+    padding: 5px 8px !important;
+    font-size: 11px !important;
+    flex: 1;
+  }
+  
+  .arb-min-arb-pill {
+    display: none !important;
+  }
+  
+  .arb-scan-btn-wrap {
+    width: 100%;
+    margin-top: 4px;
+  }
+  
+  .arb-scan-btn-wrap .btn {
+    width: 100%;
+    padding: 10px !important;
+  }
+  
+  /* Hide table header on mobile */
+  .arb-table-header {
+    display: none !important;
+  }
+  
+  /* Card layout for rows on mobile */
+  .arb-row {
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 14px !important;
+    gap: 12px !important;
+    background: rgba(0,0,0,0.25);
+    border-radius: 12px !important;
+    margin-bottom: 8px;
+  }
+  
+  /* Title area - row layout on mobile */
+  .arb-row-title {
+    flex-direction: row !important;
+    gap: 12px !important;
+    align-items: flex-start !important;
+  }
+  
+  .arb-row-img {
+    width: 60px !important;
+    min-width: 60px !important;
+  }
+  
+  .arb-row-img-inner {
+    width: 60px !important;
+    height: 60px !important;
+    border-radius: 8px !important;
+  }
+  
+  .arb-row-info {
+    flex: 1;
+    min-width: 0;
+  }
+  
+  .arb-row-market-title {
+    font-size: 14px !important;
+    line-height: 1.3 !important;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  .arb-row-links {
+    display: none !important;
+  }
+  
+  /* Strategy section - compact */
+  .arb-row-strategy {
+    order: 3;
+    display: none !important;
+  }
+  
+  /* Expires - inline with arb */
+  .arb-row-expires {
+    order: 2;
+    display: none !important;
+  }
+  
+  /* Arb percentage - bottom of card */
+  .arb-row-arb {
+    order: 1;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  
+  .arb-row-pct {
+    font-size: 20px !important;
+  }
+  
+  .arb-row-arb .muted {
+    display: none !important;
+  }
+  
+  .arb-calc-btn {
+    padding: 8px 14px !important;
+    margin-top: 0 !important;
+  }
+  
+  /* Filter panel on mobile */
+  .arb-header .panel,
+  .arb-header > div > div:last-child {
+    padding: 10px !important;
+  }
+  
+  .arb-header input[type="number"] {
+    width: 70px !important;
+    height: 32px !important;
+    font-size: 12px !important;
+  }
+  
+  /* Calculator modal notes - smaller text */
+  .arb-calc-note {
+    font-size: 11px !important;
+    padding: 10px 14px !important;
+    line-height: 1.5;
+  }
+  
+  .arb-calc-note br + br {
+    display: none;
+  }
+  
+  /* Hide fast filter on mobile */
+  .arb-calc-fast-filter {
+    display: none !important;
+  }
+  
+  /* Calculator row - profit text wrap on mobile */
+  .arb-calc-profit {
+    display: block !important;
+    margin-left: 0 !important;
+    margin-top: 2px;
+  }
+  
+  /* Calculator links smaller on mobile */
+  .arb-calc-link {
+    padding: 10px !important;
+    font-size: 12px !important;
+  }
+  
+  /* Calculator row items - tighter on mobile */
+  .arb-calc-row {
+    font-size: 12px !important;
+  }
+}
+/* ===== END ARBITRAGE MOBILE ===== */
 
 /* ===== SKELETON PULSE ANIMATION ===== */
 @keyframes skeleton-pulse {

@@ -59,6 +59,7 @@ export default function ArbitageBoard() {
   const [minArbPct, setMinArbPct] = useState(0.1); // Min arb percentage
   const [minShares, setMinShares] = useState(0); // Min shares on orderbook
   const [showFilters, setShowFilters] = useState(true); // Toggle filter panel - default open
+  const [scanMode, setScanMode] = useState("quick"); // "quick" (100 markets) or "full" (all markets)
   
   // Track if user has ever scanned
   const [hasScanned, setHasScanned] = useState(false);
@@ -117,7 +118,7 @@ export default function ArbitageBoard() {
     setProgress({ phase: "connecting", message: "Connecting..." });
     setStreamingRows([]);
 
-    const url = `/api/arbitage/stream?priceMode=${encodeURIComponent(priceMode)}&minArbPct=${encodeURIComponent(minArbPct)}&limit=100`;
+    const url = `/api/arbitage/stream?priceMode=${encodeURIComponent(priceMode)}&minArbPct=${encodeURIComponent(minArbPct)}&limit=100&scanMode=${encodeURIComponent(scanMode)}`;
     const es = new EventSource(url);
     eventSourceRef.current = es;
 
@@ -200,7 +201,7 @@ export default function ArbitageBoard() {
       setLoading(false);
       setProgress(null);
     };
-  }, [priceMode, minArbPct]);
+  }, [priceMode, minArbPct, scanMode]);
 
   // Fallback: use regular fetch if SSE fails
   const loadDataFallback = useCallback(async () => {
@@ -249,19 +250,23 @@ export default function ArbitageBoard() {
   const sorted = useMemo(() => {
     const arr = Array.isArray(displayRows) ? [...displayRows] : [];
     
-    // Sort based on sortField
-    if (sortField === "endDate") {
-      arr.sort((a, b) => {
+    // Sort based on sortField, but always prioritize whitelisted items first
+    arr.sort((a, b) => {
+      // Whitelisted items always come first
+      if (a.isWhitelisted && !b.isWhitelisted) return -1;
+      if (!a.isWhitelisted && b.isWhitelisted) return 1;
+      
+      // Then sort by selected field
+      if (sortField === "endDate") {
         const dateA = a.endDate ? new Date(a.endDate).getTime() : Infinity;
         const dateB = b.endDate ? new Date(b.endDate).getTime() : Infinity;
         return sortAsc ? dateA - dateB : dateB - dateA;
-      });
-    } else {
-      arr.sort((a, b) => sortAsc 
-        ? (a.arbPct ?? 0) - (b.arbPct ?? 0) 
-        : (b.arbPct ?? 0) - (a.arbPct ?? 0)
-      );
-    }
+      } else {
+        return sortAsc 
+          ? (a.arbPct ?? 0) - (b.arbPct ?? 0) 
+          : (b.arbPct ?? 0) - (a.arbPct ?? 0);
+      }
+    });
     return arr.filter((r) => {
       // Filter by min arb %
       if ((r.arbPct ?? 0) < minArbPct) return false;
@@ -293,13 +298,13 @@ export default function ArbitageBoard() {
   const progressPct = progress?.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <div className="arb-board" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {/* Header */}
-      <div className="panel" style={{ padding: 14 }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 900 }}>Arbitrage</div>
-            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+      <div className="panel arb-header" style={{ padding: 14 }}>
+        <div className="arb-header-top" style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+          <div className="arb-header-left">
+            <div className="arb-title" style={{ fontSize: 22, fontWeight: 900 }}>Arbitrage</div>
+            <div className="muted arb-subtitle" style={{ fontSize: 12, marginTop: 6 }}>
               {priceMode === "bids" 
                 ? <>Using best <b>BID</b> prices from Opinion & Polymarket.</>
                 : <>Using best <b>ASK</b> prices from Opinion & Polymarket.</>
@@ -315,12 +320,12 @@ export default function ArbitageBoard() {
             ) : null}
           </div>
 
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <div className="arb-header-right" style={{ display: "flex", gap: 10, alignItems: "center" }}>
             {/* Filter toggle */}
             <button
               type="button"
               onClick={() => setShowFilters((v) => !v)}
-              className="btn ghost"
+              className="btn ghost arb-filter-btn"
               style={{
                 padding: "6px 12px",
                 fontSize: 12,
@@ -332,7 +337,7 @@ export default function ArbitageBoard() {
               ⚙️ Filters
             </button>
             {/* Price Mode Toggle */}
-            <div style={{ display: "flex", gap: 4, background: "rgba(255,255,255,0.05)", borderRadius: 8, padding: 3 }}>
+            <div className="arb-mode-toggle" style={{ display: "flex", gap: 4, background: "rgba(255,255,255,0.05)", borderRadius: 8, padding: 3 }}>
               <button
                 type="button"
                 onClick={() => setPriceMode("bids")}
@@ -366,11 +371,11 @@ export default function ArbitageBoard() {
                 Asks Mode
               </button>
             </div>
-            <div className="pill">
+            <div className="pill arb-min-arb-pill">
               Min Arb: <b>{minArbPct.toFixed(2)}%</b>
               {minShares > 0 && <> • Min: <b>{minShares}</b> shares</>}
             </div>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+            <div className="arb-scan-btn-wrap" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
               <button 
                 className="btn ghost" 
                 type="button" 
@@ -398,10 +403,10 @@ export default function ArbitageBoard() {
             borderRadius: 10, 
             border: "1px solid rgba(255,255,255,0.08)" 
           }}>
-            <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
               {/* Min Arb % */}
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <label style={{ fontSize: 11, fontWeight: 800, color: "rgba(233,238,245,0.6)" }}>
+                <label style={{ fontSize: 11, fontWeight: 800, color: "rgba(233,238,245,0.6)", height: 13 }}>
                   MIN ARB %
                 </label>
                 <input
@@ -412,7 +417,7 @@ export default function ArbitageBoard() {
                   min="0"
                   style={{
                     width: 90,
-                    height: 36,
+                    height: 38,
                     padding: "0 10px",
                     fontSize: 13,
                     fontWeight: 700,
@@ -427,7 +432,7 @@ export default function ArbitageBoard() {
 
               {/* Min Shares */}
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <label style={{ fontSize: 11, fontWeight: 800, color: "rgba(233,238,245,0.6)" }}>
+                <label style={{ fontSize: 11, fontWeight: 800, color: "rgba(233,238,245,0.6)", height: 13 }}>
                   MIN SHARES
                 </label>
                 <input
@@ -439,7 +444,7 @@ export default function ArbitageBoard() {
                   placeholder="0"
                   style={{
                     width: 90,
-                    height: 36,
+                    height: 38,
                     padding: "0 10px",
                     fontSize: 13,
                     fontWeight: 700,
@@ -451,6 +456,70 @@ export default function ArbitageBoard() {
                   }}
                 />
               </div>
+
+              {/* Scan Mode */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label style={{ fontSize: 11, fontWeight: 800, color: "rgba(233,238,245,0.6)", height: 13 }}>
+                  SCAN MODE
+                </label>
+                <div style={{ display: "flex", gap: 8, height: 38, alignItems: "stretch" }}>
+                  <label 
+                    style={{ 
+                      display: "flex", 
+                      alignItems: "center", 
+                      gap: 6, 
+                      cursor: "pointer",
+                      padding: "0 12px",
+                      borderRadius: 6,
+                      background: scanMode === "quick" ? "rgba(80,200,120,0.15)" : "rgba(0,0,0,0.2)",
+                      border: scanMode === "quick" ? "1px solid rgba(80,200,120,0.4)" : "1px solid rgba(255,255,255,0.1)",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="scanMode"
+                      value="quick"
+                      checked={scanMode === "quick"}
+                      onChange={() => setScanMode("quick")}
+                      style={{ accentColor: "rgb(80,200,120)" }}
+                    />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: scanMode === "quick" ? "rgba(80,200,120,0.95)" : "rgba(233,238,245,0.7)" }}>
+                      Quick Scan
+                    </span>
+                  </label>
+                  <label 
+                    style={{ 
+                      display: "flex", 
+                      alignItems: "center", 
+                      gap: 6, 
+                      cursor: "pointer",
+                      padding: "0 12px",
+                      borderRadius: 6,
+                      background: scanMode === "full" ? "rgba(255,180,50,0.15)" : "rgba(0,0,0,0.2)",
+                      border: scanMode === "full" ? "1px solid rgba(255,180,50,0.4)" : "1px solid rgba(255,255,255,0.1)",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="scanMode"
+                      value="full"
+                      checked={scanMode === "full"}
+                      onChange={() => setScanMode("full")}
+                      style={{ accentColor: "rgb(255,180,50)" }}
+                    />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: scanMode === "full" ? "rgba(255,180,50,0.95)" : "rgba(233,238,245,0.7)" }}>
+                      Full Scan
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+            {/* Scan mode description - moved outside to avoid height mismatch */}
+            <div style={{ fontSize: 14, fontWeight: 800, color: "rgba(243, 238, 238, 0.91)", marginTop: 10 }}>
+              {scanMode === "quick" 
+                ? "*Scan top 100 markets. The results are available almost instantly."
+                : "*Scan the entire market. You may have to wait up to 1 minute."
+              }
             </div>
           </div>
         )}
@@ -490,7 +559,7 @@ export default function ArbitageBoard() {
 
       {/* Table Header */}
       <div
-        className="panel"
+        className="panel arb-table-header"
         style={{
           padding: "10px 12px",
           display: "grid",
@@ -603,7 +672,7 @@ export default function ArbitageBoard() {
 function Row({ r, priceMode, onCalculatorClick }) {
   return (
     <div
-      className="panel"
+      className="panel arb-row"
       style={{
         padding: 12,
         display: "grid",
@@ -613,10 +682,11 @@ function Row({ r, priceMode, onCalculatorClick }) {
       }}
     >
       {/* Title col */}
-      <div style={{ display: "flex", gap: 12, minWidth: 0 }}>
+      <div className="arb-row-title" style={{ display: "flex", gap: 12, minWidth: 0 }}>
         {/* Image (Opinion) */}
-        <div style={{ width: 120, flex: "0 0 auto" }}>
+        <div className="arb-row-img" style={{ width: 120, flex: "0 0 auto" }}>
           <div
+            className="arb-row-img-inner"
             style={{
               width: 120,
               height: 78,
@@ -647,8 +717,8 @@ function Row({ r, priceMode, onCalculatorClick }) {
         </div>
 
         {/* Text + Links */}
-        <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ fontSize: 15, fontWeight: 900, lineHeight: 1.2 }} title={r.parentTitle ? `${r.parentTitle} - ${r.outcome || r.title}` : (r.title || r.opinionTitle || r.polyTitle)}>
+        <div className="arb-row-info" style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="arb-row-market-title" style={{ fontSize: 15, fontWeight: 900, lineHeight: 1.2 }} title={r.parentTitle ? `${r.parentTitle} - ${r.outcome || r.title}` : (r.title || r.opinionTitle || r.polyTitle)}>
             {r.parentTitle ? (
               <>
                 <span style={{ color: "rgba(180,195,214,0.75)" }}>{r.parentTitle}</span>
@@ -660,15 +730,15 @@ function Row({ r, priceMode, onCalculatorClick }) {
             )}
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <VenueLine logoSrc="/polymarket_600.svg" label="Polymarket" url={r.poly?.url} />
-            <VenueLine logoSrc="/logo-opinion.svg" label="Opinion" url={r.opinion?.url} />
+          <div className="arb-row-links" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <VenueLine logoSrc="/2polymarket_600.webp" label="Polymarket" url={r.poly?.url} />
+            <VenueLine logoSrc="/2logo-opinion.webp" label="Opinion" url={r.opinion?.url} />
           </div>
         </div>
       </div>
 
       {/* Strat col */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div className="arb-row-strategy" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {(r.strategy ?? []).slice(0, 6).map((line, idx) => (
           <div key={idx} style={{ fontSize: 14, fontWeight: 900 }}>
             {line}
@@ -676,7 +746,7 @@ function Row({ r, priceMode, onCalculatorClick }) {
         ))}
         {/* Price details */}
         {r.prices && (
-          <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
+          <div className="arb-row-prices" style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
             <div className="muted" style={{ fontSize: 11, fontWeight: 700 }}>
               Poly: YES {formatCents(r.prices.polyYes)} · NO {formatCents(r.prices.polyNo)}
             </div>
@@ -693,15 +763,15 @@ function Row({ r, priceMode, onCalculatorClick }) {
       </div>
 
       {/* Expires col */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+      <div className="arb-row-expires" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
         <div style={{ fontSize: 16, fontWeight: 900, color: "rgba(233,238,245,0.85)" }}>
           {formatExpires(r.endDate)}
         </div>
       </div>
 
       {/* Arb col */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "center" }}>
-        <div style={{ fontSize: 24, fontWeight: 1000 }}>{formatPct(r.arbPct)}</div>
+      <div className="arb-row-arb" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "center" }}>
+        <div className="arb-row-pct" style={{ fontSize: 24, fontWeight: 1000 }}>{formatPct(r.arbPct)}</div>
         <div className="muted" style={{ fontSize: 12, fontWeight: 800, marginTop: 4 }}>
           Spread
         </div>
@@ -709,6 +779,7 @@ function Row({ r, priceMode, onCalculatorClick }) {
         <button
           type="button"
           onClick={onCalculatorClick}
+          className="arb-calc-btn"
           style={{
             marginTop: 8,
             padding: "6px 12px",

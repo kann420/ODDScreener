@@ -228,7 +228,7 @@ export default function AccessGuard({ children }) {
             marginBottom: 4,
           }}>
             <Image 
-              src="/logonewest.svg" 
+              src="/2oddscreeners_logo.webp" 
               alt="ODDScreener" 
               width={300} 
               height={194}

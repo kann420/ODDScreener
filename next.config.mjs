@@ -13,24 +13,33 @@ const nextConfig = {
       },
     ],
     
-    // Device sizes for responsive images
-    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    // Device sizes for responsive images (optimized for common breakpoints)
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256],
     
-    // Minimize image size
-    minimumCacheTTL: 60 * 60 * 24 * 30, // 30 days
+    // Minimize image size - 30 days cache
+    minimumCacheTTL: 60 * 60 * 24 * 30,
+    
+    // Disable image optimization for SVGs (they're already optimized)
+    dangerouslyAllowSVG: true,
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
 
   // ===== Compression (Gzip/Brotli) =====
   compress: true,
 
-  // ===== Bundle Optimization =====
-  swcMinify: true,
-  
+  // ===== Production Build Optimization =====
+  productionBrowserSourceMaps: false, // Disable source maps in production for smaller bundles
+
   // ===== Experimental Features for Faster Loading =====
   experimental: {
-    // Enable optimized package imports
-    optimizePackageImports: ['react', 'react-dom'],
+    // Enable optimized package imports for common libraries
+    optimizePackageImports: [
+      'react', 
+      'react-dom',
+      'lightweight-charts',  // If you use trading charts
+      'date-fns',           // If you use date-fns
+    ],
   },
 
   // ===== Headers for Caching =====
@@ -71,23 +80,41 @@ const nextConfig = {
 
   // ===== Webpack Optimization =====
   webpack: (config, { dev, isServer }) => {
-    // Production optimizations
+    // Production optimizations only
     if (!dev && !isServer) {
       config.optimization = {
         ...config.optimization,
+        // Optimize chunk splitting for better caching
         splitChunks: {
           chunks: 'all',
           minSize: 20000,
-          maxSize: 244000,
+          maxSize: 200000, // Reduced from 244000 for better loading
           cacheGroups: {
             default: false,
             vendors: false,
-            // Vendor chunk for node_modules
-            vendor: {
-              name: 'vendor',
+            // Framework chunk (React, etc.)
+            framework: {
+              name: 'framework',
               chunks: 'all',
-              test: /node_modules/,
-              priority: 20,
+              test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+              priority: 40,
+              enforce: true,
+            },
+            // Libraries chunk (large dependencies)
+            lib: {
+              test: /[\\/]node_modules[\\/]/,
+              name(module) {
+                const packageName = module.context.match(
+                  /[\\/]node_modules[\\/](.*?)([\\/]|$)/
+                )?.[1];
+                // Create separate chunks for large libraries
+                if (packageName && ['lightweight-charts', 'recharts', 'd3'].some(lib => packageName.includes(lib))) {
+                  return `lib.${packageName.replace('@', '')}`;
+                }
+                return 'vendors';
+              },
+              priority: 30,
+              chunks: 'all',
             },
             // Common chunk for shared code
             common: {

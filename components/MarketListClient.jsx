@@ -1196,7 +1196,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
             }}
           >
             Chance{" "}
-            <span style={{ fontSize: 10, opacity: sortConfig.key === "chance" ? 1 : 0.5 }}>
+            <span style={{ fontSize: 10, opacity: sortConfig.key === "chance" ? 1 : 0.5 }} suppressHydrationWarning>
               {getSortIcon("chance")}
             </span>
           </div>
@@ -1222,7 +1222,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
             }}
           >
             Volume (24h){" "}
-            <span style={{ fontSize: 10, opacity: sortConfig.key === "volume" ? 1 : 0.5 }}>
+            <span style={{ fontSize: 10, opacity: sortConfig.key === "volume" ? 1 : 0.5 }} suppressHydrationWarning>
               {getSortIcon("volume")}
             </span>
           </div>
@@ -1248,7 +1248,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
             }}
           >
             Expires{" "}
-            <span style={{ fontSize: 10, opacity: sortConfig.key === "expires" ? 1 : 0.5 }}>
+            <span style={{ fontSize: 10, opacity: sortConfig.key === "expires" ? 1 : 0.5 }} suppressHydrationWarning>
               {getSortIcon("expires")}
             </span>
           </div>
@@ -1258,13 +1258,11 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
       {/* List */}
       <div className="market-list-container" style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
         {pageList.length === 0 ? (
-          <div className="muted" style={{ textAlign: "center", padding: 20 }}>
-            {activeTab === "bonus" && bonusLoading
+          <div className="muted" style={{ textAlign: "center", padding: 20 }} suppressHydrationWarning>
+            {activeTab === "bonus"
               ? "Scanning for bonus markets... Up to ~30s to fully load."
               : search
               ? "No markets found"
-              : activeTab === "bonus"
-              ? "Loading..."
               : "Loading..."}
           </div>
         ) : (
@@ -1313,7 +1311,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
       )}
 
       {/* Tab info */}
-      <div className="muted" style={{ textAlign: "center", marginTop: 12, fontSize: 11 }}>
+      <div className="muted" style={{ textAlign: "center", marginTop: 12, fontSize: 11 }} suppressHydrationWarning>
         {activeTab === "hot"
           ? `Top ${Math.min(HOT_LIMIT, sortedMarkets.length)} hot new markets (ranked by 24h volume)`
           : activeTab === "new"
@@ -1321,9 +1319,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
           : activeTab === "trending"
           ? `Top ${Math.min(TRENDING_COUNT, sortedMarkets.length)} markets by 24h volume`
           : activeTab === "bonus"
-          ? bonusLoading
-            ? `Scanning... Found ${sortedMarkets.length} bonus markets so far`
-            : `${sortedMarkets.length} bonus markets`
+          ? `${sortedMarkets.length} bonus markets`
           : `${sortedMarkets.length} markets total`}
       </div>
     </div>

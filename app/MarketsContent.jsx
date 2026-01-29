@@ -1,7 +1,6 @@
 import { opinionFetch, opinionFetchAllMarkets, opinionFetchCategoricalChildren, normalizeMarketList } from "@/lib/opinion";
 import { getMultiOutcomeMarkets } from "@/lib/opinionAnalytics";
 import MarketListClient from "@/components/MarketListClient";
-import DiscoverNewsBar from "@/components/DiscoverNewsBar";
 
 /**
  * Convert various timestamp formats to milliseconds:
@@ -380,10 +379,7 @@ async function MarketsContent() {
   }
 
   return (
-    <>
-      <DiscoverNewsBar initialMarkets={filtered} />
-      <MarketListClient markets={filtered} initialBonusIds={bonusIdsFromList} />
-    </>
+    <MarketListClient markets={filtered} initialBonusIds={bonusIdsFromList} />
   );
 }
 

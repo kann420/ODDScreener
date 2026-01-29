@@ -82,50 +82,6 @@ export function MarketRowSkeleton() {
   );
 }
 
-// News card skeleton for DiscoverNewsBar horizontal scroll
-export function NewsCardSkeleton() {
-  return (
-    <div className="news-card skeleton-card" style={{
-      display: 'flex',
-      alignItems: 'center',
-      padding: '14px 18px',
-      borderRadius: '12px',
-      border: '1px solid var(--border)',
-      background: 'rgba(255,255,255,0.03)',
-      gap: '12px',
-      minWidth: '280px',
-      maxWidth: '320px',
-      flexShrink: 0,
-      animation: 'skeleton-pulse 1.5s ease-in-out infinite',
-    }}>
-      {/* Icon */}
-      <div className="skeleton-box" style={{
-        width: '36px',
-        height: '36px',
-        borderRadius: '8px',
-        background: 'rgba(255,255,255,0.08)',
-        flexShrink: 0,
-      }} />
-      
-      {/* Text content */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        <div className="skeleton-box" style={{
-          width: '90%',
-          height: '14px',
-          borderRadius: '4px',
-          background: 'rgba(255,255,255,0.10)',
-        }} />
-        <div className="skeleton-box" style={{
-          width: '60%',
-          height: '12px',
-          borderRadius: '4px',
-          background: 'rgba(255,255,255,0.06)',
-        }} />
-      </div>
-    </div>
-  );
-}
-
 // Tab bar skeleton - matches NEW/HOT/TRENDING/BONUS/ALL tabs
 export function TabBarSkeleton() {
   return (
@@ -192,23 +148,6 @@ export function TableHeaderSkeleton() {
 export function DiscoverPageSkeleton({ rowCount = 10 }) {
   return (
     <div className="col" style={{ gap: 12, paddingBottom: 72 }}>
-      {/* News bar skeleton - horizontal scroll */}
-      <div className="panel" style={{ 
-        padding: '12px',
-        overflow: 'hidden',
-      }}>
-        <div style={{
-          display: 'flex',
-          gap: '12px',
-          overflowX: 'auto',
-          paddingBottom: '4px',
-        }}>
-          {[1, 2, 3, 4].map((i) => (
-            <NewsCardSkeleton key={i} />
-          ))}
-        </div>
-      </div>
-
       {/* Main market list panel */}
       <div className="panel" style={{ overflow: 'hidden' }}>
         {/* Tabs */}

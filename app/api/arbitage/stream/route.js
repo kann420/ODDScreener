@@ -21,6 +21,7 @@ export async function GET(req) {
   const minSimilarity = Math.max(0.1, Math.min(1, toNum(searchParams.get("minSimilarity"), 0.35)));
   const priceMode = searchParams.get("priceMode") || "bids";
   const limit = Math.max(1, Math.min(500, Math.floor(toNum(searchParams.get("limit"), 100))));
+  const scanMode = searchParams.get("scanMode") || "quick"; // "quick" = 100 markets, "full" = unlimited
 
   // Create a ReadableStream for SSE
   const stream = new ReadableStream({
@@ -39,6 +40,7 @@ export async function GET(req) {
           minSimilarity,
           priceMode,
           limit,
+          scanMode, // Pass scan mode to control market limit
           onProgress: (progress) => {
             // Progress update: { phase, current, total, message }
             send("progress", progress);

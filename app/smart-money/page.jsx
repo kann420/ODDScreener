@@ -53,7 +53,7 @@ function fmtUsd(n) {
 }
 
 export default function SmartMoneyPage() {
-  const [minAmount, setMinAmount] = useState(200);
+  const [minAmount, setMinAmount] = useState(1000);
   const [rows, setRows] = useState([]);
   const [customOpen, setCustomOpen] = useState(false);
   const [customVal, setCustomVal] = useState("1000");
@@ -279,17 +279,23 @@ export default function SmartMoneyPage() {
   );
 
   return (
-    <div style={{ padding: 18 }}>
-      <div style={{ opacity: 0.8, marginBottom: 10, fontSize: 13, color: "#f1c964" }}>
+    <div style={{ padding: 18 }} className="smart-money-page">
+      <div className="sm-note" style={{ opacity: 0.8, marginBottom: 10, fontSize: 13, color: "#f1c964" }}>
         Note: Last 24h trades only. Tracking up to 100 markets with recent smart flow (refreshed hourly).
       </div>
 
-      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
-        <div style={{ flex: 1, display: "flex", gap: 10 }}>
+      {/* Mobile title */}
+      <div className="sm-mobile-title" style={{ fontWeight: 700, fontSize: 30, marginBottom: 12, color: "rgba(255,255,255,0.9)" }}>
+        Smart Money
+      </div>
+
+      <div className="sm-controls" style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
+        <div className="sm-search-box" style={{ flex: 1, display: "flex", gap: 10 }}>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by Market Title"
+            className="sm-search-input"
             style={{
               flex: 1,
               padding: "12px 12px",
@@ -303,6 +309,7 @@ export default function SmartMoneyPage() {
         </div>
 
         <div
+          className="sm-min-trade-box"
           style={{
             display: "flex",
             alignItems: "center",
@@ -313,9 +320,10 @@ export default function SmartMoneyPage() {
             background: "rgba(0,0,0,.25)",
           }}
         >
-          <div style={{ opacity: 0.8, fontSize: 13 }}>Min Trade Size</div>
+          <div className="sm-min-trade-label" style={{ opacity: 0.8, fontSize: 13 }}>Min Trade Size</div>
 
           <button
+            className="sm-btn-200"
             onClick={() => setMinAmount(200)}
             style={{
               padding: "6px 12px",
@@ -330,6 +338,7 @@ export default function SmartMoneyPage() {
             $200
           </button>
           <button
+            className="sm-btn-500"
             onClick={() => setMinAmount(500)}
             style={{
               padding: "6px 12px",
@@ -375,8 +384,9 @@ export default function SmartMoneyPage() {
         </div>
       </div>
 
-      {/* ✅ Pager (top) */}
+      {/* ✅ Pager (top) - hidden on mobile */}
       <div
+        className="sm-pager-top"
         style={{
           display: "flex",
           alignItems: "center",
@@ -385,7 +395,7 @@ export default function SmartMoneyPage() {
           marginBottom: 10,
         }}
       >
-        <div style={{ opacity: 0.8, fontSize: 12 }}>{rangeText}</div>
+        <div className="sm-range-text" style={{ opacity: 0.8, fontSize: 12 }}>{rangeText}</div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <PagerButton onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
@@ -424,7 +434,9 @@ export default function SmartMoneyPage() {
         </div>
       </div>
 
+      {/* Desktop table */}
       <div
+        className="sm-desktop-table"
         style={{
           border: "1px solid rgba(255,255,255,.08)",
           borderRadius: 18,
@@ -484,6 +496,7 @@ export default function SmartMoneyPage() {
             return (
               <div
                 key={`${r.marketId}-${r.ts}-${i}`}
+                className="sm-row-desktop"
                 style={{
                   display: "grid",
                   gridTemplateColumns: "120px 140px 1fr 140px 90px",
@@ -580,9 +593,64 @@ export default function SmartMoneyPage() {
         )}
       </div>
 
+      {/* ✅ Mobile card layout */}
+      <div className="sm-mobile-list">
+        {displayedRows.length === 0 ? (
+          <div style={{ padding: 14, opacity: 0.7, textAlign: "center" }}>{rows.length === 0 ? "Loading…" : "No results."}</div>
+        ) : (
+          displayedRows.map((r, i) => {
+            const isSell = String(r.side).toLowerCase().includes("sell");
+            const outcome = String(r.outcome || "").toUpperCase();
+            const isNO = outcome.includes("NO");
+
+            const thumbUrl =
+              r?.market?.thumbnailUrl ||
+              r?.market?.coverUrl ||
+              r?.thumbnailUrl ||
+              (r?.marketId ? thumbById.get(r.marketId) : "");
+
+            return (
+              <a
+                key={`mobile-${r.marketId}-${r.ts}-${i}`}
+                href={`/market/${r.marketId}`}
+                className="sm-mobile-card"
+              >
+                <div className="sm-mobile-card-top">
+                  <MarketThumbnailSM url={thumbUrl} size={32} radius={8} />
+                  <div className="sm-mobile-card-title">
+                    {r.marketTitle || `Market #${r.marketId}`}
+                  </div>
+                  <div className="sm-mobile-card-time">
+                    {timeAgo(r.ts)}
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" y1="14" x2="21" y2="3" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="sm-mobile-card-bottom">
+                  <span style={{ color: isSell ? "#ff6b6b" : "#35d07f", fontWeight: 700 }}>
+                    {isSell ? "sold" : "bought"}
+                  </span>
+                  {" "}
+                  <span style={{ color: isNO ? "#ff6b6b" : "#35d07f", fontWeight: 700 }}>
+                    {outcome || "—"}
+                  </span>
+                  {" at "}
+                  <span style={{ opacity: 0.8 }}>{r.price || "—"}</span>
+                  {" "}
+                  <span style={{ fontWeight: 700 }}>(${fmtUsd(r.amount)})</span>
+                </div>
+              </a>
+            );
+          })
+        )}
+      </div>
+
       {/* ✅ Pager (bottom) */}
       {displayedRows.length > 0 && (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+        <div className="sm-pager-bottom" style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <PagerButton onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
               ← Prev

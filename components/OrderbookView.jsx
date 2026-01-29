@@ -659,10 +659,63 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
             {/* NEW: thumbnail at the exact left spot you marked */}
             <MarketThumbnailDetail url={thumbnailUrl} size={100} radius={14} />
 
-            <div>
-              <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>Market #{marketId}</div>
-              <div className="detail-title" style={{ fontWeight: 900, fontSize: 16, display: "flex", alignItems: "center", gap: 12 }}>
+            <div className="detail-info">
+              {/* Market ID row with buttons on mobile */}
+              <div className="detail-market-id-row">
+                <span className="muted" style={{ fontSize: 11 }}>Market #{marketId}</span>
+                {/* Buttons - shown inline on mobile */}
+                <div className="detail-buttons-inline">
+                  <a
+                    href={`https://app.opinion.trade/detail?topicId=${marketId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-small-mobile"
+                  >
+                    <img src="/opinion-logo.svg" alt="Opinion" width="14" height="14" />
+                    <span className="btn-text-mobile">View on Opinion</span>
+                  </a>
+                  {hasBonus && (
+                    <img 
+                      src="/gift_icon_24.svg" 
+                      alt="Bonus" 
+                      title="Bonus market"
+                      className="bonus-icon-mobile"
+                    />
+                  )}
+                </div>
+              </div>
+              <div className="detail-title" style={{ fontWeight: 900, fontSize: 16 }}>
                 {title || "Market"}
+              </div>
+              
+              {/* Stats - shown here on mobile, hidden on desktop */}
+              <div className="detail-stats-mobile">
+                <div>
+                  <span className="muted">Chance</span>
+                  <span style={{ fontWeight: 700, color: "#fff" }}>{mid ? (mid * 100).toFixed(1) + "%" : "-"}</span>
+                </div>
+                <div>
+                  <span className="muted">Expires</span>
+                  <span style={{ fontWeight: 700 }}>{expiresAt ? (() => {
+                    const ts = Number(expiresAt);
+                    const ms = ts > 1e12 ? ts : ts * 1000;
+                    const d = new Date(ms);
+                    if (isNaN(d.getTime())) return "-";
+                    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                  })() : "-"}</span>
+                </div>
+                <div>
+                  <span className="muted">24h Vol</span>
+                  <span style={{ fontWeight: 700, color: "#fff" }}>{volume24h ? `$${fmtQty(volume24h)}` : "-"}</span>
+                </div>
+                <div>
+                  <span className="muted">Total Vol</span>
+                  <span style={{ fontWeight: 700, color: "#fff" }}>{totalVolume ? `$${fmtQty(totalVolume)}` : "-"}</span>
+                </div>
+              </div>
+              
+              {/* Buttons section - shown on desktop, hidden on mobile */}
+              <div className="detail-buttons">
                 <a
                   href={`https://app.opinion.trade/detail?topicId=${marketId}`}
                   target="_blank"
@@ -691,8 +744,8 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
           </div>
         </div>
 
-        {/* EVERYTHING BELOW: unchanged */}
-        <div className="detail-stats">
+        {/* Stats for desktop - hidden on mobile */}
+        <div className="detail-stats detail-stats-desktop">
           <div>
             <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Chance</div>
             <div style={{ fontWeight: 700, color: "#fff" }}>{mid ? (mid * 100).toFixed(1) + "%" : "-"}</div>
@@ -707,7 +760,7 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
               return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
             })() : "-"}</div>
           </div>
-          <div>
+          <div className="hide-on-mobile">
             <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>24h Change</div>
             <div style={{ fontWeight: 700 }}>-</div>
           </div>
@@ -719,15 +772,15 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
             <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Total Volume</div>
             <div style={{ fontWeight: 700, color: "#fff" }}>{totalVolume ? `$${fmtQty(totalVolume)}` : "-"}</div>
           </div>
-          <div>
+          <div className="hide-on-mobile">
             <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Open Interest</div>
             <div style={{ fontWeight: 700 }}>{openInterest ? `$${fmtQty(openInterest)}` : "-"}</div>
           </div>
-          <div>
+          <div className="hide-on-mobile">
             <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Volatility</div>
             <div style={{ fontWeight: 700 }}>-</div>
           </div>
-          <div className="detail-rules-btn" style={{ marginLeft: "auto" }}>
+          <div className="detail-rules-btn hide-on-mobile" style={{ marginLeft: "auto" }}>
             <button
               className="btn"
               style={{ fontSize: 11, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}
@@ -763,17 +816,19 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
       </div>
 
       <div className="detail-grid">
-        <div className="col" style={{ gap: 12 }}>
-          <ChartViewV2
-            key={yesTokenId}
-            tokenId={yesTokenId}
-            outcome={outcome}
-            mid={mid}
-            selectedCents={selectedCents}
-            onOutcomeChange={setOutcome}
-          />
+        <div className="detail-left-col">
+          <div className="chart-wrapper">
+            <ChartViewV2
+              key={yesTokenId}
+              tokenId={yesTokenId}
+              outcome={outcome}
+              mid={mid}
+              selectedCents={selectedCents}
+              onOutcomeChange={setOutcome}
+            />
+          </div>
 
-          <div className="panel" style={{ marginTop: 0 }}>
+          <div className="panel trades-panel" style={{ marginTop: 12 }}>
             <div className="tabs">
               <div className="tab active">Trades</div>
               <div className="tab">Top Traders</div>

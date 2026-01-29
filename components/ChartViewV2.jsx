@@ -263,6 +263,7 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
 
       <div style={{ marginTop: 8 }}>
         <div
+          className="chart-container"
           style={{
             height: 340,
             transformOrigin: "50% 50%",
@@ -280,17 +281,14 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
+      <div className="chart-controls" style={{ display: "flex", gap: 8, marginTop: 0, alignItems: "center" }}>
         {RANGES.map((r) => (
           <button key={r.key} className="btn" onClick={() => setRange(r.key)} style={{ opacity: range === r.key ? 1 : 0.65 }}>
             {r.label}
           </button>
         ))}
         <div className="spacer" />
-      </div>
-
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
-        <div style={{ display: "flex", gap: 12, color: "rgba(148,163,184,0.95)", fontSize: 12 }}>
+        <div className="chart-volume-info" style={{ display: "flex", gap: 12, color: "rgba(148,163,184,0.95)", fontSize: 12 }}>
           <div>
             Volume: <span style={{ color: "rgba(34,197,94,0.95)", fontWeight: 900 }}>-</span>
           </div>

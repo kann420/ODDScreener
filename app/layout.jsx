@@ -30,17 +30,21 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <head>
+        {/* ===== DNS Prefetch for external resources ===== */}
+        <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+        <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
+        <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
+        
         {/* ===== Google Fonts with preconnect for fast loading ===== */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* Optimized: Only load weights actually used (400, 500, 600, 700) */}
         <link 
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" 
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" 
           rel="stylesheet" 
         />
 
-        {/* ===== Preload critical images ===== */}
-        <link rel="preload" href="/2logonewest.svg" as="image" />
-        <link rel="preload" href="/logo-opinion.svg" as="image" />
+        {/* NOTE: Removed preload for large SVGs (600KB+) - consider converting to optimized PNG/WebP */}
 
         {/* Favicon */}
         <link rel="icon" href="/favicon.ico" sizes="any" />
@@ -79,12 +83,12 @@ export default function RootLayout({ children }) {
           }
         `}} />
 
-        {/* ===== Google Analytics - Load after interactive ===== */}
+        {/* ===== Google Analytics - Load lazily to not block interactivity ===== */}
         <Script
           src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
-          strategy="afterInteractive"
+          strategy="lazyOnload"
         />
-        <Script id="google-analytics" strategy="afterInteractive">
+        <Script id="google-analytics" strategy="lazyOnload">
           {`
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
@@ -94,17 +98,20 @@ export default function RootLayout({ children }) {
             });
           `}
         </Script>
+        
+        {/* Smart Money hub warm-up - load after page is interactive */}
+        <Script id="smart-money-warmup" strategy="lazyOnload">
+          {`
+            // Warm up the smart money API after page is fully loaded
+            if (typeof fetch !== 'undefined') {
+              fetch('/api/smart-money/warm', { method: 'GET', priority: 'low' })
+                .catch(() => {}); // Silently fail if warmup fails
+            }
+          `}
+        </Script>
       </head>
 
       <body>
-        {/* Smart Money hub warm-up - deferred with lazy loading */}
-        <img 
-          src="/api/smart-money/warm" 
-          alt="" 
-          style={{ display: "none" }} 
-          loading="lazy"
-        />
-
         {/* Notification Banner */}
         <div className="notification-banner" style={{
           background: 'linear-gradient(90deg, #1a1a1a 0%, #2d2d2d 100%)',
@@ -132,7 +139,7 @@ export default function RootLayout({ children }) {
               <div className="topbar-left" style={{ display: "flex", alignItems: "center", gap: 18 }}>
                 <a className="brand" href="/" aria-label="ODDScreeners">
                   <img
-                    src="/2logonewest.svg"
+                    src="/2oddscreeners_logo.webp"
                     alt="ODDScreeners"
                     width={160}
                     height={52}
@@ -157,7 +164,7 @@ export default function RootLayout({ children }) {
               <div className="platform-logos" style={{ display: "flex", alignItems: "center", gap: 16 }}>
                 <a href="https://app.opinion.trade?code=8YfTc9" target="_blank" rel="noopener noreferrer" title="Opinion">
                   <img
-                    src="/logo-opinion.svg"
+                    src="/2logo-opinion.webp"
                     alt="Opinion"
                     width={42}
                     height={42}
@@ -171,7 +178,7 @@ export default function RootLayout({ children }) {
                   />
                 </a>
                 <img
-                  src="/polymarket_600.svg"
+                  src="/2polymarket_600.webp"
                   alt="Polymarket"
                   title="Polymarket - Coming Soon"
                   width={42}
