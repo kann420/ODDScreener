@@ -11,7 +11,7 @@
  *   - "Arbitrage Manage" (new sub-feature)
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { isValidWalletAddress } from "@/lib/walletTracker/format";
 import ArbitrageManagePanel from "@/components/wallet-tracker/ArbitrageManagePanel";
@@ -20,7 +20,8 @@ import ArbitrageManagePanel from "@/components/wallet-tracker/ArbitrageManagePan
 const TAB_OPINION = "opinion";
 const TAB_ARBITRAGE = "arbitrage";
 
-export default function WalletLandingPage() {
+// Inner component that uses useSearchParams
+function WalletLandingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -404,5 +405,18 @@ export default function WalletLandingPage() {
         }
       `}</style>
     </div>
+  );
+}
+
+// Main export wrapped in Suspense
+export default function WalletLandingPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "50vh" }}>
+        <div style={{ color: "var(--muted)", fontSize: 14 }}>Loading...</div>
+      </div>
+    }>
+      <WalletLandingContent />
+    </Suspense>
   );
 }
