@@ -522,8 +522,15 @@ function MarketRowV2({
 
   const chanceText = mid > 0 ? fmtChanceFromPrice01(mid) : "-";
 
-  const volNumber =
-    volMode === "24h" ? volumeOverride?.volume24h ?? market?.volume24h : volumeOverride?.volume ?? market?.volume;
+  // Get volume based on mode
+  const volNumber = (() => {
+    if (volMode === "24h") {
+      return volumeOverride?.volume24h ?? market?.volume24h ?? market?.vol24h ?? market?.volume_24h ?? 0;
+    } else {
+      // "all" mode - use total volume
+      return volumeOverride?.volume ?? market?.volume ?? market?.volTotal ?? market?.volume_total ?? market?.volumeAll ?? 0;
+    }
+  })();
 
   const volText = fmtUsdCompact(volNumber);
 
@@ -674,7 +681,7 @@ function MarketRowV2({
           </div>
         </div>
 
-        {/* Outcome Row - Yes/No with Chance */}
+        {/* Outcome Row - Chance display */}
         <div style={{ 
           display: "flex", 
           alignItems: "center", 
@@ -685,7 +692,7 @@ function MarketRowV2({
           borderRadius: 10,
           border: "1px solid rgba(255,255,255,0.06)"
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {/* Mini Chart */}
             <div style={{ width: 50, height: 24 }}>
               {loading ? (
@@ -694,37 +701,14 @@ function MarketRowV2({
                 <MiniSparkline points={sparkPts} width={50} height={24} />
               )}
             </div>
-            {/* Chance */}
-            <span className="mono" style={{ fontWeight: 900, fontSize: 16, color: "#22d3ee" }}>
-              {loading ? <span style={{ color: "rgba(255,255,255,0.3)" }}>--</span> : chanceText}
-            </span>
+            {/* Chance Label */}
+            <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(148,163,184,0.8)" }}>Chance</span>
           </div>
           
-          {/* Yes/No Buttons */}
-          <div style={{ display: "flex", gap: 6 }}>
-            <span style={{
-              padding: "6px 14px",
-              borderRadius: 6,
-              background: "rgba(34, 197, 94, 0.15)",
-              border: "1px solid rgba(34, 197, 94, 0.3)",
-              color: "#22c55e",
-              fontSize: 12,
-              fontWeight: 700,
-            }}>
-              Yes
-            </span>
-            <span style={{
-              padding: "6px 14px",
-              borderRadius: 6,
-              background: "rgba(239, 68, 68, 0.15)",
-              border: "1px solid rgba(239, 68, 68, 0.3)",
-              color: "#ef4444",
-              fontSize: 12,
-              fontWeight: 700,
-            }}>
-              No
-            </span>
-          </div>
+          {/* Chance Value - prominent */}
+          <span className="mono" style={{ fontWeight: 900, fontSize: 18, color: "#22d3ee" }}>
+            {loading ? <span style={{ color: "rgba(255,255,255,0.3)" }}>--</span> : chanceText}
+          </span>
         </div>
 
         {/* Footer: Volume + Date */}

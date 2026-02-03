@@ -82,7 +82,7 @@ export function MarketRowSkeleton() {
   );
 }
 
-// Tab bar skeleton - matches NEW/HOT/TRENDING/BONUS/ALL tabs
+// Tab bar skeleton - matches NEW/TRENDING/BONUS/ALL tabs
 export function TabBarSkeleton() {
   return (
     <div style={{
@@ -91,7 +91,7 @@ export function TabBarSkeleton() {
       gap: '8px',
       padding: '0 4px',
     }}>
-      {['NEW', 'HOT', 'TRENDING', 'BONUS', 'ALL'].map((tab, i) => (
+      {['NEW', 'TRENDING', 'BONUS', 'ALL'].map((tab, i) => (
         <div key={tab} className="skeleton-box" style={{
           padding: '8px 16px',
           borderRadius: '8px',

@@ -18,6 +18,7 @@ function toNum(v, fallback) {
  * - minArbPct: minimum arbitrage percentage (default: 0.1)
  * - minSimilarity: minimum text similarity for matching (default: 0.35, range 0-1)
  * - limit: max results (default: 50, max: 200)
+ * - mode: "quick" (100 markets) or "full" (unlimited) (default: quick)
  * - debug: include debug info in response (default: false)
  */
 export async function GET(req) {
@@ -28,9 +29,10 @@ export async function GET(req) {
     const minArbPct = toNum(searchParams.get("minArbPct"), 0.1);
     const minSimilarity = Math.max(0.1, Math.min(1, toNum(searchParams.get("minSimilarity"), 0.35)));
     const limit = Math.max(1, Math.min(200, Math.floor(toNum(searchParams.get("limit"), 50))));
+    const scanMode = searchParams.get("mode") === "full" ? "full" : "quick";
     const wantDebug = searchParams.get("debug") === "1" || searchParams.get("debug") === "true";
 
-    const result = await scanArbitageOpportunities({ minArbPct, minSimilarity, limit });
+    const result = await scanArbitageOpportunities({ minArbPct, minSimilarity, limit, scanMode });
 
     const rows = Array.isArray(result?.rows) ? result.rows : [];
     const debug = Array.isArray(result?.debug) ? result.debug : [];
@@ -42,6 +44,7 @@ export async function GET(req) {
         totalFound: rows.length,
         minArbPct,
         minSimilarity,
+        scanMode,
         scannedAt: new Date().toISOString(),
       }
     };

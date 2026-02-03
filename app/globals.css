@@ -1,16 +1,401 @@
 :root{
   color-scheme: dark;
   --bg: #0b0d10;
+  --bg-gradient-1: rgba(34,211,238,0.12);
+  --bg-gradient-2: rgba(34,197,94,0.10);
   --panel: #12151a;
   --panel2:#0f1216;
+  --panel-hover: rgba(255,255,255,0.04);
   --text: #e9eef5;
+  --text-secondary: #c8d0dc;
   --muted: #94a3b8;
   --border: rgba(255,255,255,0.08);
+  --border-hover: rgba(255,255,255,0.14);
   --accent: #22c55e;
   --danger: #ef4444;
   --warn: #f59e0b;
   --cyan: #22d3ee;
+  --topbar-bg: rgba(8,10,12,0.9);
+  --card-bg: rgba(255,255,255,0.03);
+  --card-bg-hover: rgba(255,255,255,0.05);
+  --skeleton-base: rgba(255,255,255,0.04);
+  --skeleton-shine: rgba(255,255,255,0.08);
+  --shadow-color: rgba(0,0,0,0.15);
+  --input-bg: rgba(255,255,255,0.05);
+  --badge-new-bg: #f5c84b;
+  --badge-new-text: #111;
+  --mobile-menu-bg: linear-gradient(180deg, #1a1d21 0%, #0d0f12 100%);
+  --orderbook-ask-bg: rgba(239,68,68,0.2);
+  --orderbook-bid-bg: rgba(34,197,94,0.18);
 }
+
+/* ===== LIGHT MODE ===== */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f8fafc;
+  --bg-gradient-1: rgba(34,211,238,0.08);
+  --bg-gradient-2: rgba(34,197,94,0.06);
+  --panel: #ffffff;
+  --panel2: #f1f5f9;
+  --panel-hover: rgba(0,0,0,0.04);
+  --text: #0f172a;
+  --text-secondary: #334155;
+  --muted: #64748b;
+  --border: rgba(0,0,0,0.08);
+  --border-hover: rgba(0,0,0,0.15);
+  --accent: #16a34a;
+  --danger: #dc2626;
+  --warn: #d97706;
+  --cyan: #0891b2;
+  --topbar-bg: rgba(255,255,255,0.92);
+  --card-bg: rgba(255,255,255,0.8);
+  --card-bg-hover: rgba(255,255,255,0.95);
+  --skeleton-base: rgba(0,0,0,0.04);
+  --skeleton-shine: rgba(0,0,0,0.08);
+  --shadow-color: rgba(0,0,0,0.08);
+  --input-bg: rgba(0,0,0,0.03);
+  --badge-new-bg: #f5c84b;
+  --badge-new-text: #111;
+  --mobile-menu-bg: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+  --orderbook-ask-bg: rgba(239,68,68,0.12);
+  --orderbook-bid-bg: rgba(34,197,94,0.12);
+}
+
+/* Light mode specific overrides */
+[data-theme="light"] body {
+  background: radial-gradient(1200px 700px at 20% 10%, var(--bg-gradient-1), transparent 60%),
+              radial-gradient(900px 600px at 75% 20%, var(--bg-gradient-2), transparent 55%),
+              var(--bg);
+}
+
+[data-theme="light"] .topbar {
+  background: var(--topbar-bg);
+  border-bottom-color: var(--border);
+}
+
+[data-theme="light"] .panel {
+  background: var(--card-bg);
+  border-color: var(--border);
+  box-shadow: 0 1px 3px var(--shadow-color), 0 1px 2px -1px var(--shadow-color);
+}
+
+[data-theme="light"] .btn {
+  background: rgba(0,0,0,0.04);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+[data-theme="light"] .btn:hover {
+  background: rgba(0,0,0,0.08);
+  border-color: var(--border-hover);
+}
+
+[data-theme="light"] .btn.ghost {
+  background: rgba(0,0,0,0.02);
+  color: var(--muted);
+}
+
+[data-theme="light"] .select {
+  background: var(--input-bg);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+[data-theme="light"] .select:hover {
+  background: rgba(0,0,0,0.06);
+  border-color: var(--border-hover);
+}
+
+[data-theme="light"] .search {
+  background: var(--input-bg);
+  border-color: var(--border);
+}
+
+[data-theme="light"] .tab {
+  color: var(--muted);
+}
+
+[data-theme="light"] .tab.active {
+  color: var(--text);
+  background: rgba(0,0,0,0.05);
+  border-color: var(--border);
+}
+
+[data-theme="light"] .tab:hover {
+  color: var(--text);
+  background: rgba(0,0,0,0.03);
+}
+
+[data-theme="light"] tr:hover td {
+  background: rgba(0,0,0,0.03);
+}
+
+[data-theme="light"] .tag {
+  background: rgba(0,0,0,0.04);
+  border-color: var(--border);
+}
+
+[data-theme="light"] .skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--skeleton-base) 25%,
+    var(--skeleton-shine) 50%,
+    var(--skeleton-base) 75%
+  );
+  background-size: 200% 100%;
+}
+
+[data-theme="light"] .market-row:hover {
+  background: rgba(255,180,50,0.08) !important;
+  border-color: rgba(255,180,50,0.25) !important;
+}
+
+[data-theme="light"] .market-row-card {
+  background: var(--card-bg);
+  border-color: var(--border);
+}
+
+[data-theme="light"] .market-row-card:hover {
+  background: var(--card-bg-hover);
+  border-color: var(--border-hover);
+  box-shadow: 0 4px 12px var(--shadow-color);
+}
+
+[data-theme="light"] .market-row-outcome {
+  background: rgba(0,0,0,0.03);
+  border-color: var(--border);
+}
+
+[data-theme="light"] .market-row-footer {
+  border-top-color: var(--border);
+}
+
+[data-theme="light"] .arb-row:hover {
+  background: rgba(255,180,50,0.08);
+  border-color: rgba(255,180,50,0.25);
+}
+
+[data-theme="light"] .arb-row-arb {
+  background: rgba(80,200,120,0.08);
+}
+
+[data-theme="light"] .sm-row-desktop:hover {
+  background: rgba(255,180,50,0.08) !important;
+}
+
+/* Light mode mobile menu */
+[data-theme="light"] .mobile-menu {
+  background: var(--mobile-menu-bg);
+  border-right-color: var(--border);
+}
+
+[data-theme="light"] .mobile-menu-header {
+  border-bottom-color: var(--border);
+}
+
+[data-theme="light"] .mobile-menu-header button {
+  color: var(--text) !important;
+}
+
+[data-theme="light"] .mobile-menu-item {
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] .mobile-menu-item:hover,
+[data-theme="light"] .mobile-menu-item.active {
+  background: rgba(0,0,0,0.05);
+  color: var(--text);
+}
+
+[data-theme="light"] .mobile-menu-item.disabled {
+  color: var(--muted);
+}
+
+[data-theme="light"] .mobile-menu-divider {
+  background: var(--border);
+}
+
+[data-theme="light"] .mobile-menu-btn {
+  background: rgba(0,0,0,0.04);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+[data-theme="light"] .mobile-menu-btn:hover {
+  background: rgba(0,0,0,0.08);
+}
+
+/* Light mode orderbook */
+[data-theme="light"] .orderbook-row-content {
+  background: rgba(0,0,0,0.02);
+  border-color: var(--border);
+}
+
+[data-theme="light"] .orderbook-row:hover {
+  background: rgba(0,0,0,0.03);
+}
+
+[data-theme="light"] .orderbook-row:hover .orderbook-row-content {
+  border-color: var(--border-hover);
+}
+
+[data-theme="light"] .orderbook-spread-row {
+  background: rgba(0,0,0,0.03);
+  border-color: var(--border);
+}
+
+[data-theme="light"] .orderbook-spread-value {
+  color: var(--text);
+}
+
+[data-theme="light"] .orderbook-empty-state {
+  background: rgba(0,0,0,0.02);
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+[data-theme="light"] .outcome-btn {
+  background: rgba(0,0,0,0.06);
+  color: var(--muted);
+}
+
+[data-theme="light"] .outcome-btn:hover {
+  background: rgba(0,0,0,0.1);
+  color: var(--text);
+}
+
+/* Light mode trades table */
+[data-theme="light"] .trades-table-header {
+  background: linear-gradient(180deg, var(--panel) 0%, var(--panel) 90%, transparent 100%);
+}
+
+[data-theme="light"] .trades-table-header th {
+  color: var(--muted);
+}
+
+[data-theme="light"] .trades-empty-state {
+  color: var(--muted);
+}
+
+/* Light mode wallet tracker */
+[data-theme="light"] .wallet-header-container {
+  background: var(--card-bg);
+  border-color: var(--border);
+}
+
+[data-theme="light"] .wallet-position-row {
+  background: rgba(0,0,0,0.02);
+  border-color: var(--border) !important;
+}
+
+[data-theme="light"] .wallet-activity-row {
+  background: rgba(0,0,0,0.02);
+  border-color: var(--border) !important;
+}
+
+/* Light mode smart money */
+[data-theme="light"] .sm-mobile-list {
+  background: var(--border);
+}
+
+[data-theme="light"] .sm-mobile-card {
+  background: var(--panel);
+}
+
+[data-theme="light"] .sm-mobile-card:active {
+  background: rgba(0,0,0,0.03);
+}
+
+[data-theme="light"] .sm-mobile-card-title {
+  color: var(--text);
+}
+
+[data-theme="light"] .sm-mobile-card-time {
+  color: var(--muted);
+}
+
+[data-theme="light"] .sm-mobile-card-bottom {
+  color: var(--text-secondary);
+}
+
+/* Light mode arbitrage */
+[data-theme="light"] .arb-row {
+  background: var(--card-bg);
+}
+
+@media (max-width: 600px) {
+  [data-theme="light"] .arb-row {
+    background: var(--card-bg);
+  }
+  
+  [data-theme="light"] .arb-row-arb {
+    background: rgba(80,200,120,0.1) !important;
+    border-bottom-color: var(--border);
+  }
+}
+
+/* Light mode inputs */
+[data-theme="light"] input[type="text"],
+[data-theme="light"] input[type="number"],
+[data-theme="light"] input[type="search"] {
+  background: var(--input-bg);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+[data-theme="light"] input::placeholder {
+  color: var(--muted);
+}
+
+/* Light mode brand */
+[data-theme="light"] .brand-odds {
+  color: var(--text);
+}
+
+[data-theme="light"] .brand-beta {
+  color: var(--muted);
+}
+
+/* Light mode nav */
+[data-theme="light"] .nav {
+  color: var(--muted);
+}
+
+[data-theme="light"] .nav > a:hover {
+  color: var(--text);
+}
+
+[data-theme="light"] .nav > a.active {
+  color: var(--text);
+}
+
+[data-theme="light"] .nav-disabled {
+  opacity: 0.5;
+}
+
+/* Light mode detail page */
+[data-theme="light"] .detail-title {
+  color: var(--text);
+}
+
+[data-theme="light"] .iframe {
+  background: rgba(0,0,0,0.02);
+}
+
+/* ===== END LIGHT MODE ===== */
+
+/* Shimmer animation for skeleton loaders */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Spin animation for refresh button */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 *{ box-sizing:border-box; }
 html,body{ height:100%; }
 body{
@@ -64,6 +449,11 @@ a{ color:inherit; text-decoration:none; }
   padding: 6px 10px;
   font-size: 12px;
   color: var(--muted);
+}
+
+/* Wallet page wrapper - desktop default */
+.wallet-page-wrapper {
+  padding-top: 0.1px;
 }
 .btn{
   background: rgba(255,255,255,0.06);
@@ -648,22 +1038,35 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
 .market-pagination {
   display: flex;
   justify-content: center;
-  gap: 10px;
+  gap: 12px;
   margin-top: 16px;
 }
 
 @media (max-width: 480px) {
   .market-pagination {
-    gap: 6px;
+    gap: 8px;
   }
   .market-pagination .btn {
-    padding: 8px 12px;
+    padding: 12px 18px;
+    min-height: 44px;
+    min-width: 44px;
+    font-size: 14px;
   }
 }
 
 /* Market list panel responsive */
 .market-list-panel {
   padding: 12px;
+}
+
+/* Market row hover effect (like Arbitrage) */
+.market-row {
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.market-row:hover {
+  background: rgba(255,180,50,0.04) !important;
+  border-color: rgba(255,180,50,0.15) !important;
 }
 
 @media (max-width: 768px) {
@@ -912,8 +1315,228 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
 
 /* Orderbook panel responsive */
 .orderbook-panel {
-  padding: 10px;
+  padding: 12px;
   height: fit-content;
+}
+
+/* ===== ORDERBOOK ROW STYLES ===== */
+.orderbook-row {
+  position: relative;
+  overflow: hidden;
+  margin-top: 6px;
+  border-radius: 8px;
+  transition: background 0.12s ease;
+}
+
+.orderbook-row:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+.orderbook-row-depth {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(239,68,68,0.2);
+  border-radius: 8px 0 0 8px;
+  transition: width 0.2s ease;
+}
+
+.orderbook-row-depth-bid {
+  background: rgba(34,197,94,0.18);
+}
+
+.orderbook-row-content {
+  position: relative;
+  display: grid;
+  grid-template-columns: 74px 1fr 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.015);
+}
+
+.orderbook-row:hover .orderbook-row-content {
+  border-color: rgba(255,255,255,0.1);
+}
+
+.orderbook-price {
+  font-weight: 900;
+  font-size: 13px;
+}
+
+.orderbook-shares {
+  font-size: 12px;
+}
+
+.orderbook-total {
+  text-align: right;
+  font-size: 12px;
+}
+
+/* Orderbook header and outcome toggle */
+.orderbook-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.orderbook-title {
+  font-weight: 900;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.outcome-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+.outcome-btn {
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.6);
+  transition: all 0.15s ease;
+  min-width: 48px;
+  text-align: center;
+}
+
+.outcome-btn:hover {
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.8);
+}
+
+.outcome-btn-yes.active {
+  background: #22d3ee;
+  color: #0a0a0a;
+}
+
+.outcome-btn-no.active {
+  background: #a855f7;
+  color: #fff;
+}
+
+/* Orderbook spread row */
+.orderbook-spread-row {
+  margin-top: 14px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.orderbook-spread-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.orderbook-spread-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(148,163,184,0.85);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.orderbook-spread-value {
+  font-size: 14px;
+  font-weight: 800;
+  color: #e9eef5;
+}
+
+/* Orderbook empty state */
+.orderbook-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 12px;
+  text-align: center;
+  color: rgba(148,163,184,0.7);
+  font-size: 12px;
+  background: rgba(255,255,255,0.02);
+  border-radius: 8px;
+  border: 1px dashed rgba(255,255,255,0.08);
+  gap: 4px;
+}
+
+.orderbook-empty-hint {
+  font-size: 10px;
+  color: rgba(148,163,184,0.5);
+}
+
+/* ===== TRADES TABLE STYLES ===== */
+.trades-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.trades-table-header {
+  position: sticky;
+  top: 0;
+  background: linear-gradient(180deg, #0d0d0d 0%, #0d0d0d 90%, transparent 100%);
+  z-index: 2;
+}
+
+.trades-table-header tr {
+  border-bottom: 2px solid rgba(255,255,255,0.08);
+}
+
+.trades-table-header th {
+  padding: 12px 12px;
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(148,163,184,0.95);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.trades-table-header th:first-child {
+  padding-left: 0;
+}
+
+/* Trades empty state */
+.trades-empty-state {
+  text-align: center;
+  padding: 32px 16px !important;
+}
+
+.trades-empty-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.trades-empty-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(148,163,184,0.7);
+}
+
+.trades-empty-error {
+  color: rgba(239,68,68,0.8);
+}
+
+.trades-empty-hint {
+  font-size: 11px;
+  color: rgba(148,163,184,0.5);
 }
 
 /* Trades table responsive */
@@ -934,12 +1557,47 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   
   .trades-table th,
   .trades-table td {
-    padding: 8px 6px !important;
+    padding: 10px 8px !important;
   }
   
   .trades-table th:last-child,
   .trades-table td:last-child {
     display: none; /* Hide Trader column on mobile */
+  }
+  
+  .trades-table-header th {
+    font-size: 10px;
+    letter-spacing: 0.02em;
+  }
+  
+  /* Orderbook mobile adjustments */
+  .orderbook-row-content {
+    padding: 8px 10px;
+    grid-template-columns: 60px 1fr 1fr;
+    gap: 8px;
+  }
+  
+  .orderbook-price {
+    font-size: 12px;
+  }
+  
+  .orderbook-spread-row {
+    padding: 10px 12px;
+  }
+  
+  .orderbook-spread-value {
+    font-size: 13px;
+  }
+  
+  /* Outcome toggle mobile */
+  .outcome-toggle {
+    gap: 6px;
+  }
+  
+  .outcome-btn {
+    padding: 10px 16px !important;
+    font-size: 12px !important;
+    min-width: 52px;
   }
 }
 
@@ -954,7 +1612,34 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   
   .trades-table th,
   .trades-table td {
-    padding: 6px 4px !important;
+    padding: 8px 6px !important;
+  }
+  
+  .trades-table-header th {
+    font-size: 9px;
+    padding: 10px 6px !important;
+  }
+  
+  /* Further mobile orderbook adjustments */
+  .orderbook-row-content {
+    padding: 8px;
+    grid-template-columns: 50px 1fr 1fr;
+    gap: 6px;
+  }
+  
+  .orderbook-price {
+    font-size: 11px;
+  }
+  
+  .orderbook-shares,
+  .orderbook-total {
+    font-size: 10px;
+  }
+  
+  /* Outcome toggle small mobile */
+  .outcome-btn {
+    padding: 8px 14px !important;
+    min-width: 48px;
   }
 }
 
@@ -1131,6 +1816,15 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
 /* Hide mobile title on desktop */
 .sm-mobile-title {
   display: none;
+}
+
+/* Smart Money row hover effect (like Arbitrage/Discover) */
+.sm-row-desktop {
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.sm-row-desktop:hover {
+  background: rgba(255,180,50,0.04) !important;
 }
 
 @media (max-width: 600px) {
@@ -1383,13 +2077,40 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   }
   
   .arb-row-links {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 8px !important;
+    margin-top: 8px !important;
+  }
+  
+  .arb-row-links a {
+    padding: 6px 10px !important;
+    background: rgba(255,255,255,0.05) !important;
+    border-radius: 6px !important;
+    font-size: 12px !important;
+  }
+  
+  .arb-row-links a span:first-of-type {
     display: none !important;
   }
   
-  /* Strategy section - compact */
+  .arb-row-links a img:first-of-type {
+    width: 16px !important;
+    height: 16px !important;
+  }
+  
+  /* Strategy section - hidden on mobile (desktop version) */
   .arb-row-strategy {
     order: 3;
     display: none !important;
+  }
+  
+  /* Mobile-only strategy - shows Buy YES/NO actions below links */
+  .arb-row-strategy-mobile {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 12px !important;
+    margin-top: 0.1px !important;
   }
   
   /* Expires - inline with arb */
@@ -1398,27 +2119,41 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
     display: none !important;
   }
   
-  /* Arb percentage - bottom of card */
+  /* Arb percentage - prominent at top of card on mobile */
   .arb-row-arb {
-    order: 1;
+    order: -1 !important;
     flex-direction: row !important;
     align-items: center !important;
     justify-content: space-between !important;
-    padding-top: 8px;
-    border-top: 1px solid rgba(255,255,255,0.06);
+    padding: 10px 12px !important;
+    margin: -14px -14px 8px -14px !important;
+    background: rgba(80,200,120,0.08) !important;
+    border-radius: 12px 12px 0 0 !important;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  
+  .arb-row-pct-wrapper {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
   }
   
   .arb-row-pct {
-    font-size: 20px !important;
+    font-size: 22px !important;
+    color: rgba(80,200,120,1) !important;
   }
   
   .arb-row-arb .muted {
-    display: none !important;
+    display: block !important;
+    font-size: 11px !important;
+    margin-top: 2px !important;
   }
   
   .arb-calc-btn {
-    padding: 8px 14px !important;
+    padding: 10px 16px !important;
     margin-top: 0 !important;
+    min-height: 44px !important;
+    font-size: 13px !important;
   }
   
   /* Filter panel on mobile */
@@ -1468,6 +2203,33 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   }
 }
 /* ===== END ARBITRAGE MOBILE ===== */
+
+/* ===== ARBITRAGE ROW HOVER ===== */
+.arb-row {
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.arb-row:hover {
+  background: rgba(255,180,50,0.04);
+  border-color: rgba(255,180,50,0.15);
+}
+
+/* Subtle highlight for Arb% column */
+.arb-row-arb {
+  background: rgba(80,200,120,0.04);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: -4px -8px;
+}
+
+/* Venue link hover */
+.arb-venue-link:hover {
+  background: rgba(255,255,255,0.05);
+}
+
+.arb-venue-link:hover .arb-venue-label {
+  text-decoration: underline;
+}
 
 /* ===== SKELETON PULSE ANIMATION ===== */
 @keyframes skeleton-pulse {
@@ -1625,3 +2387,503 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   backface-visibility: hidden;
 }
 /* ===== END GPU ACCELERATION ===== */
+
+/* ===== WALLET TRACKER MOBILE STYLES ===== */
+@media (max-width: 640px) {
+  /* Wallet page container - reduce top padding on mobile */
+  .wallet-container {
+    padding-top: 4px !important;
+  }
+  
+  /* Page wrapper - ELIMINATE top padding completely */
+  .wallet-page-wrapper {
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+  }
+  
+  /* Navigation bar (Back/Refresh) - minimal margin */
+  .wallet-nav-bar {
+    margin-bottom: 8px !important;
+    padding-top: 0 !important;
+  }
+  
+  /* Wallet Header Container - already optimized, just ensure consistency */
+  .wallet-header-container {
+    padding: 14px 14px !important;
+    gap: 14px !important;
+    border-radius: 12px !important;
+    flex-direction: column !important;
+  }
+  
+  /* Profile row - compact */
+  .wallet-profile-row {
+    gap: 12px !important;
+    margin-bottom: 14px !important;
+  }
+  
+  /* Avatar smaller on mobile */
+  .wallet-profile-row > div:first-child {
+    width: 42px !important;
+    height: 42px !important;
+    font-size: 14px !important;
+  }
+  
+  /* Profile name/chain section */
+  .wallet-profile-row .wallet-name {
+    font-size: 16px !important;
+  }
+  
+  /* Hide vertical divider on mobile */
+  .wallet-divider {
+    display: none !important;
+  }
+  
+  /* Chart section - more compact */
+  .wallet-chart-section {
+    min-width: 100% !important;
+    padding-top: 12px !important;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  
+  /* Wallet landing page tabs */
+  .wallet-tabs {
+    padding: 12px 12px 0 !important;
+  }
+  
+  .wallet-tab {
+    padding: 10px 12px !important;
+    font-size: 12px !important;
+  }
+  
+  /* Wallet hero section */
+  .wallet-landing {
+    padding: 40px 16px !important;
+  }
+  
+  .wallet-hero-title {
+    font-size: 24px !important;
+  }
+  
+  .wallet-hero-icon {
+    width: 64px !important;
+    height: 64px !important;
+  }
+  
+  /* Wallet detail page */
+  .wallet-page-container {
+    padding: 12px !important;
+  }
+  
+  /* Tab buttons on mobile */
+  .wallet-tab-btn {
+    padding: 12px 16px !important;
+    font-size: 14px !important;
+  }
+  
+  /* Sub-tab buttons */
+  .wallet-subtab-btn {
+    padding: 6px 12px !important;
+    font-size: 12px !important;
+  }
+  
+  /* Position/Activity tables - hide header, show card-based rows */
+  .wallet-positions-header,
+  .wallet-activity-header {
+    display: none !important;
+  }
+  
+  /* Position row mobile card style */
+  .wallet-position-row {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    padding: 14px !important;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.02);
+    margin-bottom: 10px;
+    border: 1px solid rgba(255,255,255,0.06) !important;
+  }
+  
+  .wallet-position-row > * {
+    width: 100% !important;
+  }
+  
+  /* Market cell full width */
+  .wallet-market-cell {
+    grid-column: 1 / -1;
+  }
+  
+  /* Stats row for mobile */
+  .wallet-stats-mobile {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    font-size: 12px;
+  }
+  
+  /* Activity row mobile */
+  .wallet-activity-row {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    padding: 12px !important;
+    background: rgba(255,255,255,0.02);
+    border-radius: 10px;
+    margin-bottom: 8px;
+    border: 1px solid rgba(255,255,255,0.06) !important;
+  }
+  
+  /* Search input full width */
+  .wallet-search-input-wrap {
+    width: 100% !important;
+    max-width: none !important;
+  }
+  
+  /* Controls stack vertically */
+  .wallet-controls {
+    flex-direction: column !important;
+    gap: 10px !important;
+    align-items: stretch !important;
+  }
+  
+  .wallet-controls > div:first-child {
+    justify-content: center;
+  }
+  
+  /* Hide Predictions stat on mobile only */
+  .wallet-stat-predictions {
+    display: none !important;
+  }
+  
+  /* Stats grid - 2 columns on mobile, compact */
+  .wallet-stats-row {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px 16px !important;
+    padding-top: 12px !important;
+  }
+  
+  .wallet-stats-row > div {
+    padding: 0 !important;
+  }
+  
+  /* Smaller stat values on mobile */
+  .wallet-stats-row > div > div:last-child {
+    font-size: 18px !important;
+  }
+  
+  .wallet-stats-row > div > div:first-child {
+    font-size: 11px !important;
+    margin-bottom: 2px !important;
+  }
+}
+/* ===== END WALLET TRACKER MOBILE STYLES ===== */
+
+/* ===== THEME TOGGLE BUTTON ===== */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.theme-toggle:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text);
+  border-color: var(--border-hover);
+}
+
+.theme-toggle:active {
+  transform: scale(0.95);
+}
+
+.theme-toggle svg {
+  transition: transform 0.3s ease;
+}
+
+.theme-toggle:hover svg {
+  transform: rotate(15deg);
+}
+
+/* Light mode theme toggle */
+[data-theme="light"] .theme-toggle {
+  background: rgba(0,0,0,0.04);
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+[data-theme="light"] .theme-toggle:hover {
+  background: rgba(0,0,0,0.08);
+  color: var(--text);
+  border-color: var(--border-hover);
+}
+
+/* Mobile: show theme toggle in hamburger menu area */
+@media (max-width: 900px) {
+  .theme-toggle {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .theme-toggle svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .theme-toggle {
+    width: 34px;
+    height: 34px;
+  }
+  
+  .theme-toggle svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+/* ===== END THEME TOGGLE BUTTON ===== */
+
+/* ===== LIGHT MODE NOTIFICATION BANNER ===== */
+[data-theme="light"] .notification-banner {
+  background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 100%) !important;
+  color: #334155 !important;
+}
+
+[data-theme="light"] .notification-banner a {
+  color: #334155 !important;
+}
+/* ===== END LIGHT MODE NOTIFICATION BANNER ===== */
+
+/* ===== LIGHT MODE ADDITIONAL STYLES ===== */
+/* Footer bar */
+[data-theme="light"] .footer-bar {
+  background: var(--panel) !important;
+  border-top-color: var(--border) !important;
+}
+
+/* Charts - keep dark for better readability */
+[data-theme="light"] .chart-container {
+  background: #1a1d21;
+  border-radius: 12px;
+}
+
+/* Code/mono text */
+[data-theme="light"] .mono {
+  color: var(--text);
+}
+
+/* Yes/No badges */
+[data-theme="light"] .yes-badge {
+  background: rgba(22, 163, 74, 0.12);
+  border-color: rgba(22, 163, 74, 0.25);
+  color: #16a34a;
+}
+
+[data-theme="light"] .no-badge {
+  background: rgba(220, 38, 38, 0.12);
+  border-color: rgba(220, 38, 38, 0.25);
+  color: #dc2626;
+}
+
+/* Market bonus badge */
+[data-theme="light"] .market-bonus-badge {
+  background: rgba(245, 200, 75, 0.12);
+  border-color: rgba(245, 200, 75, 0.35);
+}
+
+/* Green/Red text colors */
+[data-theme="light"] .green {
+  color: #16a34a;
+}
+
+[data-theme="light"] .red {
+  color: #dc2626;
+}
+
+/* Tab buttons */
+[data-theme="light"] .tab-btn {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+[data-theme="light"] .tab-btn:hover {
+  background: rgba(0,0,0,0.04);
+}
+
+/* Market tabs */
+[data-theme="light"] .market-tabs button {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+/* KPI items */
+[data-theme="light"] .kpi-item .label {
+  color: var(--muted);
+}
+
+[data-theme="light"] .kpi-item .val {
+  color: var(--text);
+}
+
+/* Divider */
+[data-theme="light"] .divider {
+  background: var(--border);
+}
+
+/* Rules tooltip */
+[data-theme="light"] .rules-tooltip {
+  background: var(--panel) !important;
+  border-color: var(--border) !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
+}
+
+/* Smart money filter controls */
+[data-theme="light"] .sm-min-trade-box {
+  background: rgba(0,0,0,0.03) !important;
+  border-color: var(--border) !important;
+}
+
+[data-theme="light"] .sm-min-trade-box button {
+  background: rgba(0,0,0,0.04) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+[data-theme="light"] .sm-search-input {
+  background: var(--input-bg) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+/* Arbitrage calculator modal */
+[data-theme="light"] .arb-calc-modal {
+  background: var(--panel) !important;
+  border-color: var(--border) !important;
+}
+
+[data-theme="light"] .arb-calc-note {
+  background: rgba(0,0,0,0.03) !important;
+  border-color: var(--border) !important;
+  color: var(--text-secondary) !important;
+}
+
+/* Detail page */
+[data-theme="light"] .detail-stats {
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] .detail-stats .muted {
+  color: var(--muted);
+}
+
+/* Price displays */
+[data-theme="light"] .orderbook-price {
+  color: var(--text);
+}
+
+[data-theme="light"] .orderbook-shares,
+[data-theme="light"] .orderbook-total {
+  color: var(--text-secondary);
+}
+
+/* Outcome toggle buttons */
+[data-theme="light"] .outcome-btn-yes.active {
+  background: #0891b2;
+  color: #fff;
+}
+
+[data-theme="light"] .outcome-btn-no.active {
+  background: #9333ea;
+  color: #fff;
+}
+
+/* Links in light mode */
+[data-theme="light"] a:hover {
+  color: var(--text);
+}
+
+/* Dropdown menus and selects */
+[data-theme="light"] option {
+  background: var(--panel);
+  color: var(--text);
+}
+
+/* Scrollbar styling for light mode */
+[data-theme="light"] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.05);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.2);
+  border-radius: 4px;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,0,0,0.3);
+}
+
+/* Market row mobile */
+@media (max-width: 900px) {
+  [data-theme="light"] .market-row {
+    background: var(--card-bg) !important;
+    border-color: var(--border) !important;
+  }
+}
+
+/* Smart money mobile cards */
+@media (max-width: 600px) {
+  [data-theme="light"] .sm-mobile-list {
+    background: var(--border);
+  }
+  
+  [data-theme="light"] .sm-mobile-card {
+    background: var(--panel);
+  }
+  
+  [data-theme="light"] .sm-min-trade-box {
+    background: rgba(0,0,0,0.04) !important;
+    border-color: var(--border) !important;
+  }
+  
+  [data-theme="light"] .sm-min-trade-box button {
+    background: rgba(0,0,0,0.05) !important;
+    border-color: var(--border) !important;
+  }
+}
+
+/* Arbitrage mobile */
+@media (max-width: 600px) {
+  [data-theme="light"] .arb-row {
+    background: var(--card-bg) !important;
+    border-color: var(--border) !important;
+  }
+  
+  [data-theme="light"] .arb-row-arb {
+    background: rgba(80,200,120,0.08) !important;
+  }
+}
+
+/* Wallet tracker mobile */
+@media (max-width: 640px) {
+  [data-theme="light"] .wallet-position-row,
+  [data-theme="light"] .wallet-activity-row {
+    background: rgba(0,0,0,0.02) !important;
+    border-color: var(--border) !important;
+  }
+}
+/* ===== END LIGHT MODE ADDITIONAL STYLES ===== */

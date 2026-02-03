@@ -79,9 +79,68 @@ export default function SmartMoneyPage() {
     });
   };
 
-  const sortIcon = (key) => {
-    if (sort.key !== key) return "↕";
-    return sort.dir === "asc" ? "↑" : "↓";
+  // Sort icon component - 12px outline style SVG icons per guidelines
+  const SortIcon = ({ sortKey }) => {
+    const isActive = sort.key === sortKey;
+    const direction = sort.dir;
+    
+    // Neutral state (double chevron)
+    if (!isActive) {
+      return (
+        <svg 
+          width="12" 
+          height="12" 
+          viewBox="0 0 24 24" 
+          fill="none" 
+          stroke="currentColor" 
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ opacity: 0.4 }}
+        >
+          <path d="M7 15l5 5 5-5" />
+          <path d="M7 9l5-5 5 5" />
+        </svg>
+      );
+    }
+    
+    // Active desc (arrow down)
+    if (direction === "desc") {
+      return (
+        <svg 
+          width="12" 
+          height="12" 
+          viewBox="0 0 24 24" 
+          fill="none" 
+          stroke="currentColor" 
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ color: "rgba(255,180,50,1)" }}
+        >
+          <path d="M12 5v14" />
+          <path d="M19 12l-7 7-7-7" />
+        </svg>
+      );
+    }
+    
+    // Active asc (arrow up)
+    return (
+      <svg 
+        width="12" 
+        height="12" 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        stroke="currentColor" 
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{ color: "rgba(255,180,50,1)" }}
+      >
+        <path d="M12 19V5" />
+        <path d="M5 12l7-7 7 7" />
+      </svg>
+    );
   };
 
   // marketId -> thumbnailUrl cache
@@ -272,6 +331,10 @@ export default function SmartMoneyPage() {
         fontWeight: active ? 900 : 800,
         opacity: disabled ? 0.45 : 0.95,
         userSelect: "none",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 2,
       }}
     >
       {children}
@@ -291,21 +354,44 @@ export default function SmartMoneyPage() {
 
       <div className="sm-controls" style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
         <div className="sm-search-box" style={{ flex: 1, display: "flex", gap: 10 }}>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by Market Title"
-            className="sm-search-input"
-            style={{
-              flex: 1,
-              padding: "12px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,.1)",
-              background: "rgba(0,0,0,.25)",
-              color: "#fff",
-              outline: "none",
-            }}
-          />
+          <div style={{ position: "relative", flex: 1 }}>
+            {/* Search icon */}
+            <svg 
+              width="16" 
+              height="16" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="rgba(255,255,255,0.4)" 
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ 
+                position: "absolute", 
+                left: 12, 
+                top: "50%", 
+                transform: "translateY(-50%)",
+                pointerEvents: "none"
+              }}
+            >
+              <circle cx="11" cy="11" r="8" />
+              <path d="M21 21l-4.35-4.35" />
+            </svg>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by Market Title"
+              className="sm-search-input"
+              style={{
+                width: "100%",
+                padding: "12px 12px 12px 40px",
+                borderRadius: 14,
+                border: "1px solid rgba(255,255,255,.1)",
+                background: "rgba(0,0,0,.25)",
+                color: "#fff",
+                outline: "none",
+              }}
+            />
+          </div>
         </div>
 
         <div
@@ -400,7 +486,20 @@ export default function SmartMoneyPage() {
 
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <PagerButton onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
-            ← Prev
+            <svg 
+              width="16" 
+              height="16" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+            <span style={{ marginLeft: 4 }}>Prev</span>
           </PagerButton>
 
           {pageNums[0] > 1 && (
@@ -430,7 +529,20 @@ export default function SmartMoneyPage() {
           )}
 
           <PagerButton onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
-            Next →
+            <span style={{ marginRight: 4 }}>Next</span>
+            <svg 
+              width="16" 
+              height="16" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M9 18l6-6-6-6" />
+            </svg>
           </PagerButton>
         </div>
       </div>
@@ -457,25 +569,49 @@ export default function SmartMoneyPage() {
         >
           <div
             onClick={() => toggleSort("trade")}
-            style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 6 }}
+            style={{ 
+              cursor: "pointer", 
+              userSelect: "none", 
+              display: "flex", 
+              alignItems: "center", 
+              gap: 6,
+              color: sort.key === "trade" ? "rgba(255,180,50,1)" : undefined,
+              fontWeight: sort.key === "trade" ? 800 : undefined,
+            }}
             title="Sort by Trade (Buy/Sell)"
           >
-            Trade <span style={{ opacity: 0.7 }}>{sortIcon("trade")}</span>
+            Trade <SortIcon sortKey="trade" />
           </div>
           <div
             onClick={() => toggleSort("amount")}
-            style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 6 }}
+            style={{ 
+              cursor: "pointer", 
+              userSelect: "none", 
+              display: "flex", 
+              alignItems: "center", 
+              gap: 6,
+              color: sort.key === "amount" ? "rgba(255,180,50,1)" : undefined,
+              fontWeight: sort.key === "amount" ? 800 : undefined,
+            }}
             title="Sort by Amount"
           >
-            Amount <span style={{ opacity: 0.7 }}>{sortIcon("amount")}</span>
+            Amount <SortIcon sortKey="amount" />
           </div>
           <div>Market</div>
           <div
             onClick={() => toggleSort("outcome")}
-            style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 6 }}
+            style={{ 
+              cursor: "pointer", 
+              userSelect: "none", 
+              display: "flex", 
+              alignItems: "center", 
+              gap: 6,
+              color: sort.key === "outcome" ? "rgba(255,180,50,1)" : undefined,
+              fontWeight: sort.key === "outcome" ? 800 : undefined,
+            }}
             title="Sort by Outcome (YES/NO)"
           >
-            Outcome <span style={{ opacity: 0.7 }}>{sortIcon("outcome")}</span>
+            Outcome <SortIcon sortKey="outcome" />
           </div>
           <div>Price</div>
         </div>
@@ -654,13 +790,39 @@ export default function SmartMoneyPage() {
         <div className="sm-pager-bottom" style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <PagerButton onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
-              ← Prev
+              <svg 
+                width="16" 
+                height="16" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+              <span style={{ marginLeft: 4 }}>Prev</span>
             </PagerButton>
             <div style={{ opacity: 0.85, fontSize: 12 }}>
               Page <b>{page}</b> / {totalPages}
             </div>
             <PagerButton onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
-              Next →
+              <span style={{ marginRight: 4 }}>Next</span>
+              <svg 
+                width="16" 
+                height="16" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M9 18l6-6-6-6" />
+              </svg>
             </PagerButton>
           </div>
         </div>

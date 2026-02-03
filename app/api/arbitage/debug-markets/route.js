@@ -6,53 +6,111 @@ export const dynamic = "force-dynamic";
 /**
  * GET /api/arbitage/debug-markets
  * Debug endpoint to see what markets are being fetched from both exchanges
+ * 
+ * Query params:
+ * - mode: "quick" (default, maxTotalMarkets=100) or "full" (maxTotalMarkets=9999)
+ * - search: comma-separated keywords to search for
  */
-export async function GET() {
+export async function GET(req) {
   try {
-    console.log("\n=== DEBUG: Fetching markets ===");
+    const { searchParams } = new URL(req.url);
+    const mode = searchParams.get("mode") || "quick";
+    const searchQuery = searchParams.get("search") || "";
+    const keywords = searchQuery ? searchQuery.split(",").map(k => k.trim().toLowerCase()) : [];
     
-    // Fetch a small sample from both exchanges (more pages for Poly due to filtering)
+    const maxTotalMarkets = mode === "full" ? 9999 : 100;
+    const maxPages = mode === "full" ? 100 : 10;
+    
+    console.log(`\n=== DEBUG: Fetching markets (mode=${mode}, maxTotalMarkets=${maxTotalMarkets}) ===`);
+    
+    // Fetch from both exchanges
     const [opinionMarkets, polyEvents] = await Promise.all([
-      fetchAllOpinionMarkets({ limit: 20, maxPages: 1 }),
-      fetchAllPolymarketEvents({ limit: 100, maxPages: 5 }),  // More pages since many get filtered
+      fetchAllOpinionMarkets({ limit: 20, maxPages, maxTotalMarkets }),
+      fetchAllPolymarketEvents({ limit: 100, maxPages: mode === "full" ? 30 : 10 }),
     ]);
 
     console.log(`Opinion markets: ${opinionMarkets.length}`);
     console.log(`Poly events: ${polyEvents.length}`);
 
-    // Extract titles
-    const opinionTitles = opinionMarkets.slice(0, 15).map((m) => ({
-      id: m.marketId,
-      title: m.marketTitle || m.tittle || m.title,
-      type: m.isCategorical ? "categorical" : "binary",
+    // Flatten Opinion markets including child markets
+    const allOpinionTitles = [];
+    for (const m of opinionMarkets) {
+      allOpinionTitles.push({
+        id: m.marketId,
+        title: m.marketTitle || m.tittle || m.title,
+        type: m.isCategorical ? "categorical" : "binary",
+      });
+      // Include child markets for categorical
+      if (m.childMarkets && m.isCategorical) {
+        for (const c of m.childMarkets) {
+          allOpinionTitles.push({
+            id: c.marketId,
+            title: c.marketTitle || c.tittle,
+            type: "child",
+            parentId: m.marketId,
+            parentTitle: m.marketTitle,
+          });
+        }
+      }
+    }
+
+    // Search for keywords if provided
+    let searchResults = null;
+    if (keywords.length > 0) {
+      searchResults = {};
+      for (const kw of keywords) {
+        // Search in Opinion
+        const opMatches = allOpinionTitles.filter(m => 
+          m.title && m.title.toLowerCase().includes(kw)
+        ).slice(0, 5).map(m => ({ id: m.id, title: m.title, type: m.type, parentTitle: m.parentTitle }));
+        
+        // Search in Polymarket
+        const polyMatches = [];
+        for (const e of polyEvents) {
+          if (e.title && e.title.toLowerCase().includes(kw)) {
+            polyMatches.push({ slug: e.slug, title: e.title, type: "event" });
+          }
+          for (const m of (e.markets || [])) {
+            const mTitle = m.question || m.title || "";
+            if (mTitle.toLowerCase().includes(kw)) {
+              polyMatches.push({ title: mTitle, type: "market", eventSlug: e.slug });
+            }
+          }
+        }
+        
+        searchResults[kw] = {
+          opinion: opMatches,
+          polymarket: polyMatches.slice(0, 5),
+        };
+      }
+    }
+
+    // Sample data for response
+    const opinionSample = allOpinionTitles.slice(0, 20).map((o) => ({
+      id: o.id,
+      title: o.title,
+      type: o.type,
     }));
 
-    const polyTitles = polyEvents.slice(0, 15).map((e) => ({
+    const polySample = polyEvents.slice(0, 20).map((e) => ({
       slug: e.slug,
       title: e.title,
       marketsCount: e.markets?.length || 0,
-      marketTitles: (e.markets || []).slice(0, 3).map((m) => m.question || m.title),
     }));
 
-    // Log to console
-    console.log("\n--- Opinion Markets ---");
-    opinionTitles.forEach((o, i) => console.log(`${i + 1}. [${o.type}] ${o.title}`));
-
-    console.log("\n--- Polymarket Events ---");
-    polyTitles.forEach((p, i) => {
-      console.log(`${i + 1}. ${p.title}`);
-      p.marketTitles.forEach((mt, j) => console.log(`   ${j + 1}. ${mt}`));
-    });
-
     return NextResponse.json({
+      mode,
+      maxTotalMarkets,
       opinion: {
         count: opinionMarkets.length,
-        sample: opinionTitles,
+        totalTitles: allOpinionTitles.length,
+        sample: opinionSample,
       },
       polymarket: {
         count: polyEvents.length,
-        sample: polyTitles,
+        sample: polySample,
       },
+      searchResults,
     });
   } catch (err) {
     console.error("[debug-markets] Error:", err);

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { opinionFetch } from "@/lib/opinion";
+import { opinionFetch, opinionFetchAllMarkets } from "@/lib/opinion";
 import fs from "fs/promises";
 import path from "path";
 
@@ -93,14 +93,20 @@ async function fetchMarketDetail(marketId, marketType) {
 async function scanBonusMarkets(limit) {
   console.log(`[Bonus] Starting scan with limit=${limit}`);
   
-  // 1) Pull a large activated market list (fetch ALL types)
-  const listPayload = await opinionFetch("/market", {
-    params: { status: "activated", sortBy: 5, limit },
+  // 1) Pull activated markets with pagination (API limit is 20 per page)
+  // Calculate maxPages based on limit
+  const maxPages = Math.ceil(Math.min(limit, 500) / 20);
+  const listPayload = await opinionFetchAllMarkets({
+    status: "activated",
+    sortBy: 5,
+    marketType: 0, // Binary only (categorical children need different approach)
+    maxPages,
   });
 
-  const list = listPayload?.result?.data?.list || listPayload?.result?.data?.data?.list || [];
+  // API may return result.list (direct) or result.data.list (nested)
+  const list = listPayload?.result?.list || listPayload?.result?.data?.list || listPayload?.result?.data?.data?.list || [];
   
-  console.log(`[Bonus] List API returned ${list?.length || 0} markets`);
+  console.log(`[Bonus] List API returned ${list?.length || 0} markets (maxPages=${maxPages})`);
   
   if (!Array.isArray(list) || list.length === 0) {
     return { ids: [], scanned: 0, source: "empty" };

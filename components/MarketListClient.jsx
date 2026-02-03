@@ -5,11 +5,9 @@ import MarketRowV2 from "@/components/MarketRowV2";
 import { getDiscoverCache, setDiscoverCache, getBonusCache, setBonusCache } from "@/lib/clientCache";
 
 const ITEMS_PER_PAGE = 10;
-const TRENDING_COUNT = 20;
+const TRENDING_COUNT = 10;
 
 const NEW_LIMIT = 100; // ✅ top 100 newest active markets
-const HOT_LIMIT = 20; // ✅ top 20 hot markets
-const HOT_POOL = 150; // take top 150 newest active -> then rank by 24h vol
 
 // ===== helpers =====
 function parseCompactNumber(v) {
@@ -381,7 +379,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
   const cachedBonus = getBonusCache();
   const hasCachedBonus = cachedBonus?.loaded === true;
 
-  const [activeTab, setActiveTab] = useState(cached.activeTab || "bonus"); // "new" | "hot" | "trending" | "bonus" | "all"
+  const [activeTab, setActiveTab] = useState(cached.activeTab || "bonus"); // "new" | "trending" | "bonus" | "all"
   const [volMode, setVolMode] = useState(cached.volMode || "24h"); // "24h" | "all"
   const [currentPage, setCurrentPage] = useState(cached.currentPage || 1);
   const [visible, setVisible] = useState(cached.visible || 6);
@@ -405,8 +403,6 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
 
   const [allTabLoaded, setAllTabLoaded] = useState(cached.allTabLoaded || false);
   const initTrendingDoneRef = useRef(false);
-  const hotPrefetchDoneRef = useRef(false);
-  const trendingPrefetchDoneRef = useRef(false);
 
   // ✅ NEW: State to hold freshly fetched new markets (merged with initial)
   const [freshNewMarkets, setFreshNewMarkets] = useState(cached.freshNewMarkets || []);
@@ -451,22 +447,19 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
         const json = await res.json();
         const list = json?.result?.list ?? [];
         if (Array.isArray(list) && list.length > 0) {
-          // ✅ Filter out root/parent markets (marketType=1)
-          const filteredList = list.filter((m) => {
-            const mType = m?.marketType ?? m?.market_type;
-            return mType !== 1 && mType !== "1";
-          });
+          // ✅ Both marketType=0 (Binary) and marketType=1 (Categorical) are valid!
+          // No filtering by marketType needed
           
           setFreshNewMarkets((prev) => {
             // Merge new markets, dedup by marketId
             const byId = new Map();
-            for (const m of [...prev, ...filteredList]) {
+            for (const m of [...prev, ...list]) {
               const id = String(m?.marketId);
               if (id && !byId.has(id)) byId.set(id, m);
             }
             return Array.from(byId.values());
           });
-          console.log(`[NewTab] Polled ${filteredList.length} newest markets (filtered from ${list.length})`);
+          console.log(`[NewTab] Polled ${list.length} newest markets`);
         }
       } catch (e) {
         console.error("[NewTab] Poll failed:", e);
@@ -490,12 +483,12 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
   }, [activeTab]);
 
     // ✅ Auto refresh by tab (NO refetch). Visibility-guarded to save TPS/CPU.
-  // NEW: 6h/lần | HOT/TRENDING: 1h/lần
+  // NEW: 6h/lần | TRENDING: 1h/lần
   useEffect(() => {
     let hours = 0;
 
     if (activeTab === "new") hours = 6;
-    else if (activeTab === "hot" || activeTab === "trending") hours = 1;
+    else if (activeTab === "trending") hours = 1;
     else return; // other tabs: no auto refresh
 
     const intervalMs = hours * 60 * 60 * 1000;
@@ -515,26 +508,39 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
 
   // ✅ Central active list to avoid showing/processing expired/resolved markets in Discover
   // Also merge freshNewMarkets for "new" tab
-  // Filter out root/parent markets (marketType=1)
+  // NOTE: marketType=0 (Binary), marketType=1 (Categorical)
+  // For categorical: only show CHILD markets (has rootMarketId different from marketId)
+  // Parent categorical markets are not tradable directly
   const activeMarkets = useMemo(() => {
-    const nowMs = Date.now();
-    // Merge initial markets with freshly polled new markets
-    const combined = [...markets];
-    if (freshNewMarkets.length > 0) {
-      const existingIds = new Set(markets.map((m) => String(m?.marketId)));
-      for (const m of freshNewMarkets) {
-        if (!existingIds.has(String(m?.marketId))) {
-          combined.push(m);
+    try {
+      const nowMs = Date.now();
+      // Merge initial markets with freshly polled new markets
+      const combined = [...(markets || [])];
+      if (freshNewMarkets && freshNewMarkets.length > 0) {
+        const existingIds = new Set(combined.map((m) => String(m?.marketId)));
+        for (const m of freshNewMarkets) {
+          if (!existingIds.has(String(m?.marketId))) {
+            combined.push(m);
+          }
         }
       }
+      return combined.filter((m) => {
+        // ✅ Filter out parent categorical markets (not tradable directly)
+        const mType = Number(m?.marketType ?? m?.market_type);
+        if (mType === 1) {
+          const rootId = m?.rootMarketId;
+          const marketId = m?.marketId;
+          // Parent if: no rootMarketId, or rootMarketId equals marketId
+          if (!rootId || rootId === "" || rootId === null || rootId === undefined) return false;
+          if (String(rootId) === String(marketId)) return false;
+        }
+        
+        return isActiveNotExpired(m, nowMs);
+      });
+    } catch (err) {
+      console.error("[activeMarkets] Error:", err);
+      return [];
     }
-    return combined.filter((m) => {
-      // ✅ Filter out root/parent markets (marketType=1)
-      const mType = m?.marketType ?? m?.market_type;
-      if (mType === 1 || mType === "1") return false;
-      
-      return isActiveNotExpired(m, nowMs);
-    });
   }, [markets, freshNewMarkets, refreshTick]);
 
   // Detect bonus markets from list data first (if incentiveFactor exists in list)
@@ -673,8 +679,8 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     setActiveTab(tab);
     setCurrentPage(1);
     setSearch("");
-    // Auto sort by volume desc for Hot/Trending/All tabs
-    if (tab === "hot" || tab === "trending" || tab === "all") {
+    // Auto sort by volume desc for Trending/All tabs
+    if (tab === "trending" || tab === "all") {
       setSortConfig({ key: "volume", direction: "desc" });
     } else {
       setSortConfig({ key: null, direction: null });
@@ -685,6 +691,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
 
   // ✅ NEW: newest ACTIVE markets (from activeMarkets)
   const newestPool = useMemo(() => {
+    if (!activeMarkets || activeMarkets.length === 0) return [];
     return [...activeMarkets].sort((a, b) => recencyKey(b) - recencyKey(a));
   }, [activeMarkets]);
 
@@ -692,32 +699,34 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     return newestPool.slice(0, NEW_LIMIT);
   }, [newestPool]);
 
-  // ✅ HOT: from newestPool (top 150 newest active), rank by 24h vol, take top 20
-  // Fallback to total volume for categorical children that don't have volume24h
-  const hotMarkets = useMemo(() => {
-    const pool = newestPool.slice(0, HOT_POOL);
-
-    const ranked = [...pool].sort((a, b) => {
-      const aOv = volumeMap[String(a.marketId)];
-      const bOv = volumeMap[String(b.marketId)];
-      const aVal = (aOv?.volume24h ?? 0) || getVolumeValue(a, "24h") || getVolumeValue(a, "total");
-      const bVal = (bOv?.volume24h ?? 0) || getVolumeValue(b, "24h") || getVolumeValue(b, "total");
-      return bVal - aVal;
-    });
-
-    return ranked.slice(0, HOT_LIMIT);
-  }, [newestPool, volumeMap]);
-
-  // ✅ TRENDING: top 20 by volume (24h), use same logic as ALL tab sort
-  // Uses volumeMap (from API fetch) for accurate volume24h data
+  // ✅ TRENDING: Sort activeMarkets by volume24h (with fallback logic)
+  // activeMarkets already includes both binary AND categorical children (from MarketsContent)
+  // NOTE: Categorical children don't have volume24h from API, only total volume
+  // Strategy: 
+  // 1. Markets with volume24h > 0 get sorted by volume24h
+  // 2. Markets without volume24h (categorical children) use total volume / 30 as estimate
+  //    (assuming ~30 day average activity as proxy for daily volume)
   const trendingMarkets = useMemo(() => {
+    if (!activeMarkets || activeMarkets.length === 0) return [];
     const arr = [...activeMarkets];
     arr.sort((a, b) => {
-      // Same logic as ALL tab sort - use volumeMap first for accurate volume24h
       const aOv = volumeMap[String(a.marketId)];
       const bOv = volumeMap[String(b.marketId)];
-      const aVal = (aOv?.volume24h ?? 0) || getVolumeValue(a, "24h") || getVolumeValue(a, "total");
-      const bVal = (bOv?.volume24h ?? 0) || getVolumeValue(b, "24h") || getVolumeValue(b, "total");
+      
+      // Get volume24h (preferred)
+      const aVol24h = (aOv?.volume24h ?? 0) || getVolumeValue(a, "24h");
+      const bVol24h = (bOv?.volume24h ?? 0) || getVolumeValue(b, "24h");
+      
+      // Get total volume
+      const aVolTotal = (aOv?.volume ?? 0) || getVolumeValue(a, "total");
+      const bVolTotal = (bOv?.volume ?? 0) || getVolumeValue(b, "total");
+      
+      // Calculate effective value for sorting
+      // If volume24h exists, use it directly
+      // Otherwise, estimate daily volume as totalVolume / 30
+      const aVal = aVol24h > 0 ? aVol24h : (aVolTotal / 30);
+      const bVal = bVol24h > 0 ? bVol24h : (bVolTotal / 30);
+      
       return bVal - aVal;
     });
     return arr.slice(0, TRENDING_COUNT);
@@ -731,16 +740,15 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
 
   // ✅ ALL: only ACTIVE markets (this is what drops 922 -> smaller)
   const allMarkets = useMemo(() => {
-    return activeMarkets;
+    return activeMarkets || [];
   }, [activeMarkets]);
 
   const currentTabMarkets = useMemo(() => {
     if (activeTab === "new") return newMarkets;
-    if (activeTab === "hot") return hotMarkets;
     if (activeTab === "trending") return trendingMarkets;
     if (activeTab === "bonus") return bonusMarkets;
     return allMarkets;
-  }, [activeTab, newMarkets, hotMarkets, trendingMarkets, bonusMarkets, allMarkets]);
+  }, [activeTab, newMarkets, trendingMarkets, bonusMarkets, allMarkets]);
 
   const filteredMarkets = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -751,105 +759,6 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
       return title.includes(s) || id.includes(s);
     });
   }, [currentTabMarkets, search]);
-
-  // ✅ Prefetch volumes for TRENDING when user opens it (fast - only top 50, high concurrency)
-  useEffect(() => {
-    if (activeTab !== "trending") return;
-    if (trendingPrefetchDoneRef.current) return;
-    if (!activeMarkets || activeMarkets.length === 0) return;
-
-    trendingPrefetchDoneRef.current = true;
-
-    // Sort by what we know to get likely top volume markets first
-    const sorted = [...activeMarkets].sort((a, b) => {
-      const aVal = getVolumeValue(a, "24h") || getVolumeValue(a, "total");
-      const bVal = getVolumeValue(b, "24h") || getVolumeValue(b, "total");
-      return bVal - aVal;
-    });
-
-    const idsNeed = sorted
-      .slice(0, 50) // Only top 50, not 200
-      .map((m) => String(m.marketId))
-      .filter(Boolean)
-      .filter((id) => {
-        const ov = volumeMap[id];
-        return !ov || (ov.volume24h <= 0 && ov.volume <= 0);
-      });
-
-    if (idsNeed.length === 0) return;
-
-    const run = async () => {
-      await runWithConcurrency(
-        idsNeed,
-        async (id) => {
-          try {
-            const res = await fetch(`/api/opinion/market/${encodeURIComponent(id)}`, { cache: "no-store" });
-            if (!res.ok) return;
-            const j = await safeReadJson(res);
-            if (!j) return;
-            const data = j?.result?.data ?? j?.result ?? j?.data ?? j ?? {};
-            const vAll = Number(data?.volume ?? 0) || 0;
-            const v24h = Number(data?.volume24h ?? 0) || 0;
-            if (vAll > 0 || v24h > 0) handleVolumeLoaded(id, { volume: vAll, volume24h: v24h });
-          } catch { /* ignore */ }
-        },
-        8 // Higher concurrency for faster load
-      );
-    };
-
-    run();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, activeMarkets]);
-
-  // ✅ Prefetch volumes for HOT when user opens HOT (for accuracy)
-  useEffect(() => {
-    if (activeTab !== "hot") return;
-    if (hotPrefetchDoneRef.current) return;
-    if (!newestPool || newestPool.length === 0) return;
-
-    hotPrefetchDoneRef.current = true;
-
-    const idsNeed = newestPool
-      .slice(0, HOT_POOL)
-      .map((m) => String(m.marketId))
-      .filter(Boolean)
-      .filter((id) => {
-        const ov = volumeMap[id];
-        return !ov || (ov.volume24h <= 0 && ov.volume <= 0);
-      })
-      .slice(0, 120);
-
-    if (idsNeed.length === 0) return;
-
-    const run = async () => {
-      await runWithConcurrency(
-        idsNeed,
-        async (id) => {
-          try {
-            const res = await fetch(`/api/opinion/market/${encodeURIComponent(id)}`, { cache: "no-store" });
-            if (!res.ok) return;
-
-            const j = await safeReadJson(res);
-            if (!j) return;
-
-            const data = j?.result?.data ?? j?.result ?? j?.data ?? j ?? {};
-            const vAll = Number(data?.volume ?? 0) || 0;
-            const v24h = Number(data?.volume24h ?? 0) || 0;
-
-            if (vAll > 0 || v24h > 0) handleVolumeLoaded(id, { volume: vAll, volume24h: v24h });
-          } catch {
-            // ignore
-          } finally {
-            await sleep(15);
-          }
-        },
-        4
-      );
-    };
-
-    run();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, newestPool]);
 
   // Prefetch volumes when ALL tab is activated (only ACTIVE markets)
   useEffect(() => {
@@ -907,8 +816,8 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     let effectiveSortKey = sortConfig.key;
     let effectiveSortDir = sortConfig.direction;
 
-    // Default volume desc for trending/hot if user hasn't chosen sort
-    if ((activeTab === "trending" || activeTab === "hot") && !sortConfig.key) {
+    // Default volume desc for trending if user hasn't chosen sort
+    if (activeTab === "trending" && !sortConfig.key) {
       effectiveSortKey = "volume";
       effectiveSortDir = "desc";
     }
@@ -936,6 +845,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
           aVal = (aOv?.volume24h ?? 0) || getVolumeValue(a, "24h");
           bVal = (bOv?.volume24h ?? 0) || getVolumeValue(b, "24h");
         } else {
+          // "all" mode - use total volume from volumeMap or market data
           aVal = (aOv?.volume ?? 0) || getVolumeValue(a, "all");
           bVal = (bOv?.volume ?? 0) || getVolumeValue(b, "all");
         }
@@ -978,9 +888,68 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     setCurrentPage(1);
   }, []);
 
-  const getSortIcon = useCallback((key) => {
-    if (sortConfig.key !== key) return "↕";
-    return sortConfig.direction === "desc" ? "↓" : "↑";
+  // Sort icon component - 12px outline style icons per guidelines
+  const SortIcon = useCallback(({ sortKey }) => {
+    const isActive = sortConfig.key === sortKey;
+    const direction = sortConfig.direction;
+    
+    // Neutral state (both arrows)
+    if (!isActive) {
+      return (
+        <svg 
+          width="12" 
+          height="12" 
+          viewBox="0 0 24 24" 
+          fill="none" 
+          stroke="currentColor" 
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ opacity: 0.4 }}
+        >
+          <path d="M7 15l5 5 5-5" />
+          <path d="M7 9l5-5 5 5" />
+        </svg>
+      );
+    }
+    
+    // Active desc (arrow down)
+    if (direction === "desc") {
+      return (
+        <svg 
+          width="12" 
+          height="12" 
+          viewBox="0 0 24 24" 
+          fill="none" 
+          stroke="currentColor" 
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ color: "rgba(255,180,50,1)" }}
+        >
+          <path d="M12 5v14" />
+          <path d="M19 12l-7 7-7-7" />
+        </svg>
+      );
+    }
+    
+    // Active asc (arrow up)
+    return (
+      <svg 
+        width="12" 
+        height="12" 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        stroke="currentColor" 
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{ color: "rgba(255,180,50,1)" }}
+      >
+        <path d="M12 19V5" />
+        <path d="M5 12l7-7 7 7" />
+      </svg>
+    );
   }, [sortConfig.key, sortConfig.direction]);
 
   // Deferred search for smoother typing
@@ -990,19 +959,20 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     <div className="panel market-list-panel" style={{ padding: 12 }}>
       {/* Top Bar: Tabs + Search + Volume Mode */}
       <div className="market-topbar">
-        {/* Tabs: NEW | HOT | TRENDING | BONUS | ALL */}
+        {/* Tabs: NEW | TRENDING | BONUS | ALL */}
         <div className="market-tabs">
           <button
             onClick={() => handleTabChange("new")}
+            aria-pressed={activeTab === "new"}
             style={{
-              padding: "10px 18px",
+              padding: "10px 16px",
               borderRadius: 8,
               border: "1px solid",
               borderColor: activeTab === "new" ? "rgba(0, 136, 255, 0.5)" : "rgba(255,255,255,0.12)",
               background: activeTab === "new" ? "rgba(0, 136, 255, 0.15)" : "transparent",
               color: activeTab === "new" ? "#0088ff" : "#fff",
               cursor: "pointer",
-              fontSize: 15,
+              fontSize: 14,
               fontWeight: 700,
               lineHeight: 1.2,
               transition: "all 0.2s",
@@ -1012,35 +982,17 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
           </button>
 
           <button
-            onClick={() => handleTabChange("hot")}
-            style={{
-              padding: "10px 18px",
-              borderRadius: 8,
-              border: "1px solid",
-              borderColor: activeTab === "hot" ? "rgba(255, 153, 0, 0.55)" : "rgba(255,255,255,0.12)",
-              background: activeTab === "hot" ? "rgba(255, 153, 0, 0.16)" : "transparent",
-              color: activeTab === "hot" ? "#ff9900" : "#fff",
-              cursor: "pointer",
-              fontSize: 15,
-              fontWeight: 700,
-              lineHeight: 1.2,
-              transition: "all 0.2s",
-            }}
-          >
-            HOT
-          </button>
-
-          <button
             onClick={() => handleTabChange("trending")}
+            aria-pressed={activeTab === "trending"}
             style={{
-              padding: "10px 18px",
+              padding: "10px 16px",
               borderRadius: 8,
               border: "1px solid",
               borderColor: activeTab === "trending" ? "rgba(0, 255, 136, 0.5)" : "rgba(255,255,255,0.12)",
               background: activeTab === "trending" ? "rgba(0, 255, 136, 0.15)" : "transparent",
               color: activeTab === "trending" ? "#00ff88" : "#fff",
               cursor: "pointer",
-              fontSize: 15,
+              fontSize: 14,
               fontWeight: 700,
               lineHeight: 1.2,
               transition: "all 0.2s",
@@ -1051,15 +1003,16 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
 
           <button
             onClick={() => handleTabChange("bonus")}
+            aria-pressed={activeTab === "bonus"}
             style={{
-              padding: "10px 18px",
+              padding: "10px 16px",
               borderRadius: 8,
               border: "1px solid",
               borderColor: activeTab === "bonus" ? "rgba(245, 200, 75, 0.55)" : "rgba(255,255,255,0.12)",
               background: activeTab === "bonus" ? "rgba(245, 200, 75, 0.12)" : "transparent",
               color: activeTab === "bonus" ? "#F5C84B" : "#fff",
               cursor: "pointer",
-              fontSize: 15,
+              fontSize: 14,
               fontWeight: 700,
               lineHeight: 1.2,
               transition: "all 0.2s",
@@ -1070,15 +1023,16 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
 
           <button
             onClick={() => handleTabChange("all")}
+            aria-pressed={activeTab === "all"}
             style={{
-              padding: "10px 18px",
+              padding: "10px 16px",
               borderRadius: 8,
               border: "1px solid",
               borderColor: activeTab === "all" ? "rgba(0, 136, 255, 0.5)" : "rgba(255,255,255,0.12)",
               background: activeTab === "all" ? "rgba(0, 136, 255, 0.15)" : "transparent",
               color: activeTab === "all" ? "#0088ff" : "#fff",
               cursor: "pointer",
-              fontSize: 15,
+              fontSize: 14,
               fontWeight: 700,
               lineHeight: 1.2,
               transition: "all 0.2s",
@@ -1089,14 +1043,34 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
         </div>
 
         {/* Search */}
-        <div className="market-search-wrap">
+        <div className="market-search-wrap" style={{ position: "relative" }}>
+          {/* Search Icon */}
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{
+              position: "absolute",
+              left: 12,
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: "rgba(255,255,255,0.4)",
+              pointerEvents: "none",
+            }}
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
           <input
             type="text"
             placeholder={`Search in ${
               activeTab === "new"
                 ? "New"
-                : activeTab === "hot"
-                ? "Hot"
                 : activeTab === "trending"
                 ? "Trending"
                 : activeTab === "bonus"
@@ -1110,7 +1084,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
             }}
             style={{
               width: "100%",
-              padding: "10px 16px",
+              padding: "10px 16px 10px 40px",
               borderRadius: 8,
               border: "1px solid rgba(255,255,255,0.12)",
               background: "rgba(255,255,255,0.04)",
@@ -1185,80 +1159,56 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
 
           <div
             className="muted"
-            onClick={() => {
-              setSortConfig((prev) => {
-                if (prev.key === "chance") {
-                  if (prev.direction === "desc") return { key: "chance", direction: "asc" };
-                  if (prev.direction === "asc") return { key: null, direction: null };
-                }
-                return { key: "chance", direction: "desc" };
-              });
-              setCurrentPage(1);
-            }}
+            onClick={() => handleSort("chance")}
             style={{
               cursor: "pointer",
               userSelect: "none",
               display: "flex",
               alignItems: "center",
               gap: 4,
+              color: sortConfig.key === "chance" ? "rgba(255,180,50,1)" : undefined,
+              fontWeight: sortConfig.key === "chance" ? 700 : undefined,
             }}
+            title="Sort by chance"
           >
-            Chance{" "}
-            <span style={{ fontSize: 10, opacity: sortConfig.key === "chance" ? 1 : 0.5 }} suppressHydrationWarning>
-              {getSortIcon("chance")}
-            </span>
+            Chance
+            <SortIcon sortKey="chance" />
           </div>
 
           <div
             className="muted"
-            onClick={() => {
-              setSortConfig((prev) => {
-                if (prev.key === "volume") {
-                  if (prev.direction === "desc") return { key: "volume", direction: "asc" };
-                  if (prev.direction === "asc") return { key: null, direction: null };
-                }
-                return { key: "volume", direction: "desc" };
-              });
-              setCurrentPage(1);
-            }}
+            onClick={() => handleSort("volume")}
             style={{
               cursor: "pointer",
               userSelect: "none",
               display: "flex",
               alignItems: "center",
               gap: 4,
+              color: sortConfig.key === "volume" ? "rgba(255,180,50,1)" : undefined,
+              fontWeight: sortConfig.key === "volume" ? 700 : undefined,
             }}
+            title="Sort by volume"
           >
-            Volume (24h){" "}
-            <span style={{ fontSize: 10, opacity: sortConfig.key === "volume" ? 1 : 0.5 }} suppressHydrationWarning>
-              {getSortIcon("volume")}
-            </span>
+            Volume ({displayVolMode === "all" ? "All" : "24h"})
+            <SortIcon sortKey="volume" />
           </div>
 
           <div
             className="muted"
-            onClick={() => {
-              setSortConfig((prev) => {
-                if (prev.key === "expires") {
-                  if (prev.direction === "desc") return { key: "expires", direction: "asc" };
-                  if (prev.direction === "asc") return { key: null, direction: null };
-                }
-                return { key: "expires", direction: "desc" };
-              });
-              setCurrentPage(1);
-            }}
+            onClick={() => handleSort("expires")}
             style={{
               cursor: "pointer",
               userSelect: "none",
               display: "flex",
               alignItems: "center",
               gap: 4,
+              color: sortConfig.key === "expires" ? "rgba(255,180,50,1)" : undefined,
+              fontWeight: sortConfig.key === "expires" ? 700 : undefined,
             }}
+            title="Sort by expiration date"
           >
-            Expires{" "}
-            <span style={{ fontSize: 10, opacity: sortConfig.key === "expires" ? 1 : 0.5 }} suppressHydrationWarning>
-              {getSortIcon("expires")}
-            </span>
+            Expires
+            <SortIcon sortKey="expires" />
           </div>
         </div>
       </div>
@@ -1266,12 +1216,28 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
       {/* List */}
       <div className="market-list-container" style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
         {pageList.length === 0 ? (
-          <div className="muted" style={{ textAlign: "center", padding: 20 }} suppressHydrationWarning>
-            {activeTab === "bonus"
-              ? "Scanning for bonus markets... Up to ~30s to fully load."
-              : search
-              ? "No markets found"
-              : "Loading..."}
+          <div className="muted" style={{ textAlign: "center", padding: 32 }} suppressHydrationWarning>
+            {activeTab === "bonus" && bonusLoading ? (
+              <>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Finding bonus markets...</div>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>This may take up to 30 seconds on first load.</div>
+              </>
+            ) : search ? (
+              <>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>No markets found</div>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>Try a different search term.</div>
+              </>
+            ) : activeTab === "bonus" && !bonusLoading && bonusMarkets.length === 0 ? (
+              <>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>No bonus markets available</div>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>Check back later for new bonus opportunities.</div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Loading markets...</div>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>Fetching latest data.</div>
+              </>
+            )}
           </div>
         ) : (
           pageList.slice(0, visible).map((m, idx) => (
@@ -1298,9 +1264,27 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
             className="btn ghost"
             onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={currentPage === 1}
-            style={{ opacity: currentPage === 1 ? 0.4 : 1 }}
+            style={{ 
+              opacity: currentPage === 1 ? 0.4 : 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "8px 12px",
+            }}
+            aria-label="Previous page"
           >
-            ←
+            <svg 
+              width="16" 
+              height="16" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="15,18 9,12 15,6" />
+            </svg>
           </button>
 
           <div className="muted" style={{ paddingTop: 8, fontSize: 13 }}>
@@ -1311,18 +1295,34 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
             className="btn ghost"
             onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
             disabled={currentPage === totalPages}
-            style={{ opacity: currentPage === totalPages ? 0.4 : 1 }}
+            style={{ 
+              opacity: currentPage === totalPages ? 0.4 : 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "8px 12px",
+            }}
+            aria-label="Next page"
           >
-            →
+            <svg 
+              width="16" 
+              height="16" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="9,18 15,12 9,6" />
+            </svg>
           </button>
         </div>
       )}
 
       {/* Tab info */}
       <div className="muted" style={{ textAlign: "center", marginTop: 12, fontSize: 11 }} suppressHydrationWarning>
-        {activeTab === "hot"
-          ? `Top ${Math.min(HOT_LIMIT, sortedMarkets.length)} hot new markets (ranked by 24h volume)`
-          : activeTab === "new"
+        {activeTab === "new"
           ? `Top ${Math.min(NEW_LIMIT, sortedMarkets.length)} newest active markets`
           : activeTab === "trending"
           ? `Top ${Math.min(TRENDING_COUNT, sortedMarkets.length)} markets by 24h volume`

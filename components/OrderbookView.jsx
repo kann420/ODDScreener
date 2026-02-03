@@ -760,10 +760,6 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
               return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
             })() : "-"}</div>
           </div>
-          <div className="hide-on-mobile">
-            <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>24h Change</div>
-            <div style={{ fontWeight: 700 }}>-</div>
-          </div>
           <div>
             <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>24h Volume</div>
             <div style={{ fontWeight: 700, color: "#fff" }}>{volume24h ? `$${fmtQty(volume24h)}` : "-"}</div>
@@ -771,30 +767,6 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
           <div>
             <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Total Volume</div>
             <div style={{ fontWeight: 700, color: "#fff" }}>{totalVolume ? `$${fmtQty(totalVolume)}` : "-"}</div>
-          </div>
-          <div className="hide-on-mobile">
-            <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Open Interest</div>
-            <div style={{ fontWeight: 700 }}>{openInterest ? `$${fmtQty(openInterest)}` : "-"}</div>
-          </div>
-          <div className="hide-on-mobile">
-            <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Volatility</div>
-            <div style={{ fontWeight: 700 }}>-</div>
-          </div>
-          <div className="detail-rules-btn hide-on-mobile" style={{ marginLeft: "auto" }}>
-            <button
-              className="btn"
-              style={{ fontSize: 11, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}
-              onClick={() => setShowRules(!showRules)}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14,2 14,8 20,8" />
-                <line x1="16" y1="13" x2="8" y2="13" />
-                <line x1="16" y1="17" x2="8" y2="17" />
-                <polyline points="10,9 9,9 8,9" />
-              </svg>
-              Rules
-            </button>
           </div>
         </div>
 
@@ -837,42 +809,41 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
 
             <div style={{ padding: "12px 16px" }}>
               <div className="trades-table-wrap">
-                <table className="trades-table" style={{
-                  width: "100%",
-                  borderCollapse: "collapse",
-                  fontSize: 13
-                }}>
-                  <thead style={{ position: "sticky", top: 0, background: "#0d0d0d", zIndex: 1 }}>
-                    <tr style={{
-                      fontSize: 12,
-                      color: "rgba(148,163,184,0.8)",
-                      fontWeight: 700,
-                      textAlign: "left"
-                    }}>
-                      <th style={{ padding: "10px 12px 10px 0", fontWeight: 700 }}>Time</th>
-                      <th style={{ padding: "10px 12px", fontWeight: 700 }}>Outcome</th>
-                      <th style={{ padding: "10px 12px", fontWeight: 700 }}>Type</th>
-                      <th style={{ padding: "10px 12px", fontWeight: 700 }}>Price</th>
-                      <th style={{ padding: "10px 12px", fontWeight: 700 }}>Amount</th>
-                      <th style={{ padding: "10px 12px", fontWeight: 700 }}>Total USD</th>
-                      <th style={{ padding: "10px 12px", fontWeight: 700 }}>Trader</th>
+                <table className="trades-table">
+                  <thead className="trades-table-header">
+                    <tr>
+                      <th>Time</th>
+                      <th>Outcome</th>
+                      <th>Type</th>
+                      <th>Price</th>
+                      <th>Amount</th>
+                      <th>Total USD</th>
+                      <th>Trader</th>
                     </tr>
                   </thead>
 
                   <tbody>
                     {recentTrades.length === 0 ? (
                       <tr>
-                        <td colSpan={7} style={{
-                          textAlign: "center",
-                          padding: "24px 0",
-                          color: "rgba(148,163,184,0.6)",
-                          fontSize: 13
-                        }}>
-                          {wsConnected
-                            ? "Loading..."
-                            : wsError
-                              ? "Unable to connect to live feed"
-                              : "Connecting to live feed..."}
+                        <td colSpan={7} className="trades-empty-state">
+                          <div className="trades-empty-content">
+                            {wsConnected ? (
+                              <>
+                                <span className="trades-empty-title">Waiting for trades</span>
+                                <span className="trades-empty-hint">Live trades will appear here</span>
+                              </>
+                            ) : wsError ? (
+                              <>
+                                <span className="trades-empty-title trades-empty-error">Connection error</span>
+                                <span className="trades-empty-hint">Unable to connect to live feed</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="trades-empty-title">Connecting...</span>
+                                <span className="trades-empty-hint">Establishing live feed connection</span>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ) : (
@@ -995,38 +966,18 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
         </div>
 
         <div className="panel orderbook-panel">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ fontWeight: 900, fontSize: 13 }}>Order Book</div>
-            <div style={{ display: "flex", gap: 4 }}>
+          <div className="orderbook-header">
+            <div className="orderbook-title">Order Book</div>
+            <div className="outcome-toggle">
               <button
                 onClick={() => setOutcome("YES")}
-                style={{
-                  padding: "6px 14px",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  borderRadius: 6,
-                  border: "none",
-                  cursor: "pointer",
-                  background: outcome === "YES" ? "#22d3ee" : "rgba(255,255,255,0.08)",
-                  color: outcome === "YES" ? "#0a0a0a" : "rgba(255,255,255,0.6)",
-                  transition: "all 0.15s ease"
-                }}
+                className={`outcome-btn outcome-btn-yes ${outcome === "YES" ? "active" : ""}`}
               >
                 YES
               </button>
               <button
                 onClick={() => setOutcome("NO")}
-                style={{
-                  padding: "6px 14px",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  borderRadius: 6,
-                  border: "none",
-                  cursor: "pointer",
-                  background: outcome === "NO" ? "#a855f7" : "rgba(255,255,255,0.08)",
-                  color: outcome === "NO" ? "#fff" : "rgba(255,255,255,0.6)",
-                  transition: "all 0.15s ease"
-                }}
+                className={`outcome-btn outcome-btn-no ${outcome === "NO" ? "active" : ""}`}
               >
                 NO
               </button>
@@ -1059,33 +1010,21 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                   </div>
                 ))
               ) : asksD.length === 0 ? (
-                <div className="muted" style={{ padding: 10, fontSize: 12 }}>No asks</div>
+                <div className="orderbook-empty-state">
+                  <span>No asks available</span>
+                  <span className="orderbook-empty-hint">Waiting for sell orders</span>
+                </div>
               ) : (
                 asksD.map((r, i) => {
                   const maxCum = Math.max(1, ...asksD.map(x => x.cumTotal));
                   const pct = Math.max(0, Math.min(100, (r.cumTotal / maxCum) * 100));
                   return (
-                    <div key={`ask-${i}`} style={{ position: "relative", overflow: "hidden", marginTop: 6 }}>
-                      <div style={{
-                        position: "absolute",
-                        left: 0, top: 0, bottom: 0,
-                        width: `${pct}%`,
-                        background: "rgba(239,68,68,0.26)"
-                      }} />
-                      <div style={{
-                        position: "relative",
-                        display: "grid",
-                        gridTemplateColumns: "74px 1fr 1fr",
-                        gap: 10,
-                        alignItems: "center",
-                        padding: "10px 10px",
-                        borderRadius: 10,
-                        border: "1px solid rgba(255,255,255,0.06)",
-                        background: "rgba(255,255,255,0.02)"
-                      }}>
-                        <div className="red" style={{ fontWeight: 900 }}>{(r.price * 100).toFixed(1)}¢</div>
-                        <div className="mono muted">{fmtQty(r.shares)}</div>
-                        <div className="mono" style={{ textAlign: "right" }}>${fmtQty(r.total)}</div>
+                    <div key={`ask-${i}`} className="orderbook-row orderbook-row-ask">
+                      <div className="orderbook-row-depth" style={{ width: `${pct}%` }} />
+                      <div className="orderbook-row-content">
+                        <div className="red orderbook-price">{(r.price * 100).toFixed(1)}¢</div>
+                        <div className="mono muted orderbook-shares">{fmtQty(r.shares)}</div>
+                        <div className="mono orderbook-total">${fmtQty(r.total)}</div>
                       </div>
                     </div>
                   );
@@ -1094,19 +1033,15 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
             </div>
           </div>
 
-          <div style={{
-            marginTop: 12,
-            padding: "10px 10px",
-            borderTop: "1px solid rgba(255,255,255,0.06)",
-            borderBottom: "1px solid rgba(255,255,255,0.06)",
-            display: "flex",
-            justifyContent: "space-between",
-            color: "rgba(148,163,184,0.95)",
-            fontSize: 12,
-            fontWeight: 800
-          }}>
-            <div>Last: <span className="mono" style={{ color: "#e9eef5" }}>{bids[0] ? (bids[0].price * 100).toFixed(1).replace(/\.0$/, "") + "¢" : "-"}</span></div>
-            <div>Spread: <span className="mono" style={{ color: "#e9eef5" }}>{bids[0] && asks[0] ? ((asks[0].price - bids[0].price) * 100).toFixed(1).replace(/\.0$/, "") + "¢" : "-"}</span></div>
+          <div className="orderbook-spread-row">
+            <div className="orderbook-spread-item">
+              <span className="orderbook-spread-label">Last</span>
+              <span className="mono orderbook-spread-value">{bids[0] ? (bids[0].price * 100).toFixed(1).replace(/\.0$/, "") + "¢" : "-"}</span>
+            </div>
+            <div className="orderbook-spread-item">
+              <span className="orderbook-spread-label">Spread</span>
+              <span className="mono orderbook-spread-value">{bids[0] && asks[0] ? ((asks[0].price - bids[0].price) * 100).toFixed(1).replace(/\.0$/, "") + "¢" : "-"}</span>
+            </div>
           </div>
 
           <div style={{ marginTop: 12 }}>
@@ -1121,33 +1056,21 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                   </div>
                 ))
               ) : bidsD.length === 0 ? (
-                <div className="muted" style={{ padding: 10, fontSize: 12 }}>No bids</div>
+                <div className="orderbook-empty-state">
+                  <span>No bids available</span>
+                  <span className="orderbook-empty-hint">Waiting for buy orders</span>
+                </div>
               ) : (
                 bidsD.map((r, i) => {
                   const maxCum = Math.max(1, ...bidsD.map(x => x.cumTotal));
                   const pct = Math.max(0, Math.min(100, (r.cumTotal / maxCum) * 100));
                   return (
-                    <div key={`bid-${i}`} style={{ position: "relative", overflow: "hidden", marginTop: 6 }}>
-                      <div style={{
-                        position: "absolute",
-                        left: 0, top: 0, bottom: 0,
-                        width: `${pct}%`,
-                        background: "rgba(34,197,94,0.22)"
-                      }} />
-                      <div style={{
-                        position: "relative",
-                        display: "grid",
-                        gridTemplateColumns: "74px 1fr 1fr",
-                        gap: 10,
-                        alignItems: "center",
-                        padding: "10px 10px",
-                        borderRadius: 10,
-                        border: "1px solid rgba(255,255,255,0.06)",
-                        background: "rgba(255,255,255,0.02)"
-                      }}>
-                        <div className="green" style={{ fontWeight: 900 }}>{(r.price * 100).toFixed(1)}¢</div>
-                        <div className="mono muted">{fmtQty(r.shares)}</div>
-                        <div className="mono" style={{ textAlign: "right" }}>${fmtQty(r.total)}</div>
+                    <div key={`bid-${i}`} className="orderbook-row orderbook-row-bid">
+                      <div className="orderbook-row-depth orderbook-row-depth-bid" style={{ width: `${pct}%` }} />
+                      <div className="orderbook-row-content">
+                        <div className="green orderbook-price">{(r.price * 100).toFixed(1)}¢</div>
+                        <div className="mono muted orderbook-shares">{fmtQty(r.shares)}</div>
+                        <div className="mono orderbook-total">${fmtQty(r.total)}</div>
                       </div>
                     </div>
                   );

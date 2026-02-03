@@ -45,10 +45,13 @@ export default function NavLinks() {
           <span className="coming-soon">coming soon</span>
         </span>
 
-        <span className="nav-disabled">
-          Wallet Tracker
-          <span className="coming-soon">coming soon</span>
-        </span>
+        <Link
+          href="/wallet"
+          className={pathname?.startsWith("/wallet") ? "nav-smart active" : "nav-smart"}
+        >
+          <span className="nav-smart-title">Wallet Tracker</span>
+          <span className="nav-smart-badge">NEW</span>
+        </Link>
 
         <Link
           href="/smart-money"
@@ -135,6 +138,15 @@ export default function NavLinks() {
             <span className="mobile-menu-badge orange">EARLY</span>
           </Link>
 
+          <Link href="/wallet" className={`mobile-menu-item ${pathname?.startsWith("/wallet") ? "active" : ""}`}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+              <line x1="1" y1="10" x2="23" y2="10"/>
+            </svg>
+            Wallet Tracker
+            <span className="mobile-menu-badge">NEW</span>
+          </Link>
+
           <div className="mobile-menu-divider" />
 
           <div className="mobile-menu-item disabled">
@@ -151,15 +163,6 @@ export default function NavLinks() {
               <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
             </svg>
             Watchlist
-            <span className="mobile-menu-soon">Soon</span>
-          </div>
-
-          <div className="mobile-menu-item disabled">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
-              <line x1="1" y1="10" x2="23" y2="10"/>
-            </svg>
-            Wallet Tracker
             <span className="mobile-menu-soon">Soon</span>
           </div>
         </nav>
