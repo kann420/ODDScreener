@@ -999,20 +999,16 @@ export default function ArbitageBoard() {
           <div className="muted" style={{ fontSize: 13, fontWeight: 800 }}>
             {searchQuery.trim() 
               ? `No results found for "${searchQuery.trim()}"`
-              : whitelistOnly 
-                ? `No whitelist markets with arbitrage ≥ ${minArbPct.toFixed(2)}% found.`
-                : bonusOnly 
-                  ? `No bonus markets with arbitrage ≥ ${minArbPct.toFixed(2)}% found.`
-                  : `No arbitrage opportunities ≥ ${minArbPct.toFixed(2)}% found.`}
+              : bonusOnly 
+                ? `No bonus markets with arbitrage ≥ ${minArbPct.toFixed(2)}% found.`
+                : `No arbitrage opportunities ≥ ${minArbPct.toFixed(2)}% found.`}
           </div>
           <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
             {searchQuery.trim()
               ? "Try a different search term or clear the search."
-              : whitelistOnly 
-                ? "Try disabling the whitelist filter or running a Full Scan."
-                : bonusOnly 
-                  ? "Try disabling the bonus filter or adjusting other filters."
-                  : "Try checking back later, adjust filters, or switch between Bids/Asks mode."}
+              : bonusOnly 
+                ? "Try disabling the bonus filter or adjusting other filters."
+                : "Try checking back later, adjust filters, or switch between Bids/Asks mode."}
           </div>
         </div>
       ) : (
