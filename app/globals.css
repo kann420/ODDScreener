@@ -572,6 +572,11 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
     padding: 10px 12px; 
     overflow-x: hidden;
   }
+
+  /* Wallet page specific - tighter spacing on mobile */
+  .container.wallet-page-container { 
+    padding: 4px 12px !important; 
+  }
   
   .topbar-inner { 
     gap: 8px; 
@@ -640,6 +645,9 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
 
 @media (max-width: 480px) {
   .container { padding: 8px 10px; }
+  
+  /* Wallet page specific - tighter spacing */
+  .container.wallet-page-container { padding: 4px 10px !important; }
   
   .topbar-inner { 
     height: 44px;

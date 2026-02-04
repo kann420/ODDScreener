@@ -17,6 +17,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { polyFetch } from "@/lib/polyFetch";
 
 // ============================================================================
 // Configuration
@@ -39,9 +40,15 @@ function isValidWallet(address) {
 }
 
 /**
- * Fetch with timeout
+ * Fetch with timeout - uses polyFetch for Polymarket domains
  */
 async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  // Use polyFetch for Polymarket domains (bypasses DNS issues)
+  if (url.includes("polymarket.com")) {
+    return polyFetch(url, { ...options, timeoutMs });
+  }
+  
+  // Standard fetch for other domains
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   

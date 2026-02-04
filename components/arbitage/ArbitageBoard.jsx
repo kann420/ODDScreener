@@ -302,6 +302,15 @@ export default function ArbitageBoard() {
       try {
         const data = JSON.parse(e.data);
         setProgress(data);
+        
+        // Check for Polymarket API error
+        if (data.phase === "error" && data.error === "POLYMARKET_UNAVAILABLE") {
+          setErr(data.errorMessage || "Cannot connect to Polymarket API. Try changing DNS to 8.8.8.8 or using a VPN.");
+          es.close();
+          eventSourceRef.current = null;
+          setLoading(false);
+          setProgress(null);
+        }
       } catch {}
     });
 
@@ -540,7 +549,7 @@ export default function ArbitageBoard() {
               )}
             </div>
             {err ? (
-              <div style={{ marginTop: 8, fontSize: 12, fontWeight: 800, color: "rgba(255,120,120,0.95)" }}>{err}</div>
+              <div style={{ marginTop: 8, fontSize: 12, fontWeight: 800, color: "rgba(255,120,120,0.95)" }}>⚠️ {err}</div>
             ) : null}
           </div>
 

@@ -24,3 +24,11 @@ data/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+
+# Debug and test files - don't commit
+debug_*.json
+debug-*.js
+test-*.js
+poly_*.json
+poly_*.txt
+server.log

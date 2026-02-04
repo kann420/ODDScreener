@@ -37,8 +37,11 @@ export async function GET(req) {
     const rows = Array.isArray(result?.rows) ? result.rows : [];
     const debug = Array.isArray(result?.debug) ? result.debug : [];
 
+    // Check for Polymarket API error
+    const isPolymarketError = result?.error === "POLYMARKET_UNAVAILABLE";
+
     const payload = { 
-      ok: true, 
+      ok: !isPolymarketError, 
       rows,
       meta: {
         totalFound: rows.length,
@@ -48,6 +51,12 @@ export async function GET(req) {
         scannedAt: new Date().toISOString(),
       }
     };
+
+    // Add error info if Polymarket is unavailable
+    if (isPolymarketError) {
+      payload.error = result.error;
+      payload.errorMessage = result.errorMessage || "Cannot connect to Polymarket API.";
+    }
     
     if (wantDebug) payload.debug = debug;
 

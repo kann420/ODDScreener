@@ -19,6 +19,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { isValidWalletAddress } from "@/lib/walletTracker/format";
 import ArbitrageManageResults from "./ArbitrageManageResults";
+import SavedWalletsDropdown, { saveWalletAddress } from "./SavedWallets";
 
 // ============================================================================
 // Info Tooltip Component
@@ -60,19 +61,24 @@ function InfoTooltip({ text }) {
       onMouseLeave={() => setShow(false)}
       onClick={handleClick}
     >
-      {/* Info icon (circle with "i") */}
+      {/* Info icon (filled circle with "i") */}
       <svg 
         width="18" 
         height="18" 
         viewBox="0 0 24 24" 
-        fill="none" 
-        stroke="rgba(255,255,255,0.5)" 
-        strokeWidth="2"
-        style={{ transition: "stroke 0.15s" }}
+        fill="currentColor"
+        style={{ color: "rgba(255,255,255,0.6)", transition: "color 0.2s", cursor: "pointer" }}
+        onMouseEnter={(e) => e.currentTarget.style.color = "rgba(255,255,255,1)"}
+        onMouseLeave={(e) => e.currentTarget.style.color = "rgba(255,255,255,0.6)"}
       >
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="16" x2="12" y2="12"/>
-        <line x1="12" y1="8" x2="12.01" y2="8"/>
+        {/* Filled circle background */}
+        <circle cx="12" cy="12" r="10" fill="currentColor" opacity="0.15"/>
+        {/* Circle outline */}
+        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+        {/* Info text: dot */}
+        <circle cx="12" cy="8" r="1.2" fill="currentColor"/>
+        {/* Info text: line */}
+        <line x1="12" y1="11" x2="12" y2="16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
       </svg>
       
       {/* Tooltip popup */}
@@ -293,6 +299,10 @@ export default function ArbitrageManagePanel() {
     const finalPoly = polymarketWallet.trim();
     const finalOpinion = opinionWallet.trim();
     updateQueryParams(finalPoly, finalOpinion);
+    
+    // Save wallets to localStorage for future use
+    saveWalletAddress(finalPoly);
+    saveWalletAddress(finalOpinion);
     
     // For now, just show a placeholder message
     // (Real scanning logic will be implemented next)
@@ -527,6 +537,12 @@ export default function ArbitrageManagePanel() {
         {/* Polymarket Wallet Section */}
         <div className="arb-input-section">
           <label className="arb-input-label">Polymarket Wallet <span className="arb-label-note">(Proxy Wallet)</span></label>
+          <div style={{ position: "relative" }}>
+            <SavedWalletsDropdown 
+              onSelect={(wallet) => setPolymarketWallet(wallet)}
+              currentValue={polymarketWallet}
+            />
+          </div>
           <div className={`arb-input-wrapper ${polyError && polyTouched ? "error" : ""}`}>
             <SearchIcon />
             <input
@@ -543,6 +559,15 @@ export default function ArbitrageManagePanel() {
           <div className="arb-proxy-hint">
             💡 Find your proxy wallet at <a href="https://polymarket.com/profile" target="_blank" rel="noopener noreferrer">polymarket.com/profile</a> → Deposit/Withdraw → Your wallet address
           </div>
+          
+          <div style={{ marginTop: 12, borderRadius: 8, overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)" }}>
+            <img 
+              src="/wallet track/polytuto.png" 
+              alt="Polymarket Proxy Wallet Tutorial" 
+              style={{ width: "100%", display: "block" }} 
+            />
+          </div>
+
           {polyError && polyTouched && (
             <div className="arb-error">{polyError}</div>
           )}
@@ -554,6 +579,12 @@ export default function ArbitrageManagePanel() {
         {/* Opinion Wallet Section */}
         <div className="arb-input-section">
           <label className="arb-input-label">Opinion Wallet</label>
+          <div style={{ position: "relative" }}>
+            <SavedWalletsDropdown 
+              onSelect={(wallet) => setOpinionWallet(wallet)}
+              currentValue={opinionWallet}
+            />
+          </div>
           <div className={`arb-input-wrapper ${opinionError && opinionTouched ? "error" : ""}`}>
             <SearchIcon />
             <input
@@ -567,6 +598,19 @@ export default function ArbitrageManagePanel() {
               autoComplete="off"
             />
           </div>
+          
+          <div style={{ marginTop: 12, borderRadius: 8, overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)" }}>
+            <img 
+              src="/wallet track/optuto.png" 
+              alt="Opinion Wallet Tutorial" 
+              style={{ width: "100%", display: "block" }} 
+            />
+          </div>
+          
+          <div className="arb-proxy-hint">
+            💡 Find your wallet by click on Profile icon → Your wallet address
+          </div>
+
           {opinionError && opinionTouched && (
             <div className="arb-error">{opinionError}</div>
           )}
@@ -609,7 +653,7 @@ export default function ArbitrageManagePanel() {
         /* Card */
         .arb-card {
           background: rgba(255, 255, 255, 0.03);
-          border: 1px solid var(--border, rgba(255,255,255,0.1));
+          border: 1px solid #f97316;
           border-radius: 16px;
           padding: 24px;
         }
@@ -636,14 +680,14 @@ export default function ArbitrageManagePanel() {
           align-items: center;
           gap: 12px;
           background: rgba(0, 0, 0, 0.2);
-          border: 1px solid var(--border, rgba(255,255,255,0.1));
+          border: 1px solid #f97316;
           border-radius: 12px;
           padding: 14px 16px;
-          transition: border-color 0.15s, opacity 0.15s;
+          transition: border-color 0.15s, opacity 0.15s, box-shadow 0.15s;
         }
         
         .arb-input-wrapper:focus-within {
-          border-color: var(--accent, #22c55e);
+          box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
         }
         
         .arb-input-wrapper.error {
@@ -728,11 +772,15 @@ export default function ArbitrageManagePanel() {
         /* Track Wallet Button */
         .arb-track-btn {
           width: 100%;
-          background: linear-gradient(135deg, var(--accent, #22c55e), #16a34a);
+          background: linear-gradient(90deg, #ffaf89 0%, #f97316 100%);
           border: none;
           border-radius: 12px;
           padding: 16px 24px;
           color: white;
+          text-shadow:
+            0 1px 2px rgba(0, 0, 0, 0.2),
+            0 0 0.5px rgba(0, 0, 0, 0.9),
+            0 0 1px rgba(0, 0, 0, 0.9);
           font-size: 15px;
           font-weight: 600;
           cursor: pointer;
@@ -741,7 +789,8 @@ export default function ArbitrageManagePanel() {
         
         .arb-track-btn:hover:not(:disabled) {
           transform: translateY(-1px);
-          box-shadow: 0 4px 16px rgba(34, 197, 94, 0.35);
+          box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+          filter: brightness(1.1);
         }
         
         .arb-track-btn:active:not(:disabled) {

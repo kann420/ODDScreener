@@ -14,6 +14,7 @@ import {
   formatUSD, 
   formatUSDSigned,
   getWhaleName,
+  getWhaleInfo,
   getDisplayName,
 } from "@/lib/walletTracker/format";
 
@@ -47,19 +48,24 @@ function InfoTooltip({ text }) {
       onMouseEnter={() => setShow(true)}
       onMouseLeave={() => setShow(false)}
     >
-      {/* Info icon */}
+      {/* Info icon (filled circle with "i") */}
       <svg 
         width="14" 
         height="14" 
         viewBox="0 0 24 24" 
-        fill="none" 
-        stroke="rgba(255,255,255,0.4)" 
-        strokeWidth="2"
-        style={{ transition: "stroke 0.15s" }}
+        fill="currentColor"
+        style={{ color: "rgba(255,255,255,0.5)", transition: "color 0.2s", cursor: "pointer" }}
+        onMouseEnter={(e) => e.currentTarget.style.color = "rgba(255,255,255,0.9)"}
+        onMouseLeave={(e) => e.currentTarget.style.color = "rgba(255,255,255,0.5)"}
       >
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="16" x2="12" y2="12"/>
-        <line x1="12" y1="8" x2="12.01" y2="8"/>
+        {/* Filled circle background */}
+        <circle cx="12" cy="12" r="10" fill="currentColor" opacity="0.15"/>
+        {/* Circle outline */}
+        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+        {/* Info text: dot */}
+        <circle cx="12" cy="8" r="1.2" fill="currentColor"/>
+        {/* Info text: line */}
+        <line x1="12" y1="11" x2="12" y2="16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
       </svg>
       
       {/* Tooltip */}
@@ -227,15 +233,17 @@ export default function WalletHeader({
 }) {
   const [selectedPeriod, setSelectedPeriod] = useState("1W");
   
-  // Get whale name or shortened address
-  const whaleName = getWhaleName(wallet);
-  const displayName = whaleName || shortenAddress(wallet);
-  const isWhale = !!whaleName;
+  // Get whale info (name + topPnl flag + avatar)
+  const whaleInfo = getWhaleInfo(wallet);
+  const displayName = whaleInfo?.name || shortenAddress(wallet);
+  const isWhale = !!whaleInfo;
+  const isTopPnl = whaleInfo?.topPnl || false;
+  const whaleAvatar = whaleInfo?.avatar || null;
   
   // Opinion profile URL instead of bscscan
   const opinionProfileUrl = `https://app.opinion.trade/profile?address=${wallet}`;
   
-  // Get first 2 chars after 0x for avatar
+  // Get first 2 chars after 0x for avatar fallback
   const avatarText = wallet ? wallet.slice(2, 4).toUpperCase() : "??";
   
   // Get PnL from stats
@@ -279,26 +287,42 @@ export default function WalletHeader({
           {/* Profile Row */}
           <div className="wallet-profile-row" style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
           {/* Avatar */}
-          <div style={{
-            width: 52,
-            height: 52,
-            borderRadius: "50%",
-            background: "linear-gradient(135deg, #8b5cf6 0%, #6366f1 50%, #3b82f6 100%)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 18,
-            fontWeight: 700,
-            color: "#fff",
-            flexShrink: 0,
-            boxShadow: "0 4px 12px rgba(99, 102, 241, 0.3)",
-          }}>
-            {avatarText}
-          </div>
+          {whaleAvatar ? (
+            <img 
+              src={whaleAvatar}
+              alt={displayName}
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: "50%",
+                objectFit: "cover",
+                flexShrink: 0,
+                boxShadow: "0 4px 12px rgba(99, 102, 241, 0.3)",
+                border: "2px solid rgba(255,183,77,0.5)",
+              }}
+            />
+          ) : (
+            <div style={{
+              width: 52,
+              height: 52,
+              borderRadius: "50%",
+              background: "linear-gradient(135deg, #8b5cf6 0%, #6366f1 50%, #3b82f6 100%)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 18,
+              fontWeight: 700,
+              color: "#fff",
+              flexShrink: 0,
+              boxShadow: "0 4px 12px rgba(99, 102, 241, 0.3)",
+            }}>
+              {avatarText}
+            </div>
+          )}
           
           {/* Name & Chain */}
           <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{
                 fontSize: 18,
                 fontWeight: 700,
@@ -326,6 +350,24 @@ export default function WalletHeader({
                 </span>
               )}
               
+              {/* TOP PNL badge */}
+              {isTopPnl && (
+                <span style={{
+                  background: "linear-gradient(135deg, rgba(34,197,94,0.2) 0%, rgba(16,185,129,0.15) 100%)",
+                  color: "#22c55e",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: "2px 8px",
+                  borderRadius: 4,
+                  letterSpacing: "0.5px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}>
+                  💰 TOP PNL
+                </span>
+              )}
+              
               {/* External link to Opinion profile */}
               <a
                 href={opinionProfileUrl}
@@ -347,20 +389,7 @@ export default function WalletHeader({
               </a>
             </div>
             
-            {/* Chain badge - only BSC label */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-              <span style={{
-                background: "linear-gradient(135deg, rgba(255,183,77,0.2) 0%, rgba(255,152,0,0.15) 100%)",
-                color: "#ffb74d",
-                fontSize: 11,
-                fontWeight: 700,
-                padding: "3px 10px",
-                borderRadius: 6,
-                letterSpacing: "0.5px",
-              }}>
-                BSC
-              </span>
-            </div>
+
           </div>
         </div>
         
