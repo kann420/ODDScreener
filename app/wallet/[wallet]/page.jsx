@@ -635,7 +635,8 @@ export default function WalletPage() {
    * Handle back navigation - go to wallet tracker search
    */
   const handleBack = useCallback(() => {
-    router.push("/wallet");
+    // Use replace to prevent adding to history stack
+    router.replace("/wallet");
   }, [router]);
   
   /**
