@@ -15,6 +15,7 @@ import {
   timeAgo,
   getExplorerTxUrl,
   num,
+  normalizeUsdAmount,
 } from "@/lib/walletTracker/format";
 
 /**
@@ -63,7 +64,8 @@ function ActivityRowSkeleton({ isMobile }) {
 function ActivityRowDesktop({ trade, chainId }) {
   const price = num(trade.price);
   const shares = num(trade.shares);
-  const amount = num(trade.amount) || num(trade.usdAmount);
+  // Use normalizeUsdAmount to handle wei format from Opinion API
+  const amount = normalizeUsdAmount(trade.usdAmount, trade.amount);
   
   const rawOutcomeSide = trade.outcomeSideEnum || trade.outcomeSide || trade.outcome || "";
   const outcomeSideStr = typeof rawOutcomeSide === "number" 
@@ -136,7 +138,8 @@ function ActivityRowDesktop({ trade, chainId }) {
 function ActivityCardMobile({ trade, chainId }) {
   const price = num(trade.price);
   const shares = num(trade.shares);
-  const amount = num(trade.amount) || num(trade.usdAmount);
+  // Use normalizeUsdAmount to handle wei format from Opinion API
+  const amount = normalizeUsdAmount(trade.usdAmount, trade.amount);
   
   const rawOutcomeSide = trade.outcomeSideEnum || trade.outcomeSide || trade.outcome || "";
   const outcomeSideStr = typeof rawOutcomeSide === "number" 

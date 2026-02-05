@@ -975,7 +975,7 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   }
   
   .market-search-wrap input {
-    padding: 10px 14px !important;
+    padding: 10px 14px 10px 40px !important;
     font-size: 13px !important;
     border-radius: 10px !important;
   }
