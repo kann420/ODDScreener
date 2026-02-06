@@ -694,11 +694,11 @@ function matchClosedArbPositions(polyClosedPositions, opinionClosedPositions) {
   console.log("\n=== DEBUG: matchClosedArbPositions ===");
   console.log("Poly closed positions:", polyClosedPositions.length);
   polyClosedPositions.forEach(p => {
-    console.log(`  [POLY] "${p.marketTitle}" side=${p.side} shares=${p.shares} pnl=${p.pnlUsd} _debug=`, p._debug);
+    console.log(`  [POLY] "${p.marketTitle}" side=${p.side} outcome=${p.outcome} shares=${p.shares} pnl=${p.pnlUsd}`);
   });
   console.log("Opinion closed positions:", opinionClosedPositions.length);
   opinionClosedPositions.forEach(p => {
-    console.log(`  [OPINION] "${p.marketTitle}" side=${p.side} shares=${p.shares} pnl=${p.pnlUsd} _debug=`, p._debug);
+    console.log(`  [OPINION] "${p.marketTitle}" outcomeName=${p.outcomeName} side=${p.side} shares=${p.shares} pnl=${p.pnlUsd}`);
   });
   const SIMILARITY_THRESHOLD = 0.3;
   
@@ -708,11 +708,42 @@ function matchClosedArbPositions(polyClosedPositions, opinionClosedPositions) {
   for (const polyPos of polyClosedPositions) {
     let bestMatch = null;
     let bestScore = 0;
+    let matchType = "standard";
     
     for (const opinionPos of opinionClosedPositions) {
       if (usedOpinionIds.has(opinionPos.marketId)) continue;
       
-      // Arbitrage requires opposite sides (YES on one, NO on other)
+      // ============================================================
+      // CASE 1: Poly binary market → Opinion categorical outcome
+      // Example: Poly "Will there be no change in Fed..." + Opinion "US Fed Decision in June?" outcome="No change"
+      // ============================================================
+      const binaryMatch = matchPolyBinaryToOpinionCategorical(
+        polyPos.marketTitle, 
+        opinionPos.marketTitle, 
+        opinionPos.outcomeName
+      );
+      
+      if (binaryMatch.matched) {
+        // For binary-to-categorical:
+        // - Poly YES = bet the outcome happens
+        // - Opinion NO = bet the outcome does NOT happen
+        // - Poly YES + Opinion NO = ARBITRAGE
+        // - Poly NO + Opinion YES = ARBITRAGE
+        const isArbPair = (polyPos.side === "YES" && opinionPos.side === "NO") ||
+                         (polyPos.side === "NO" && opinionPos.side === "YES");
+        
+        if (isArbPair) {
+          console.log(`[Matching-Closed] Binary-to-Categorical match: "${polyPos.marketTitle.slice(0,40)}" ↔ "${opinionPos.outcomeName}"`);
+          bestMatch = opinionPos;
+          bestScore = 1.0;
+          matchType = "binary-to-categorical";
+          break; // Perfect match, no need to continue
+        }
+      }
+      
+      // ============================================================
+      // CASE 2: Standard title matching with opposite sides
+      // ============================================================
       const isOppositeSide = polyPos.side !== opinionPos.side;
       if (!isOppositeSide) continue;
       
@@ -722,6 +753,7 @@ function matchClosedArbPositions(polyClosedPositions, opinionClosedPositions) {
       if (score > bestScore && score >= SIMILARITY_THRESHOLD) {
         bestScore = score;
         bestMatch = opinionPos;
+        matchType = "standard";
       }
     }
     
@@ -733,7 +765,7 @@ function matchClosedArbPositions(polyClosedPositions, opinionClosedPositions) {
       const pair = createClosedArbPair(polyPos, bestMatch, bestScore);
       closedArbPairs.push(pair);
       
-      console.log(`[Matching-Closed] ✓ Matched: "${polyPos.marketTitle.slice(0,50)}" (score: ${bestScore.toFixed(2)})`);
+      console.log(`[Matching-Closed] ✓ Matched (${matchType}): "${polyPos.marketTitle.slice(0,50)}" (score: ${bestScore.toFixed(2)})`);
     }
   }
   
@@ -956,6 +988,7 @@ const MARKET_TITLE_WHITELIST = [
   // Fed Decision markets - Direct mapping
   { poly: "fed decision in june", opinion: "us fed decision in june" },
   { poly: "fed decision in march", opinion: "us fed rate decision in march" },
+  { poly: "fed decision in april", opinion: "us fed rate decision april 2026" },
   
   // ECB markets
   { poly: "ecb interest rates: march 2026", opinion: "ecb rates decision (dfr): march 2026" },
@@ -971,18 +1004,26 @@ const MARKET_TITLE_WHITELIST = [
  */
 const POLY_BINARY_TO_OPINION_CATEGORICAL = [
   // Fed June 2026 - "No change" outcome
+  // Poly: "Will there be no change in Fed interest rates after the June" (may not have "2026")
   {
-    polyKeywords: ["no change", "fed", "june 2026"],
+    polyKeywords: ["no change", "fed", "june"],
     opinionMarket: "us fed decision in june",
     outcome: "no change",
   },
   // Fed March 2026 - "No change" outcome  
   {
-    polyKeywords: ["no change", "fed", "january 2026"],
+    polyKeywords: ["no change", "fed", "march"],
     opinionMarket: "us fed rate decision in march",
     outcome: "no change",
   },
-  // Add more mappings as needed
+  // Fed April 2026 - "25 bps decrease" outcome
+  // Poly: "Will the Fed decrease interest rates by 25 bps after the April 2026 meeting?"
+  // Opinion: "US Fed Rate Decision: April 2026" outcome="25 bps decrease"
+  {
+    polyKeywords: ["25 bps", "fed", "april"],
+    opinionMarket: "us fed rate decision april 2026",
+    outcome: "25 bps decrease",
+  },
 ];
 
 /**

@@ -58,10 +58,10 @@ function startThumbnailCacheRefresh(apiKey, baseUrl) {
   (async () => {
     try {
       console.log("[tradesThumbnailCache] Starting cache refresh...");
-      // Fetch both activated and resolved markets
+      // Fetch activated and resolved markets (all types)
       for (const status of ["activated", "resolved"]) {
         let page = 1;
-        const maxPages = 10; // Limit to 200 markets per status
+        const maxPages = 10;
         
         while (page <= maxPages) {
           const url = new URL(`${baseUrl}/market`);
@@ -93,6 +93,43 @@ function startThumbnailCacheRefresh(apiKey, baseUrl) {
           page++;
         }
       }
+
+      // Also fetch ALL categorical parent markets (marketType=1) without status filter.
+      // Parent markets carry thumbnails for their child outcomes, but may have
+      // status=Created which is missed by the activated/resolved queries above.
+      {
+        let page = 1;
+        const maxPages = 20; // Up to 400 parents
+        while (page <= maxPages) {
+          const url = new URL(`${baseUrl}/market`);
+          url.searchParams.set("limit", "20");
+          url.searchParams.set("page", String(page));
+          url.searchParams.set("marketType", "1");
+
+          const res = await fetch(url.toString(), {
+            method: "GET",
+            headers: { "apikey": apiKey, "Accept": "application/json" },
+            cache: "no-store",
+          });
+
+          if (!res.ok) break;
+          const data = await res.json();
+          if (data.errno !== 0 || !data.result?.list?.length) break;
+
+          for (const market of data.result.list) {
+            if (market.thumbnailUrl) {
+              thumbnailCache.set(String(market.marketId), {
+                url: market.thumbnailUrl,
+                time: Date.now()
+              });
+            }
+          }
+
+          if (data.result.list.length < 20) break;
+          page++;
+        }
+      }
+
       console.log(`[tradesThumbnailCache] Loaded ${thumbnailCache.size} markets`);
     } catch (error) {
       console.error("[tradesThumbnailCache] Error:", error);
@@ -108,11 +145,47 @@ function startThumbnailCacheRefresh(apiKey, baseUrl) {
  * @returns {string|null} - Thumbnail URL or null
  */
 function getThumbnail(marketId) {
+  if (!marketId) return null;
   const cached = thumbnailCache.get(String(marketId));
   if (cached && (Date.now() - cached.time) < CACHE_TTL) {
     return cached.url;
   }
   return null;
+}
+
+/**
+ * Fetch thumbnails on-demand for specific market IDs (categorical endpoint).
+ * Used as a synchronous fallback when the background cache misses parent markets.
+ * @param {string[]} marketIds - Array of market ID strings
+ * @param {string} apiKey - API key
+ * @param {string} baseUrl - API base URL
+ * @returns {Promise<Map<string, string>>} - Map of marketId -> thumbnailUrl
+ */
+async function fetchThumbnailsOnDemand(marketIds, apiKey, baseUrl) {
+  const result = new Map();
+  if (!marketIds.length) return result;
+
+  const fetches = marketIds.map(async (id) => {
+    try {
+      // Use categorical endpoint — parent markets only resolve through this path
+      const res = await fetch(`${baseUrl}/market/categorical/${id}`, {
+        method: "GET",
+        headers: { "apikey": apiKey, "Accept": "application/json" },
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const thumb = data.result?.data?.thumbnailUrl;
+      if (thumb) {
+        result.set(id, thumb);
+        // Also populate background cache
+        thumbnailCache.set(id, { url: thumb, time: Date.now() });
+      }
+    } catch { /* ignore individual failures */ }
+  });
+
+  await Promise.all(fetches);
+  return result;
 }
 
 export async function GET(request, { params }) {
@@ -187,13 +260,11 @@ export async function GET(request, { params }) {
     
     // Enrich trades with displayTitle and thumbnails
     if (data.errno === 0 && data.result?.list?.length > 0) {
+      // First pass: enrich from cache
       data.result.list = data.result.list.map(trade => {
-        // rootMarketTitle = Main market title (e.g. "What price will Bitcoin hit in January?")
-        // marketTitle = Outcome name (e.g. "↓ 80,000", "$2B", "Bhumjaithai Party (BJT)")
         const mainTitle = trade.rootMarketTitle || "";
         const outcomeName = trade.marketTitle || trade.outcome || "";
         
-        // Build display title: [Root Market Title] - [Outcome]
         let displayTitle;
         if (mainTitle && outcomeName && mainTitle !== outcomeName) {
           displayTitle = `${mainTitle} - ${outcomeName}`;
@@ -201,8 +272,9 @@ export async function GET(request, { params }) {
           displayTitle = mainTitle || outcomeName || "Unknown";
         }
         
-        // Get thumbnail from cache using rootMarketId (parent market ID)
-        const thumbnailUrl = getThumbnail(trade.rootMarketId);
+        // Get thumbnail from cache using rootMarketId (parent market)
+        // Fallback to marketId for binary markets
+        const thumbnailUrl = getThumbnail(trade.rootMarketId) || getThumbnail(trade.marketId);
         
         return {
           ...trade,
@@ -212,6 +284,25 @@ export async function GET(request, { params }) {
           outcomeName: outcomeName,
         };
       });
+
+      // Second pass: fetch missing thumbnails on-demand for this page
+      const missingIds = [...new Set(
+        data.result.list
+          .filter(t => !t.thumbnailUrl && (t.rootMarketId || t.marketId))
+          .map(t => String(t.rootMarketId || t.marketId))
+      )];
+
+      if (missingIds.length > 0) {
+        const fetched = await fetchThumbnailsOnDemand(missingIds, apiKey, baseUrl);
+        if (fetched.size > 0) {
+          data.result.list = data.result.list.map(trade => {
+            if (trade.thumbnailUrl) return trade;
+            const id = String(trade.rootMarketId || trade.marketId);
+            const url = fetched.get(id) || null;
+            return url ? { ...trade, thumbnailUrl: url } : trade;
+          });
+        }
+      }
     }
     
     // Return data

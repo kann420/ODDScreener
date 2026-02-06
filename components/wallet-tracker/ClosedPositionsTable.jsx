@@ -159,8 +159,9 @@ function ClosedRowDesktop({ position }) {
       
       <div className="closed-market-cell">
         <div className="closed-icon" style={{ 
-          backgroundImage: imageUrl ? `url(${imageUrl})` : undefined,
-          background: !imageUrl ? "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)" : undefined,
+          background: imageUrl 
+            ? `url(${imageUrl}) center/cover no-repeat`
+            : "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
         }}>
           {!imageUrl && displayTitle?.charAt(0)}
         </div>
@@ -218,8 +219,9 @@ function ClosedCardMobile({ position }) {
       <div className="closed-card-row">
         <div className="closed-icon" style={{ 
           width: 44, height: 44,
-          backgroundImage: imageUrl ? `url(${imageUrl})` : undefined,
-          background: !imageUrl ? "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)" : undefined,
+          background: imageUrl 
+            ? `url(${imageUrl}) center/cover no-repeat`
+            : "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
         }}>
           {!imageUrl && displayTitle?.charAt(0)}
         </div>
