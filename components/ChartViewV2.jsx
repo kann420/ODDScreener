@@ -27,15 +27,48 @@ function cacheSet(key, v) {
 }
 
 const RANGES = [
-  { key: "1H", label: "1h", days: null, hours: 1 },
-  { key: "6H", label: "6h", days: null, hours: 6 },
-  { key: "1D", label: "1d", days: 1 },
-  { key: "1W", label: "1w", days: 7 },
-  { key: "ALL", label: "All", days: null },
+  { key: "6H", label: "6h", apiInterval: "1h", startOffsetSec: 6 * 3600 },
+  { key: "1D", label: "1d", apiInterval: "1h", startOffsetSec: 24 * 3600 },
+  { key: "1W", label: "1w", apiInterval: "1d", startOffsetSec: 7 * 86400 },
+  { key: "ALL", label: "All", apiInterval: "max" },
 ];
 
+/**
+ * For "All" / "max" interval the API back-fills history before the market
+ * actually existed by repeating the initial price as flat data all the way
+ * back (e.g. showing 2023 data for a market created in Nov 2025).
+ *
+ * Strategy: walk from the oldest point forward.  While the price is identical
+ * to the very first price, treat it as synthetic back-fill.  Keep only the
+ * last back-fill point (so the chart starts at the right level) plus all real
+ * price-change data after it.
+ */
+function sanitizeMaxHistory(sorted) {
+  if (sorted.length < 3) return sorted;
+
+  const initPrice = sorted[0].p;
+  let lastFlatIdx = 0;
+
+  // Find the last consecutive point that still has the initial price
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].p === initPrice) {
+      lastFlatIdx = i;
+    } else {
+      break;
+    }
+  }
+
+  // If more than ~5 identical points at the start, it's very likely back-fill.
+  // Keep one anchor point (lastFlatIdx) so the chart begins at the right price.
+  if (lastFlatIdx > 5) {
+    return sorted.slice(lastFlatIdx);
+  }
+
+  return sorted;
+}
+
 export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents, onOutcomeChange }) {
-  const [range, setRange] = useState("1D");
+  const [range, setRange] = useState("ALL");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [allPts, setAllPts] = useState([]);
@@ -47,7 +80,9 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
   const appliedCacheAtRef = useRef(0);
   const lastTokenIdRef = useRef(null);
 
-  const interval = "1d";
+  // Derive API interval from selected range
+  const rangeConfig = RANGES.find((r) => r.key === range) || RANGES[1];
+  const interval = rangeConfig.apiInterval;
 
   useEffect(() => {
     flipRef.current = flipT;
@@ -81,21 +116,11 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
 
   const pts = useMemo(() => {
     if (!Array.isArray(allPts) || allPts.length === 0) return [];
-    const r = RANGES.find((x) => x.key === range);
-    if (!r) return allPts;
-
-    let cutoff;
-    if (r.hours) {
-      cutoff = Date.now() - r.hours * 60 * 60 * 1000;
-    } else if (r.days) {
-      cutoff = Date.now() - r.days * 24 * 60 * 60 * 1000;
-    } else {
-      return allPts; // ALL
-    }
-
-    const sliced = allPts.filter((x) => Number(x.t) >= cutoff);
-    return sliced.length >= 2 ? sliced : allPts.slice(-Math.max(2, allPts.length));
-  }, [allPts, range]);
+    // For "All" / max: sanitize fake old timestamps
+    if (rangeConfig.apiInterval === "max") return sanitizeMaxHistory(allPts);
+    // Other ranges already get exactly the right data via start_at
+    return allPts;
+  }, [allPts, range, rangeConfig]);
 
   const displayPts = useMemo(() => {
     if (!pts || pts.length === 0) return [];
@@ -116,6 +141,8 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
       appliedCacheAtRef.current = 0;
       lastTokenIdRef.current = tokenId;
     }
+    // Reset cache ref on range change so cached data is always applied
+    appliedCacheAtRef.current = 0;
 
     async function run() {
       if (!tokenId) {
@@ -125,7 +152,15 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
         return;
       }
 
-      const key = `ph:${tokenId}:${interval}`;
+      // Build query params — use start_at to get exactly the right time window
+      let apiInterval = interval;
+      let extraParams = "";
+      if (rangeConfig.startOffsetSec) {
+        const startAt = Math.floor(Date.now() / 1000) - rangeConfig.startOffsetSec;
+        extraParams = `&start_at=${startAt}`;
+      }
+
+      const key = `ph:${tokenId}:${apiInterval}:${rangeConfig.key}`;
 
       const cachedEntry = cacheGetEntry(key, 30_000);
       if (cachedEntry) {
@@ -145,7 +180,7 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
 
       try {
         const res = await fetch(
-          `/api/opinion/token/price-history?token_id=${encodeURIComponent(tokenId)}&interval=${encodeURIComponent(interval)}`,
+          `/api/opinion/token/price-history?token_id=${encodeURIComponent(tokenId)}&interval=${encodeURIComponent(apiInterval)}${extraParams}`,
           { cache: "no-store", signal: ac.signal }
         );
         const j = await res.json();
@@ -193,7 +228,7 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
       mounted = false;
       ac.abort();
     };
-  }, [tokenId, interval]);
+  }, [tokenId, interval, range]);
 
   const chartColor = outcome === "YES" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)";
 
@@ -254,14 +289,9 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span className="tag">
-            <span className="dot"></span>LIVE
-          </span>
-        </div>
       </div>
 
-      <div style={{ marginTop: 8 }}>
+      <div className="chart-area" style={{ marginTop: 8 }}>
         <div
           className="chart-container"
           style={{

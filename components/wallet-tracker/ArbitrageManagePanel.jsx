@@ -15,7 +15,7 @@
  * - Results table with search and sorting (after Track Wallet)
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { isValidWalletAddress } from "@/lib/walletTracker/format";
 import ArbitrageManageResults from "./ArbitrageManageResults";
@@ -31,10 +31,33 @@ import SavedWalletsDropdown, { saveWalletAddress } from "./SavedWallets";
  */
 function InfoTooltip({ text }) {
   const [show, setShow] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobileTop, setMobileTop] = useState(96);
+  const triggerRef = useRef(null);
+  
+  const updateMobilePosition = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const triggerEl = triggerRef.current;
+    if (!triggerEl || !triggerEl.getBoundingClientRect) return;
+    const rect = triggerEl.getBoundingClientRect();
+    const desiredTop = rect.bottom + 10;
+    const maxTop = Math.max(72, window.innerHeight - 220);
+    const nextTop = Math.max(72, Math.min(desiredTop, maxTop));
+    setMobileTop(nextTop);
+  }, []);
+  
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const checkMobile = () => setIsMobile(window.innerWidth <= 600);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
   
   // Handle click for mobile devices
   const handleClick = (e) => {
     e.stopPropagation();
+    if (isMobile) updateMobilePosition();
     setShow(prev => !prev);
   };
   
@@ -53,12 +76,29 @@ function InfoTooltip({ text }) {
       document.removeEventListener("click", handleClickOutside);
     };
   }, [show]);
+
+  useEffect(() => {
+    if (!show || !isMobile) return;
+    updateMobilePosition();
+    const onViewportChange = () => updateMobilePosition();
+    window.addEventListener("resize", onViewportChange);
+    window.addEventListener("scroll", onViewportChange, true);
+    return () => {
+      window.removeEventListener("resize", onViewportChange);
+      window.removeEventListener("scroll", onViewportChange, true);
+    };
+  }, [show, isMobile, updateMobilePosition]);
   
   return (
     <div 
+      ref={triggerRef}
       style={{ position: "relative", display: "inline-flex", cursor: "help", marginLeft: 8 }}
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
+      onMouseEnter={() => {
+        if (!isMobile) setShow(true);
+      }}
+      onMouseLeave={() => {
+        if (!isMobile) setShow(false);
+      }}
       onClick={handleClick}
     >
       {/* Info icon (filled circle with "i") */}
@@ -84,10 +124,12 @@ function InfoTooltip({ text }) {
       {/* Tooltip popup */}
       {show && (
         <div style={{
-          position: "absolute",
-          bottom: "calc(100% + 10px)",
-          left: "50%",
-          transform: "translateX(-50%)",
+          position: isMobile ? "fixed" : "absolute",
+          bottom: isMobile ? "auto" : "calc(100% + 10px)",
+          top: isMobile ? mobileTop : "auto",
+          left: isMobile ? 12 : "50%",
+          right: isMobile ? 12 : "auto",
+          transform: isMobile ? "none" : "translateX(-50%)",
           background: "rgba(20,22,28,0.98)",
           border: "1px solid rgba(255,255,255,0.15)",
           borderRadius: 10,
@@ -95,25 +137,29 @@ function InfoTooltip({ text }) {
           fontSize: 13,
           color: "rgba(255,255,255,0.9)",
           lineHeight: 1.6,
-          width: 300,
-          maxWidth: "90vw",
+          width: isMobile ? "auto" : 300,
+          maxWidth: isMobile ? "none" : "90vw",
           whiteSpace: "pre-wrap",
-          zIndex: 1000,
+          zIndex: 1200,
           boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
-        }}>
+        }}
+        onClick={(e) => e.stopPropagation()}
+        >
           {text}
           {/* Arrow pointing down */}
-          <div style={{
-            position: "absolute",
-            bottom: -7,
-            left: "50%",
-            transform: "translateX(-50%) rotate(45deg)",
-            width: 12,
-            height: 12,
-            background: "rgba(20,22,28,0.98)",
-            borderRight: "1px solid rgba(255,255,255,0.15)",
-            borderBottom: "1px solid rgba(255,255,255,0.15)",
-          }} />
+          {!isMobile && (
+            <div style={{
+              position: "absolute",
+              bottom: -7,
+              left: "50%",
+              transform: "translateX(-50%) rotate(45deg)",
+              width: 12,
+              height: 12,
+              background: "rgba(20,22,28,0.98)",
+              borderRight: "1px solid rgba(255,255,255,0.15)",
+              borderBottom: "1px solid rgba(255,255,255,0.15)",
+            }} />
+          )}
         </div>
       )}
     </div>

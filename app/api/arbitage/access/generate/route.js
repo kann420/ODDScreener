@@ -4,9 +4,19 @@
 
 import { NextResponse } from "next/server";
 import { generateAccessCode, generateMultipleCodes, listAllCodes, getCodeStats, revokeCode } from "@/lib/accessCodeDb";
+import crypto from "crypto";
 
 // Admin secret - MUST be set in environment variable, no fallback for security
 const ADMIN_SECRET = process.env.ADMIN_SECRET;
+
+/** Constant-time string comparison to prevent timing attacks */
+function safeCompare(a, b) {
+  if (!a || !b) return false;
+  const bufA = Buffer.from(String(a));
+  const bufB = Buffer.from(String(b));
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 function checkAdminAuth(request) {
   if (!ADMIN_SECRET) {
@@ -14,7 +24,7 @@ function checkAdminAuth(request) {
     return false;
   }
   const authHeader = request.headers.get("x-admin-secret");
-  return authHeader === ADMIN_SECRET;
+  return safeCompare(authHeader, ADMIN_SECRET);
 }
 
 export async function POST(request) {
@@ -83,7 +93,7 @@ export async function POST(request) {
   } catch (error) {
     console.error("[Access Generate] Error:", error);
     return NextResponse.json(
-      { error: "Internal server error", details: error.message },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }
@@ -95,7 +105,7 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const secret = searchParams.get("secret");
     
-    if (secret !== ADMIN_SECRET) {
+    if (!safeCompare(secret, ADMIN_SECRET)) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }
@@ -145,7 +155,7 @@ export async function GET(request) {
   } catch (error) {
     console.error("[Access Generate GET] Error:", error);
     return NextResponse.json(
-      { error: "Internal server error", details: error.message },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }

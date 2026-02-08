@@ -37,7 +37,7 @@ function formatTooltipLabel(ms) {
 
 function formatXAxisLabel(ms, range) {
   const d = new Date(ms);
-  if (range === "1H" || range === "6H") {
+  if (range === "1H" || range === "6H" || range === "1D") {
     const { hours, minutes, ampm } = formatTime12Hour(d);
     return `${hours}:${minutes}${ampm}`;
   } else {

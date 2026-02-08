@@ -898,7 +898,7 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                               animation: "fadeIn 0.3s ease"
                             }}
                           >
-                            <td className="mono muted" style={{
+                            <td className="muted" style={{
                               padding: "12px 12px 12px 0",
                               fontSize: 13,
                               whiteSpace: "nowrap"
@@ -926,29 +926,32 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                               </span>
                             </td>
 
-                            <td className="mono" style={{
+                            <td style={{
                               padding: "12px",
-                              fontWeight: 500
+                              fontWeight: 500,
+                              fontSize: 13
                             }}>
                               {priceCents}¢
                             </td>
 
-                            <td className="mono" style={{
+                            <td style={{
                               padding: "12px",
-                              fontWeight: 500
+                              fontWeight: 500,
+                              fontSize: 13
                             }}>
                               {amount}
                             </td>
 
-                            <td className="mono" style={{
+                            <td style={{
                               padding: "12px",
                               color: isBuy ? "#22c55e" : "#ef4444",
-                              fontWeight: 600
+                              fontWeight: 600,
+                              fontSize: 13
                             }}>
                               {totalStr}
                             </td>
 
-                            <td className="mono muted" style={{
+                            <td className="muted" style={{
                               padding: "12px",
                               fontSize: 13
                             }}>
@@ -1023,8 +1026,8 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                       <div className="orderbook-row-depth" style={{ width: `${pct}%` }} />
                       <div className="orderbook-row-content">
                         <div className="red orderbook-price">{(r.price * 100).toFixed(1)}¢</div>
-                        <div className="mono muted orderbook-shares">{fmtQty(r.shares)}</div>
-                        <div className="mono orderbook-total">${fmtQty(r.total)}</div>
+                        <div className="muted orderbook-shares" style={{ fontFamily: "inherit", fontWeight: 500 }}>{fmtQty(r.shares)}</div>
+                        <div className="orderbook-total" style={{ fontFamily: "inherit", fontWeight: 600 }}>${fmtQty(r.total)}</div>
                       </div>
                     </div>
                   );
@@ -1036,11 +1039,11 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
           <div className="orderbook-spread-row">
             <div className="orderbook-spread-item">
               <span className="orderbook-spread-label">Last</span>
-              <span className="mono orderbook-spread-value">{bids[0] ? (bids[0].price * 100).toFixed(1).replace(/\.0$/, "") + "¢" : "-"}</span>
+              <span className="orderbook-spread-value" style={{ fontFamily: "inherit" }}>{bids[0] ? (bids[0].price * 100).toFixed(1).replace(/\.0$/, "") + "¢" : "-"}</span>
             </div>
             <div className="orderbook-spread-item">
               <span className="orderbook-spread-label">Spread</span>
-              <span className="mono orderbook-spread-value">{bids[0] && asks[0] ? ((asks[0].price - bids[0].price) * 100).toFixed(1).replace(/\.0$/, "") + "¢" : "-"}</span>
+              <span className="orderbook-spread-value" style={{ fontFamily: "inherit" }}>{bids[0] && asks[0] ? ((asks[0].price - bids[0].price) * 100).toFixed(1).replace(/\.0$/, "") + "¢" : "-"}</span>
             </div>
           </div>
 
@@ -1069,8 +1072,8 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                       <div className="orderbook-row-depth orderbook-row-depth-bid" style={{ width: `${pct}%` }} />
                       <div className="orderbook-row-content">
                         <div className="green orderbook-price">{(r.price * 100).toFixed(1)}¢</div>
-                        <div className="mono muted orderbook-shares">{fmtQty(r.shares)}</div>
-                        <div className="mono orderbook-total">${fmtQty(r.total)}</div>
+                        <div className="muted orderbook-shares" style={{ fontFamily: "inherit", fontWeight: 500 }}>{fmtQty(r.shares)}</div>
+                        <div className="orderbook-total" style={{ fontFamily: "inherit", fontWeight: 600 }}>${fmtQty(r.total)}</div>
                       </div>
                     </div>
                   );

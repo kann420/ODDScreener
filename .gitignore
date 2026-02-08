@@ -32,3 +32,6 @@ test-*.js
 poly_*.json
 poly_*.txt
 server.log
+
+# Agent skills (local AI config)
+.agents/

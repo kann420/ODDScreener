@@ -1309,13 +1309,22 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
     display: none !important;
   }
   
-  /* Reduce chart height on mobile and pull controls up */
+  /* Reduce chart height on mobile and tune chart spacing */
   .chart-container {
-    height: 180px !important;
+    height: 155px !important;
+  }
+
+  .chart-wrapper .panel {
+    padding: 4px 6px !important;
+  }
+
+  .chart-area {
+    margin-top: 0 !important;
   }
   
   .chart-controls {
-    margin-top: -40px !important;
+    margin-top: 0 !important;
+    gap: 6px !important;
     position: relative;
     z-index: 5;
   }
@@ -1658,7 +1667,7 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
 
 @media (max-width: 600px) {
   .chart-container {
-    height: 280px !important;
+    height: 155px !important;
   }
 }
 /* ===== END ORDERBOOK / DETAIL PAGE RESPONSIVE ===== */
@@ -1832,7 +1841,8 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
 }
 
 .sm-row-desktop:hover {
-  background: rgba(255,180,50,0.04) !important;
+  background: rgba(255,180,50,0.11) !important;
+  box-shadow: inset 0 0 0 1px rgba(255,180,50,0.25);
 }
 
 @media (max-width: 600px) {
@@ -1917,25 +1927,30 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   .sm-mobile-list {
     display: flex !important;
     flex-direction: column;
-    gap: 1px;
-    background: rgba(255,255,255,0.06);
-    border-radius: 12px;
-    overflow: hidden;
+    gap: 8px;
+    background: transparent;
+    border-radius: 0;
+    overflow: visible;
   }
   
   .sm-mobile-card {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 9px;
     padding: 14px 16px;
-    background: rgba(0,0,0,0.3);
+    background: linear-gradient(180deg, rgba(20,24,30,0.92) 0%, rgba(13,17,23,0.94) 100%);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 14px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.18);
     text-decoration: none;
     color: #fff;
-    transition: background 0.15s;
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   }
   
   .sm-mobile-card:active {
-    background: rgba(255,255,255,0.05);
+    background: linear-gradient(180deg, rgba(30,36,44,0.95) 0%, rgba(19,24,31,0.96) 100%);
+    border-color: rgba(255,255,255,0.2);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
   }
   
   .sm-mobile-card-top {
@@ -1946,10 +1961,10 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   
   .sm-mobile-card-title {
     flex: 1;
-    font-size: 14px;
-    font-weight: 600;
-    line-height: 1.3;
-    color: rgba(255,255,255,0.95);
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.35;
+    color: rgba(255,255,255,0.98);
   }
   
   .sm-mobile-card-time {
@@ -1957,19 +1972,67 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
     align-items: center;
     gap: 4px;
     font-size: 12px;
-    color: rgba(255,255,255,0.5);
+    color: rgba(255,255,255,0.72);
     white-space: nowrap;
     flex-shrink: 0;
   }
   
   .sm-mobile-card-time svg {
-    opacity: 0.6;
+    opacity: 0.75;
   }
   
   .sm-mobile-card-bottom {
-    font-size: 13px;
-    color: rgba(255,255,255,0.7);
+    font-size: 14px;
+    line-height: 1.45;
+    color: rgba(255,255,255,0.86);
     padding-left: 42px; /* align with title (32px thumb + 10px gap) */
+  }
+
+  .sm-mobile-verb,
+  .sm-mobile-outcome,
+  .sm-mobile-amount {
+    font-weight: 800;
+  }
+
+  .sm-mobile-at {
+    color: rgba(255,255,255,0.8);
+  }
+
+  .sm-mobile-price {
+    color: rgba(255,255,255,0.95);
+    font-weight: 600;
+  }
+
+  .sm-mobile-amount {
+    color: rgba(255,255,255,1);
+  }
+
+  [data-theme="light"] .sm-mobile-card {
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid rgba(15,23,42,0.12);
+    box-shadow: 0 2px 10px rgba(15,23,42,0.08);
+  }
+
+  [data-theme="light"] .sm-mobile-card:active {
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    border-color: rgba(15,23,42,0.2);
+  }
+
+  [data-theme="light"] .sm-mobile-card-time {
+    color: rgba(71,85,105,0.88);
+  }
+
+  [data-theme="light"] .sm-mobile-card-bottom {
+    color: rgba(15,23,42,0.86);
+  }
+
+  [data-theme="light"] .sm-mobile-at {
+    color: rgba(51,65,85,0.82);
+  }
+
+  [data-theme="light"] .sm-mobile-price,
+  [data-theme="light"] .sm-mobile-amount {
+    color: rgba(15,23,42,0.98);
   }
   
   /* Center pager on mobile */
@@ -2034,6 +2097,11 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   .arb-scan-btn-wrap .btn {
     width: 100%;
     padding: 10px !important;
+  }
+
+  .arb-scan-now-btn {
+    min-height: 44px;
+    font-size: 14px !important;
   }
   
   /* Hide table header on mobile */
@@ -2220,6 +2288,21 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
 .arb-row:hover {
   background: rgba(255,180,50,0.04);
   border-color: rgba(255,180,50,0.15);
+}
+
+.arb-scan-now-btn {
+  transition: transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
+}
+
+.arb-scan-now-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+  box-shadow: 0 8px 20px rgba(255,150,40,0.26), 0 0 0 1px rgba(255,190,70,0.22) inset !important;
+}
+
+.arb-scan-now-btn:focus-visible {
+  outline: 2px solid rgba(255,190,70,0.55);
+  outline-offset: 1px;
 }
 
 /* Subtle highlight for Arb% column */

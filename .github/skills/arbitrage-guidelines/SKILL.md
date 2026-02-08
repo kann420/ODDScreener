@@ -485,6 +485,58 @@ clearAutoMatchCache();
 
 ---
 
+## Non-negotiable guardrails
+
+### 1) Do not dedupe Opinion IDs across different market types
+
+- `marketId` can collide between `marketType=0` (binary) and `marketType=1` (categorical parent).
+- Use separate sets: `seenBinaryIds` and `seenCategoricalIds`.
+- A shared set can drop valid categorical markets (observed with Oscars-style markets).
+
+### 2) Always protect against commodity intent mismatches
+
+- Commodity families (Gold/Silver) require intent parity:
+  - `hit` only with `hit`
+  - `above` only with `above`
+  - `settle` only with `settle`
+- Block cross-intent matches even if similarity is high.
+- Apply in both whitelist and normal similarity paths.
+- Keep `hasCommodityIntentMismatch()` check in: whitelist event check, whitelist market check, normal event similarity path, normal market similarity path.
+
+**Examples to block:**
+- Opinion `What will Silver settle at in June?` ≠ Poly `Will Silver hit ... by end of June?`
+- Opinion `Silver above ... end of June?` ≠ Poly `What will Silver hit ... by end of June?`
+
+### 3) Keep quick scan and full scan behavior separate
+
+- Quick scan may cap result size for speed (`maxTotalMarkets = 100`).
+- Full scan must not reuse quick scan display cap (`maxTotalMarkets = 9999`).
+- If UI shows matched count from full scan, list rendering must show full matched set.
+
+---
+
+## Regression checklist before merge
+
+- `Oscars 2026: Best Cinematography Winner` matches correctly.
+- `Will Microsoft (MSFT) close above ... end of February?` matches correctly.
+- `What price will Solana hit in February?` matches correctly.
+- `What price will Ethereum hit in February?` matches correctly.
+- `Zelenskyy out as Ukraine president by ...` date-series maps correctly for all dates.
+- `What will Gold/Silver settle at in ...` does not match `hit`.
+- `Gold/Silver above ... end of ...` does not match `hit`.
+- Full scan shows complete matched list, not quick-scan cap behavior.
+
+---
+
+## Safe-change policy
+
+- Change only matching/fetching logic needed for the reported class of bug.
+- Do not modify quick scan logic when fixing full scan-only issue.
+- Prefer additive safeguards over broad rewrites.
+- Log explicit skip reasons for mismatch guards to make future debug fast.
+
+---
+
 ## Related Skills
 
 - [opinion-rest-markets](../opinion-rest-markets/SKILL.md) - Opinion API details

@@ -11,7 +11,6 @@ export async function GET() {
 
   return NextResponse.json({
     ok: true,
-    dbPath,
     sizeBytes,
     count24h: countRecentTrades({ hours: 24 }),
   });

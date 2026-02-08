@@ -117,7 +117,7 @@ function WalletLandingContent() {
   return (
     <div className="container wallet-page-container" style={isMobile ? { padding: "2px 12px" } : {}}>
       {/* Tab Selector */}
-      <div className="wallet-tabs" style={isMobile ? { padding: 0, gap: 4, marginBottom: 2 } : {}}>
+      <div className="wallet-tabs" style={isMobile ? { padding: 0, gap: 4, marginBottom: 0 } : {}}>
         <button
           className={`wallet-tab ${activeTab === TAB_OPINION ? "active" : ""}`}
           onClick={() => handleTabChange(TAB_OPINION)}
@@ -140,17 +140,21 @@ function WalletLandingContent() {
       ) : (
         <div className="wallet-landing" style={isMobile ? { padding: 0 } : {}}>
           {/* Title Section */}
-          <div className="wallet-header-wrapper" style={isMobile ? { marginBottom: 2, marginTop: 0 } : {}}>
-            <h1 className="wallet-main-title" style={isMobile ? { fontSize: 23, marginBottom: 0 } : {}}>
+          <div className="wallet-header-wrapper" style={isMobile ? { marginBottom: 2, marginTop: -8 } : {}}>
+            <h1 className="wallet-main-title">
               Wallet Tracker
             </h1>
-            <p className="wallet-subtitle" style={isMobile ? { fontSize: 12, marginBottom: 4 } : {}}>
+            <p className="wallet-subtitle">
               Track active/closed positions and history trades on Opinion.
             </p>
           </div>
 
           {/* Search Form */}
-          <form onSubmit={handleSubmit} className="wallet-search-form" style={isMobile ? { marginBottom: 8, gap: 6 } : {}}>
+          <form
+            onSubmit={handleSubmit}
+            className="wallet-search-form"
+            style={isMobile ? { marginTop: 28, marginBottom: 8, gap: 6 } : {}}
+          >
             <div style={{ position: "relative" }}>
               <SavedWalletsDropdown 
                 onSelect={(wallet) => setWalletInput(wallet)}
@@ -345,6 +349,7 @@ function WalletLandingContent() {
 
         .wallet-header-wrapper {
           text-align: center;
+          margin-top: 12px;
           margin-bottom: 16px;
         }
 
@@ -352,14 +357,17 @@ function WalletLandingContent() {
           font-size: 28px;
           font-weight: 800;
           color: #fff;
-          margin-bottom: 8px;
+          margin: 0 0 8px;
           letter-spacing: -0.5px;
+          line-height: 1.2;
         }
 
         .wallet-subtitle {
           font-size: 15px;
           color: rgba(255,255,255,0.5);
           font-weight: 500;
+          margin: 0;
+          line-height: 1.35;
         }
 
         .wallet-search-form {
@@ -374,7 +382,7 @@ function WalletLandingContent() {
           .wallet-tabs {
             padding: 0;
             gap: 4px;
-            margin-bottom: 4px;
+            margin-bottom: 0;
           }
           
           .wallet-tab {
@@ -387,18 +395,20 @@ function WalletLandingContent() {
           }
 
           .wallet-header-wrapper {
-            margin-bottom: 4px;
-            margin-top: 0;
+            margin-bottom: 2px;
+            margin-top: -8px;
           }
 
           .wallet-main-title {
-            font-size: 20px;
-            margin-bottom: 0;
+            font-size: 24px;
+            margin: 0 0 4px;
+            line-height: 1.2;
           }
 
           .wallet-subtitle {
-            font-size: 11px;
-            margin-bottom: 4px;
+            font-size: 12px;
+            margin: 0;
+            line-height: 1.35;
           }
 
           .wallet-search-form {

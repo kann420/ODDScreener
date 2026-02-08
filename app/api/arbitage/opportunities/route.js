@@ -64,16 +64,9 @@ export async function GET(req) {
 
     const payload = { ok: false, rows: [], error: "server_error" };
 
-    // In dev/debug mode, return message to help you (safe)
-    try {
-      const url = new URL(req.url);
-      const wantDebug = url.searchParams.get("debug") === "1" || url.searchParams.get("debug") === "true";
-      if (wantDebug) {
-        payload.message = String(e?.message || e);
-        payload.stack = String(e?.stack || "");
-      }
-    } catch {
-      // ignore
+    // Only include error message in development, never stack traces
+    if (process.env.NODE_ENV === "development") {
+      payload.message = String(e?.message || e);
     }
 
     return NextResponse.json(payload, { status: 500 });

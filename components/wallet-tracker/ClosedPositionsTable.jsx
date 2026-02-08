@@ -600,11 +600,12 @@ export default function ClosedPositionsTable({
         .closed-mobile :global(.dropdown-item.active) { color: #22c55e; }
         .closed-mobile :global(.sort-arrow) { font-size: 12px; }
         .closed-mobile :global(.closed-card-mobile) {
-          background: rgba(255,255,255,0.02);
-          border: 1px solid rgba(255,255,255,0.06);
+          background: linear-gradient(180deg, rgba(20,24,30,0.92) 0%, rgba(13,17,23,0.94) 100%);
+          border: 1px solid rgba(255,255,255,0.14);
           border-radius: 12px;
           padding: 14px;
           margin-bottom: 10px;
+          box-shadow: 0 4px 14px rgba(0,0,0,0.18);
         }
         .closed-mobile :global(.closed-card-row) {
           display: flex;
@@ -627,9 +628,9 @@ export default function ClosedPositionsTable({
           min-width: 0;
         }
         .closed-mobile :global(.closed-card-title) {
-          font-size: 14px;
-          font-weight: 600;
-          color: #fff;
+          font-size: 15px;
+          font-weight: 700;
+          color: rgba(255,255,255,0.98);
           line-height: 1.35;
           margin-bottom: 6px;
         }
@@ -644,42 +645,47 @@ export default function ClosedPositionsTable({
           display: inline-flex;
           align-items: center;
           gap: 4px;
-          padding: 2px 6px;
-          border-radius: 4px;
+          padding: 3px 7px;
+          border-radius: 5px;
           font-size: 11px;
-          font-weight: 600;
+          font-weight: 700;
         }
         .closed-mobile :global(.result-badge.won) {
-          background: rgba(34, 197, 94, 0.15);
+          background: rgba(34, 197, 94, 0.22);
+          border: 1px solid rgba(34, 197, 94, 0.32);
           color: #22c55e;
         }
         .closed-mobile :global(.result-badge.lost) {
-          background: rgba(239, 68, 68, 0.15);
+          background: rgba(239, 68, 68, 0.22);
+          border: 1px solid rgba(239, 68, 68, 0.34);
           color: #ef4444;
         }
         .closed-mobile :global(.result-badge.unknown) {
-          background: rgba(148, 163, 184, 0.15);
-          color: #64748b;
+          background: rgba(148, 163, 184, 0.2);
+          border: 1px solid rgba(148, 163, 184, 0.3);
+          color: #94a3b8;
         }
         .closed-mobile :global(.badge-icon) { font-size: 10px; }
         .closed-mobile :global(.badge-yes),
         .closed-mobile :global(.badge-no) {
-          padding: 2px 6px;
-          border-radius: 4px;
+          padding: 3px 7px;
+          border-radius: 5px;
           font-size: 11px;
-          font-weight: 600;
+          font-weight: 700;
         }
         .closed-mobile :global(.badge-yes) {
-          background: rgba(34, 197, 94, 0.15);
+          background: rgba(34, 197, 94, 0.22);
+          border: 1px solid rgba(34, 197, 94, 0.32);
           color: #22c55e;
         }
         .closed-mobile :global(.badge-no) {
-          background: rgba(239, 68, 68, 0.15);
+          background: rgba(239, 68, 68, 0.22);
+          border: 1px solid rgba(239, 68, 68, 0.34);
           color: #ef4444;
         }
         .closed-mobile :global(.closed-card-shares) {
           font-size: 12px;
-          color: rgba(255,255,255,0.5);
+          color: rgba(255,255,255,0.74);
         }
         .closed-mobile :global(.closed-card-right) {
           text-align: right;
@@ -687,7 +693,8 @@ export default function ClosedPositionsTable({
         }
         .closed-mobile :global(.amount-value) {
           font-size: 15px;
-          font-weight: 600;
+          font-weight: 700;
+          color: rgba(255,255,255,0.98);
         }
         .closed-mobile :global(.pnl-text) {
           font-size: 12px;

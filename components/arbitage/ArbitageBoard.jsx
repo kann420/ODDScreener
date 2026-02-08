@@ -10,7 +10,12 @@ const CACHE_KEY = "arbitrage_cache";
 
 // Get cache from sessionStorage (persists across page navigation)
 function getCache() {
-  if (typeof window === "undefined") return { bids: {}, asks: {} };
+  if (typeof window === "undefined") {
+    return {
+      bids: { rows: null, timestamp: null, matchedMarkets: null },
+      asks: { rows: null, timestamp: null, matchedMarkets: null },
+    };
+  }
   try {
     const stored = sessionStorage.getItem(CACHE_KEY);
     if (stored) {
@@ -21,15 +26,18 @@ function getCache() {
       }
     }
   } catch {}
-  return { bids: { rows: null, timestamp: null }, asks: { rows: null, timestamp: null } };
+  return {
+    bids: { rows: null, timestamp: null, matchedMarkets: null },
+    asks: { rows: null, timestamp: null, matchedMarkets: null },
+  };
 }
 
 // Save cache to sessionStorage
-function saveCache(mode, rows, timestamp) {
+function saveCache(mode, rows, timestamp, matchedMarkets = null) {
   if (typeof window === "undefined") return;
   try {
     const cache = getCache();
-    cache[mode] = { rows, timestamp };
+    cache[mode] = { rows, timestamp, matchedMarkets };
     sessionStorage.setItem(CACHE_KEY, JSON.stringify(cache));
   } catch {}
 }
@@ -114,6 +122,7 @@ export default function ArbitageBoard() {
   const [sortAsc, setSortAsc] = useState(false); // false = descending (highest first)
   const [sortField, setSortField] = useState("arbPct"); // "arbPct" or "endDate"
   const [lastScanTime, setLastScanTime] = useState(null);
+  const [matchedMarketCount, setMatchedMarketCount] = useState(null);
   const [, forceUpdate] = useState(0); // For updating "X ago" display
   const [initialized, setInitialized] = useState(false);
   
@@ -122,6 +131,8 @@ export default function ArbitageBoard() {
   const [minShares, setMinShares] = useState(0); // Min shares on orderbook
   const [showFilters, setShowFilters] = useState(true); // Toggle filter panel - default open
   const [scanMode, setScanMode] = useState("quick"); // "quick" (100 markets) or "full" (all markets)
+  const [isMobileView, setIsMobileView] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   
   // Track if user has ever scanned
   const [hasScanned, setHasScanned] = useState(false);
@@ -151,6 +162,16 @@ export default function ArbitageBoard() {
   useEffect(() => {
     const interval = setInterval(() => forceUpdate((n) => n + 1), 30000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Responsive pagination sizing
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const media = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobileView(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
   }, []);
 
   // Scan bonus markets for given market IDs by fetching market detail and checking incentiveFactor
@@ -253,6 +274,7 @@ export default function ArbitageBoard() {
     if (cached?.rows && cached.rows.length > 0) {
       setRows(cached.rows);
       setLastScanTime(cached.timestamp);
+      setMatchedMarketCount(Number.isFinite(cached.matchedMarkets) ? cached.matchedMarkets : null);
       setLoading(false);
       setInitialized(true);
       setHasScanned(true); // Cache exists = user has scanned before
@@ -268,6 +290,7 @@ export default function ArbitageBoard() {
       // No cache, wait for user to scan
       setRows([]);
       setLastScanTime(null);
+      setMatchedMarketCount(null);
       setInitialized(true);
       setHasScanned(false); // Reset hasScanned when switching to mode without cache
     }
@@ -293,6 +316,7 @@ export default function ArbitageBoard() {
     setErr("");
     setProgress({ phase: "connecting", message: "Connecting..." });
     setStreamingRows([]);
+    let latestMatchedPairs = 0;
 
     const url = `/api/arbitage/stream?priceMode=${encodeURIComponent(priceMode)}&minArbPct=${encodeURIComponent(minArbPct)}&limit=100&scanMode=${encodeURIComponent(scanMode)}`;
     const es = new EventSource(url);
@@ -302,6 +326,14 @@ export default function ArbitageBoard() {
       try {
         const data = JSON.parse(e.data);
         setProgress(data);
+
+        if (
+          (data.phase === "matching" || data.phase === "processing") &&
+          Number.isFinite(data.total) &&
+          data.total >= 0
+        ) {
+          latestMatchedPairs = data.total;
+        }
         
         // Check for Polymarket API error
         if (data.phase === "error" && data.error === "POLYMARKET_UNAVAILABLE") {
@@ -351,9 +383,11 @@ export default function ArbitageBoard() {
       // Finalize: save to cache
       setStreamingRows((finalRows) => {
         const now = Date.now();
-        saveCache(priceMode, finalRows, now);
+        const finalMatchedCount = latestMatchedPairs > 0 ? latestMatchedPairs : finalRows.length;
+        saveCache(priceMode, finalRows, now, finalMatchedCount);
         setRows(finalRows);
         setLastScanTime(now);
+        setMatchedMarketCount(finalMatchedCount);
         setHasScanned(true);
         
         // Extract unique opinionMarketIds for bonus scan (defer to after state update)
@@ -418,12 +452,14 @@ export default function ArbitageBoard() {
 
       const newRows = Array.isArray(json.rows) ? json.rows : [];
       const now = Date.now();
+      const fallbackMatchedCount = newRows.length;
       
       // Save to sessionStorage cache
-      saveCache(priceMode, newRows, now);
+      saveCache(priceMode, newRows, now, fallbackMatchedCount);
       
       setRows(newRows);
       setLastScanTime(now);
+      setMatchedMarketCount(fallbackMatchedCount);
     } catch (e) {
       setErr("Failed to load arbitrage data.");
       setRows([]);
@@ -522,6 +558,37 @@ export default function ArbitageBoard() {
     });
   }, [filteredSorted, searchQuery]);
 
+  const itemsPerPage = isMobileView ? 20 : 100;
+  const totalPages = Math.max(1, Math.ceil(searchFilteredRows.length / itemsPerPage));
+
+  // Keep page valid when result set changes
+  useEffect(() => {
+    setCurrentPage((prev) => Math.min(prev, totalPages));
+  }, [totalPages]);
+
+  // Reset to first page whenever filtering/sorting mode changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [priceMode, scanMode, searchQuery, minArbPct, minShares, bonusOnly, sortField, sortAsc]);
+
+  const paginatedRows = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return searchFilteredRows.slice(start, start + itemsPerPage);
+  }, [searchFilteredRows, currentPage, itemsPerPage]);
+
+  const pageNums = useMemo(() => {
+    const max = totalPages;
+    const cur = currentPage;
+    const windowSize = 7;
+    let start = Math.max(1, cur - Math.floor(windowSize / 2));
+    let end = Math.min(max, start + windowSize - 1);
+    start = Math.max(1, end - windowSize + 1);
+
+    const arr = [];
+    for (let i = start; i <= end; i++) arr.push(i);
+    return arr;
+  }, [currentPage, totalPages]);
+
   // Count bonus markets in current results
   const bonusCount = useMemo(() => {
     return sorted.filter((r) => bonusSet.has(String(r.opinionMarketId || ""))).length;
@@ -529,6 +596,7 @@ export default function ArbitageBoard() {
 
   // Progress bar percentage
   const progressPct = progress?.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+  const showFullScanMatchedInTitle = scanMode === "full" && matchedMarketCount !== null && !loading;
 
   return (
     <div className="arb-board" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -547,6 +615,11 @@ export default function ArbitageBoard() {
                   {progress.message}
                 </span>
               )}
+              {!loading && lastScanTime && (
+                <span style={{ marginLeft: 8, color: "rgba(255,180,50,0.9)" }}>
+                  Scanned {formatTimeAgo(lastScanTime)}. Found {matchedMarketCount ?? rows.length} pairs
+                </span>
+              )}
             </div>
             {err ? (
               <div style={{ marginTop: 8, fontSize: 12, fontWeight: 800, color: "rgba(255,120,120,0.95)" }}>⚠️ {err}</div>
@@ -554,6 +627,55 @@ export default function ArbitageBoard() {
           </div>
 
           <div className="arb-header-right" style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <div className="arb-scan-btn-wrap" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+              <button
+                className="btn arb-scan-now-btn"
+                type="button"
+                onClick={handleRefresh}
+                disabled={loading}
+                style={{
+                  opacity: loading ? 0.8 : 1,
+                  minWidth: 128,
+                  padding: "9px 16px",
+                  borderRadius: 10,
+                  border: loading ? "1px solid rgba(255,180,50,0.35)" : "1px solid rgba(255,180,50,0.65)",
+                  background: loading
+                    ? "linear-gradient(135deg, rgba(255,180,50,0.18), rgba(255,140,30,0.2))"
+                    : "linear-gradient(135deg, rgba(255,190,70,0.28), rgba(255,140,30,0.32))",
+                  color: "rgba(255,242,220,0.98)",
+                  fontSize: 13,
+                  fontWeight: 900,
+                  letterSpacing: 0.2,
+                  boxShadow: loading
+                    ? "0 0 0 1px rgba(255,180,50,0.12) inset"
+                    : "0 6px 18px rgba(255,150,40,0.2), 0 0 0 1px rgba(255,190,70,0.12) inset",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 7,
+                }}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  style={{ opacity: 0.95 }}
+                >
+                  <path d="M21 2v6h-6" />
+                  <path d="M3 22v-6h6" />
+                  <path d="M3.51 9a9 9 0 0114.13-3.36L21 8" />
+                  <path d="M20.49 15a9 9 0 01-14.13 3.36L3 16" />
+                </svg>
+                {loading ? "Scanning..." : "Scan Now"}
+              </button>
+            </div>
+
             {/* Filter toggle */}
             <button
               type="button"
@@ -565,8 +687,9 @@ export default function ArbitageBoard() {
                 padding: "8px 14px",
                 fontSize: 12,
                 fontWeight: 800,
-                background: showFilters ? "rgba(255,180,50,0.15)" : "transparent",
-                border: showFilters ? "1px solid rgba(255,180,50,0.4)" : "1px solid rgba(255,255,255,0.1)",
+                background: showFilters ? "rgba(59,130,246,0.16)" : "rgba(255,255,255,0.02)",
+                border: showFilters ? "1px solid rgba(59,130,246,0.45)" : "1px solid rgba(148,163,184,0.22)",
+                color: showFilters ? "rgba(191,219,254,0.98)" : "rgba(203,213,225,0.9)",
                 display: "flex",
                 alignItems: "center",
                 gap: 6,
@@ -637,22 +760,6 @@ export default function ArbitageBoard() {
             <div className="pill arb-min-arb-pill">
               Min Arb: <b>{minArbPct.toFixed(2)}%</b>
               {minShares > 0 && <> • Min: <b>{minShares}</b> shares</>}
-            </div>
-            <div className="arb-scan-btn-wrap" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-              <button 
-                className="btn ghost" 
-                type="button" 
-                onClick={handleRefresh}
-                disabled={loading}
-                style={{ opacity: loading ? 0.5 : 1 }}
-              >
-                {loading ? "Scanning..." : "SCAN NOW"}
-              </button>
-              {lastScanTime && !loading && (
-                <div className="muted" style={{ fontSize: 10, fontWeight: 700 }}>
-                  scanned {formatTimeAgo(lastScanTime)}
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -930,21 +1037,39 @@ export default function ArbitageBoard() {
         style={{
           padding: "12px 14px",
           display: "grid",
-          gridTemplateColumns: "1.25fr 0.65fr 0.35fr 0.35fr",
+          gridTemplateColumns: "1.25fr 0.65fr 0.42fr 0.28fr",
           gap: 14,
           alignItems: "center",
           borderBottom: "2px solid rgba(255,255,255,0.06)",
         }}
       >
-        <div style={{ fontWeight: 900, color: "rgba(233,238,245,0.9)" }}>Title</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 900, color: "rgba(233,238,245,0.9)" }}>
+          <span>Title</span>
+          {showFullScanMatchedInTitle && (
+            <span
+              style={{
+                padding: "2px 6px",
+                borderRadius: 4,
+                background: "rgba(255,255,255,0.1)",
+                fontSize: 14,
+                fontWeight: 800,
+                lineHeight: 1.2,
+              }}
+            >
+              {matchedMarketCount}
+            </span>
+          )}
+        </div>
         <div style={{ fontWeight: 900, color: "rgba(233,238,245,0.9)" }}>Strategy</div>
         <div 
           style={{ 
             fontWeight: 900, 
             color: sortField === "endDate" ? "rgba(255,180,50,1)" : "rgba(233,238,245,0.9)", 
-            textAlign: "center",
+            textAlign: "left",
             cursor: "pointer",
             userSelect: "none",
+            justifySelf: "start",
+            paddingLeft: 6,
           }}
           onClick={() => {
             if (sortField === "endDate") {
@@ -956,7 +1081,7 @@ export default function ArbitageBoard() {
           }}
           title="Click to sort by expiration date"
         >
-          <span style={{ display: "flex", alignItems: "center" }}>
+          <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start" }}>
             Expires
             <ArbSortIcon active={sortField === "endDate"} direction={sortAsc} />
           </span>
@@ -1022,7 +1147,7 @@ export default function ArbitageBoard() {
         </div>
       ) : (
         <>
-          {searchFilteredRows.map((r) => (
+          {paginatedRows.map((r) => (
             <Row 
               key={r.id} 
               r={r} 
@@ -1035,6 +1160,77 @@ export default function ArbitageBoard() {
             <div className="panel" style={{ padding: 14, textAlign: "center" }}>
               <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
                 Loading more opportunities...
+              </div>
+            </div>
+          )}
+          {searchFilteredRows.length > itemsPerPage && (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 8, paddingBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                <PagerButton
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <svg 
+                    width="16" 
+                    height="16" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M15 18l-6-6 6-6" />
+                  </svg>
+                  <span style={{ marginLeft: 4 }}>Prev</span>
+                </PagerButton>
+
+                {pageNums[0] > 1 && (
+                  <>
+                    <PagerButton onClick={() => setCurrentPage(1)} active={currentPage === 1}>
+                      1
+                    </PagerButton>
+                    {pageNums[0] > 2 && <span style={{ opacity: 0.6, fontSize: 12 }}>...</span>}
+                  </>
+                )}
+
+                {pageNums.map((p) => (
+                  <PagerButton key={p} onClick={() => setCurrentPage(p)} active={p === currentPage}>
+                    {p}
+                  </PagerButton>
+                ))}
+
+                {pageNums[pageNums.length - 1] < totalPages && (
+                  <>
+                    {pageNums[pageNums.length - 1] < totalPages - 1 && (
+                      <span style={{ opacity: 0.6, fontSize: 12 }}>...</span>
+                    )}
+                    <PagerButton onClick={() => setCurrentPage(totalPages)} active={currentPage === totalPages}>
+                      {totalPages}
+                    </PagerButton>
+                  </>
+                )}
+
+                <PagerButton
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  <span style={{ marginRight: 4 }}>Next</span>
+                  <svg 
+                    width="16" 
+                    height="16" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                </PagerButton>
               </div>
             </div>
           )}
@@ -1052,6 +1248,33 @@ export default function ArbitageBoard() {
   );
 }
 
+function PagerButton({ children, onClick, disabled, active }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        height: 30,
+        padding: "0 10px",
+        borderRadius: 999,
+        border: "1px solid rgba(255,255,255,.12)",
+        background: active ? "rgba(255,255,255,.14)" : "rgba(0,0,0,.18)",
+        color: "#fff",
+        cursor: disabled ? "not-allowed" : "pointer",
+        fontWeight: active ? 900 : 800,
+        opacity: disabled ? 0.45 : 0.95,
+        userSelect: "none",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 2,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 function Row({ r, priceMode, isBonus, onCalculatorClick }) {
   return (
     <div
@@ -1059,7 +1282,7 @@ function Row({ r, priceMode, isBonus, onCalculatorClick }) {
       style={{
         padding: 12,
         display: "grid",
-        gridTemplateColumns: "1.25fr 0.65fr 0.35fr 0.35fr",
+        gridTemplateColumns: "1.25fr 0.65fr 0.42fr 0.28fr",
         gap: 14,
         alignItems: "stretch",
       }}
@@ -1155,14 +1378,14 @@ function Row({ r, priceMode, isBonus, onCalculatorClick }) {
       </div>
 
       {/* Expires col */}
-      <div className="arb-row-expires" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+      <div className="arb-row-expires" style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", justifyContent: "center", justifySelf: "start", width: "100%", paddingLeft: 6 }}>
         <div style={{ fontSize: 16, fontWeight: 900, color: "rgba(233,238,245,0.85)" }}>
           {formatExpires(r.endDate)}
         </div>
       </div>
 
       {/* Arb col */}
-      <div className="arb-row-arb" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "center" }}>
+      <div className="arb-row-arb" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "center", margin: 0 }}>
         <div className="arb-row-pct-wrapper" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
           <div className="arb-row-pct" style={{ fontSize: 24, fontWeight: 1000, color: (r.arbPct ?? 0) > 0 ? "rgba(80,200,120,1)" : "rgba(233,238,245,0.85)" }}>{formatPct(r.arbPct)}</div>
           <div className="muted" style={{ fontSize: 12, fontWeight: 700, marginTop: 4 }}>

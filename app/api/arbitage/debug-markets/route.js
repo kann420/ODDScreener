@@ -3,15 +3,22 @@ import { fetchAllOpinionMarkets, fetchAllPolymarketEvents } from "@/lib/arbitage
 
 export const dynamic = "force-dynamic";
 
+// Only allow in development mode for security
+const IS_DEV = process.env.NODE_ENV === "development";
+
 /**
  * GET /api/arbitage/debug-markets
  * Debug endpoint to see what markets are being fetched from both exchanges
+ * RESTRICTED: Only available in development mode
  * 
  * Query params:
  * - mode: "quick" (default, maxTotalMarkets=100) or "full" (maxTotalMarkets=9999)
  * - search: comma-separated keywords to search for
  */
 export async function GET(req) {
+  if (!IS_DEV) {
+    return NextResponse.json({ error: "Debug endpoint disabled in production" }, { status: 403 });
+  }
   try {
     const { searchParams } = new URL(req.url);
     const mode = searchParams.get("mode") || "quick";
@@ -114,6 +121,6 @@ export async function GET(req) {
     });
   } catch (err) {
     console.error("[debug-markets] Error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

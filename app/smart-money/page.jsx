@@ -551,10 +551,10 @@ export default function SmartMoneyPage() {
       <div
         className="sm-desktop-table"
         style={{
-          border: "1px solid rgba(255,255,255,.08)",
+          border: "1px solid rgba(255,255,255,.18)",
           borderRadius: 18,
           overflow: "hidden",
-          background: "rgba(0,0,0,.25)",
+          background: "linear-gradient(180deg, rgba(19,24,31,0.88) 0%, rgba(12,16,22,0.9) 100%)",
         }}
       >
         <div
@@ -562,9 +562,10 @@ export default function SmartMoneyPage() {
             display: "grid",
             gridTemplateColumns: "120px 140px 1fr 140px 90px",
             padding: "10px 12px",
-            background: "rgba(255,255,255,.03)",
+            background: "rgba(255,255,255,.08)",
             fontSize: 12,
-            opacity: 0.8,
+            color: "rgba(255,255,255,0.9)",
+            fontWeight: 700,
           }}
         >
           <div
@@ -634,11 +635,11 @@ export default function SmartMoneyPage() {
               <div
                 key={`${r.marketId}-${r.ts}-${i}`}
                 className="sm-row-desktop"
-                style={{
+              style={{
                   display: "grid",
                   gridTemplateColumns: "120px 140px 1fr 140px 90px",
                   padding: "10px 12px",
-                  borderTop: "1px solid rgba(255,255,255,.06)",
+                  borderTop: "1px solid rgba(255,255,255,.12)",
                   alignItems: "center",
                 }}
               >
@@ -646,10 +647,10 @@ export default function SmartMoneyPage() {
                   <span style={{ color: isSell ? "#ff6b6b" : "#35d07f", fontWeight: 800 }}>
                     {isSell ? "Sell" : "Buy"}
                   </span>
-                  <span style={{ opacity: 0.7, fontSize: 12 }}>{timeAgo(r.ts)}</span>
+                  <span style={{ color: "rgba(255,255,255,0.82)", fontSize: 12, fontWeight: 600 }}>{timeAgo(r.ts)}</span>
                 </div>
 
-                <div style={{ fontWeight: 800 }}>${fmtUsd(r.amount)}</div>
+                <div style={{ fontWeight: 800, color: "rgba(255,255,255,0.98)" }}>${fmtUsd(r.amount)}</div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
   <MarketThumbnailSM url={thumbUrl} size={20} />
@@ -666,7 +667,7 @@ export default function SmartMoneyPage() {
       minWidth: 0,
       overflow: "hidden",
       textDecoration: "none",
-      color: "rgba(255,255,255,.95)",
+      color: "rgba(255,255,255,0.99)",
       fontWeight: 800,
       cursor: "pointer",
     }}
@@ -713,7 +714,8 @@ export default function SmartMoneyPage() {
                     style={{
                       padding: "4px 10px",
                       borderRadius: 10,
-                      background: isNO ? "rgba(239,68,68,.15)" : "rgba(53,208,127,.15)",
+                      background: isNO ? "rgba(239,68,68,.22)" : "rgba(53,208,127,.22)",
+                      border: `1px solid ${isNO ? "rgba(239,68,68,.38)" : "rgba(53,208,127,.36)"}`,
                       color: isNO ? "#ff6b6b" : "#35d07f",
                       fontWeight: 800,
                       fontSize: 12,
@@ -723,7 +725,7 @@ export default function SmartMoneyPage() {
                   </span>
                 </div>
 
-                <div style={{ opacity: 0.9 }}>{r.price || ""}</div>
+                <div style={{ color: "rgba(255,255,255,0.95)", fontWeight: 600 }}>{r.price || ""}</div>
               </div>
             );
           })
@@ -767,17 +769,23 @@ export default function SmartMoneyPage() {
                   </div>
                 </div>
                 <div className="sm-mobile-card-bottom">
-                  <span style={{ color: isSell ? "#ff6b6b" : "#35d07f", fontWeight: 700 }}>
+                  <span
+                    className="sm-mobile-verb"
+                    style={{ color: isSell ? "#ff6b6b" : "#35d07f", fontWeight: 700 }}
+                  >
                     {isSell ? "sold" : "bought"}
                   </span>
                   {" "}
-                  <span style={{ color: isNO ? "#ff6b6b" : "#35d07f", fontWeight: 700 }}>
+                  <span
+                    className="sm-mobile-outcome"
+                    style={{ color: isNO ? "#ff6b6b" : "#35d07f", fontWeight: 700 }}
+                  >
                     {outcome || "—"}
                   </span>
-                  {" at "}
-                  <span style={{ opacity: 0.8 }}>{r.price || "—"}</span>
+                  <span className="sm-mobile-at"> at </span>
+                  <span className="sm-mobile-price">{r.price || "—"}</span>
                   {" "}
-                  <span style={{ fontWeight: 700 }}>(${fmtUsd(r.amount)})</span>
+                  <span className="sm-mobile-amount">(${fmtUsd(r.amount)})</span>
                 </div>
               </a>
             );

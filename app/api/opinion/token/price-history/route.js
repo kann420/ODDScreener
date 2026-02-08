@@ -36,16 +36,22 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const token_id = searchParams.get("token_id");
     const interval = searchParams.get("interval") || "1d";
+    const start_at = searchParams.get("start_at") || "";
+    const end_at = searchParams.get("end_at") || "";
 
     if (!token_id) {
       return json({ errno: -1, errormsg: "missing_token_id", result: null }, "MISS");
     }
 
-    const key = `price-history:${token_id}:${interval}`;
+    const key = `price-history:${token_id}:${interval}:${start_at}`;
     const cached = cacheGet(key);
     if (cached) return json(cached, "HIT");
 
-    const r = await opinionFetch("/token/price-history", { params: { token_id, interval } });
+    const params = { token_id, interval };
+    if (start_at) params.start_at = start_at;
+    if (end_at) params.end_at = end_at;
+
+    const r = await opinionFetch("/token/price-history", { params });
 
     const ok =
       (typeof r?.errno === "number" && r.errno === 0) ||
