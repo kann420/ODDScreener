@@ -560,7 +560,8 @@ export default function SmartMoneyPage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "120px 140px 1fr 140px 90px",
+            gridTemplateColumns:
+              "var(--smart-money-desktop-grid-columns, 120px 140px minmax(0, 1fr) 140px 90px)",
             padding: "10px 12px",
             background: "rgba(255,255,255,.08)",
             fontSize: 12,
@@ -637,7 +638,8 @@ export default function SmartMoneyPage() {
                 className="sm-row-desktop"
               style={{
                   display: "grid",
-                  gridTemplateColumns: "120px 140px 1fr 140px 90px",
+                  gridTemplateColumns:
+                    "var(--smart-money-desktop-grid-columns, 120px 140px minmax(0, 1fr) 140px 90px)",
                   padding: "10px 12px",
                   borderTop: "1px solid rgba(255,255,255,.12)",
                   alignItems: "center",

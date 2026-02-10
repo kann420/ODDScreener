@@ -548,6 +548,35 @@ export default function ClosedPositionsTable({
           color: rgba(255,255,255,0.3);
           font-size: 12px;
         }
+
+        @media (min-width: 1800px) {
+          .closed-header-desktop {
+            font-size: 12px;
+          }
+
+          .closed-container :global(.closed-title) {
+            font-size: 16px;
+          }
+
+          .closed-container :global(.badge-yes),
+          .closed-container :global(.badge-no),
+          .closed-container :global(.shares-text) {
+            font-size: 13px;
+          }
+
+          .closed-container :global(.closed-bet),
+          .closed-container :global(.amount-value) {
+            font-size: 16px;
+          }
+
+          .closed-container :global(.pnl-text) {
+            font-size: 13px;
+          }
+
+          .closed-container :global(.result-badge) {
+            font-size: 13px;
+          }
+        }
         
         /* Mobile Cards */
         .closed-mobile {

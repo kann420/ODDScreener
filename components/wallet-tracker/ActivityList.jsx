@@ -411,6 +411,35 @@ export default function ActivityList({
           color: rgba(255,255,255,0.3);
           font-size: 12px;
         }
+
+        @media (min-width: 1800px) {
+          .activity-header-desktop {
+            font-size: 12px;
+          }
+
+          .activity-container :global(.activity-title) {
+            font-size: 16px;
+          }
+
+          .activity-container :global(.badge-buy),
+          .activity-container :global(.badge-sell) {
+            font-size: 13px;
+          }
+
+          .activity-container :global(.badge-yes),
+          .activity-container :global(.badge-no),
+          .activity-container :global(.meta-text) {
+            font-size: 13px;
+          }
+
+          .activity-container :global(.amount-value) {
+            font-size: 16px;
+          }
+
+          .activity-container :global(.amount-time) {
+            font-size: 13px;
+          }
+        }
         
         /* Mobile Cards */
         .activity-mobile {

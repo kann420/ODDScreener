@@ -402,6 +402,37 @@ export default function PositionsTable({
           color: rgba(255,255,255,0.3);
           font-size: 12px;
         }
+
+        @media (min-width: 1800px) {
+          .positions-header-desktop {
+            font-size: 12px;
+          }
+
+          .positions-container :global(.position-title) {
+            font-size: 16px;
+          }
+
+          .positions-container :global(.badge-yes),
+          .positions-container :global(.badge-no) {
+            font-size: 13px;
+          }
+
+          .positions-container :global(.shares-text) {
+            font-size: 14px;
+          }
+
+          .positions-container :global(.position-price) {
+            font-size: 15px;
+          }
+
+          .positions-container :global(.value-amount) {
+            font-size: 16px;
+          }
+
+          .positions-container :global(.pnl-text) {
+            font-size: 13px;
+          }
+        }
         
         /* Mobile Cards - hidden on desktop */
         .positions-mobile {

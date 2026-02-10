@@ -1166,8 +1166,9 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(320px, 1.6fr) 140px 110px 140px 130px",
-            gap: 12,
+            gridTemplateColumns:
+              "var(--market-desktop-grid-columns, minmax(320px, 1.6fr) 140px 110px 140px 130px)",
+            gap: "var(--market-desktop-grid-gap, 12px)",
             alignItems: "center",
             fontSize: 12,
           }}

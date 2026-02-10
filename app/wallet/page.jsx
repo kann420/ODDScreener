@@ -373,6 +373,20 @@ function WalletLandingContent() {
         .wallet-search-form {
           margin-bottom: 24px;
         }
+
+        @media (min-width: 1800px) {
+          .wallet-tabs {
+            max-width: 760px;
+            gap: 12px;
+          }
+
+          .wallet-tab {
+            max-width: 260px;
+            padding: 14px 22px;
+            font-size: 16px;
+            font-weight: 600;
+          }
+        }
         
         @media (max-width: 768px) {
           .wallet-page-container {

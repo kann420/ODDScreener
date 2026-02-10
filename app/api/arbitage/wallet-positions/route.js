@@ -26,6 +26,9 @@ import { polyFetch } from "@/lib/polyFetch";
 const POLYMARKET_DATA_API = "https://data-api.polymarket.com";
 const OPINION_OPENAPI_BASE = process.env.OPINION_OPENAPI_BASE || "https://openapi.opinion.trade/openapi";
 const OPINION_API_KEY = process.env.OPINION_API_KEY || "";
+const CLOSED_NET_SHARES_EPSILON = 0.01;
+const OPINION_PRACTICAL_CLOSE_SHARES = 3;
+const CLOSED_ROUND_MAX_TIME_GAP_MS = 14 * 24 * 60 * 60 * 1000;
 
 // ============================================================================
 // Helper Functions
@@ -37,6 +40,17 @@ const OPINION_API_KEY = process.env.OPINION_API_KEY || "";
 function isValidWallet(address) {
   if (!address || typeof address !== "string") return false;
   return /^0x[a-fA-F0-9]{40}$/i.test(address);
+}
+
+/**
+ * Normalize unix timestamp to seconds.
+ * Polymarket endpoints may return seconds or milliseconds.
+ */
+function normalizeUnixSeconds(ts) {
+  const n = Number(ts);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  // If value is too large for seconds (beyond year 2100), treat as milliseconds.
+  return n > 4102444800 ? Math.floor(n / 1000) : Math.floor(n);
 }
 
 /**
@@ -350,7 +364,7 @@ async function fetchPolymarketTrades(wallet) {
           // Also use activity.size (not activity.shares)
           const convertedTrade = {
             transactionHash: activity.transactionHash,
-            timestamp: activity.timestamp ? Math.floor(activity.timestamp / 1000) : null,
+            timestamp: normalizeUnixSeconds(activity.timestamp),
             conditionId: activity.conditionId,
             title: activity.title,
             slug: activity.slug,
@@ -380,6 +394,11 @@ async function fetchPolymarketTrades(wallet) {
     }
   } catch (error) {
     console.log("[Polymarket-Activity] Fetch error:", error.message);
+  }
+
+  // Normalize timestamps from both /trades and /activity to seconds
+  for (const trade of trades) {
+    trade.timestamp = normalizeUnixSeconds(trade.timestamp);
   }
   
   return trades;
@@ -458,11 +477,12 @@ async function fetchOpinionTrades(wallet) {
 
 /**
  * Aggregate Polymarket trades into closed positions
- * Groups by conditionId + outcome, calculates P&L
+ * Groups by conditionId + outcome and splits into closed rounds:
+ * open -> flat (closed) -> reopen
  */
 function aggregatePolymarketTrades(trades, activeConditionIds = new Set()) {
   const closedPositions = [];
-  
+
   // Group trades by conditionId + outcome
   const tradeGroups = new Map();
   for (const trade of trades) {
@@ -472,105 +492,137 @@ function aggregatePolymarketTrades(trades, activeConditionIds = new Set()) {
     }
     tradeGroups.get(key).push(trade);
   }
-  
+
   console.log("[Poly-Aggregate] Found", tradeGroups.size, "trade groups");
-  
+
   for (const [key, groupTrades] of tradeGroups) {
-    // Calculate net position
-    let netShares = 0;
-    let totalBought = 0; // Amount spent buying
-    let totalSold = 0;   // Amount received selling
-    let avgBuyPrice = 0;
-    let buyCount = 0;
-    let totalSharesBought = 0;
-    
     // Sort trades by timestamp (oldest first)
     groupTrades.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-    
+
+    let roundIndex = 0;
+    let roundNetShares = 0;
+    let round = null;
+
     for (const trade of groupTrades) {
       const shares = Number(trade.size) || 0;
       const price = Number(trade.price) || 0;
       const amount = shares * price;
-      const side = (trade.side || '').toUpperCase();
-      
-      if (side === 'BUY') {
-        netShares += shares;
-        totalBought += amount;
-        avgBuyPrice += price;
-        buyCount++;
-        totalSharesBought += shares;
-      } else if (side === 'SELL') {
-        netShares -= shares;
-        totalSold += amount;
+      const side = (trade.side || "").toUpperCase();
+
+      if (!Number.isFinite(shares) || shares <= 0) continue;
+      if (side !== "BUY" && side !== "SELL") continue;
+
+      if (!round) {
+        round = {
+          firstTrade: trade,
+          lastTrade: trade,
+          totalBought: 0,
+          totalSold: 0,
+          buyPriceWeightedSum: 0,
+          buySharesForAvg: 0,
+          totalSharesBought: 0,
+          tradeCount: 0,
+        };
       }
+
+      round.lastTrade = trade;
+      round.tradeCount += 1;
+
+      if (side === "BUY") {
+        roundNetShares += shares;
+        round.totalBought += amount;
+        round.totalSharesBought += shares;
+        round.buyPriceWeightedSum += price * shares;
+        round.buySharesForAvg += shares;
+      } else {
+        roundNetShares -= shares;
+        round.totalSold += amount;
+      }
+
+      const isRoundClosed = Math.abs(roundNetShares) < CLOSED_NET_SHARES_EPSILON;
+      const hasSells = round.totalSold > 0;
+      const hasBuys = round.totalBought > 0;
+
+      if (!isRoundClosed || !hasSells || !hasBuys) {
+        continue;
+      }
+
+      const firstTrade = round.firstTrade;
+      const lastTrade = round.lastTrade;
+      const conditionId = firstTrade?.conditionId;
+      const isActiveCondition = activeConditionIds.has(conditionId);
+      if (isActiveCondition && Math.abs(roundNetShares) >= CLOSED_NET_SHARES_EPSILON) {
+        continue;
+      }
+
+      const realizedPnl = round.totalSold - round.totalBought;
+      const realizedPnlPercent = round.totalBought > 0 ? (realizedPnl / round.totalBought) * 100 : 0;
+      const entryPrice = round.buySharesForAvg > 0 ? (round.buyPriceWeightedSum / round.buySharesForAvg) : 0;
+      const entryPriceCents = Math.round(entryPrice * 1000) / 10;
+      const outcomeRaw = firstTrade?.outcome || "";
+      const outcomeNorm = String(outcomeRaw).toLowerCase();
+
+      closedPositions.push({
+        platform: "polymarket",
+        roundKey: `${conditionId}:${outcomeNorm}:r${roundIndex}`,
+        roundIndex,
+        conditionId: conditionId,
+        marketTitle: firstTrade?.title || "",
+        marketSlug: firstTrade?.slug || "",
+        eventSlug: firstTrade?.eventSlug || "",
+        outcome: outcomeRaw,
+        side: outcomeRaw?.toUpperCase() === "YES"
+          ? "YES"
+          : outcomeRaw?.toLowerCase() === "no"
+            ? "NO"
+            : String(outcomeRaw || "").toUpperCase(),
+        thumbnailUrl: firstTrade?.icon || null,
+        marketUrl: firstTrade?.eventSlug
+          ? `https://polymarket.com/event/${firstTrade.eventSlug}`
+          : (firstTrade?.slug ? `https://polymarket.com/market/${firstTrade.slug}` : null),
+
+        // Position metrics
+        shares: Math.round(round.totalSharesBought * 100) / 100,
+        entryPriceCents,
+        avgPriceCents: entryPriceCents,
+
+        // P&L
+        initialValueUsd: round.totalBought,
+        pnlUsd: realizedPnl,
+        pnlPercent: realizedPnlPercent,
+
+        // Closed info
+        isClosed: true,
+        openedAt: firstTrade?.timestamp ? firstTrade.timestamp * 1000 : null,
+        closedAt: lastTrade?.timestamp ? lastTrade.timestamp * 1000 : Date.now(),
+        totalTrades: round.tradeCount,
+
+        // Debug
+        _debug: {
+          netShares: roundNetShares,
+          totalBought: round.totalBought,
+          totalSold: round.totalSold,
+        },
+      });
+
+      roundIndex += 1;
+      round = null;
+      roundNetShares = 0;
     }
-    
-    // Only include if position is closed (net shares ~ 0) or has sells
-    const isClosed = Math.abs(netShares) < 1;
-    const hasSells = totalSold > 0;
-    
-    // Skip if still active
-    const conditionId = groupTrades[0]?.conditionId;
-    if (activeConditionIds.has(conditionId) && !isClosed) continue;
-    
-    // Only include closed positions with P&L
-    if (!isClosed && !hasSells) continue;
-    
-    const firstTrade = groupTrades[0];
-    const lastTrade = groupTrades[groupTrades.length - 1];
-    
-    // Calculate realized P&L: amount received - amount spent
-    const realizedPnl = totalSold - totalBought;
-    const realizedPnlPercent = totalBought > 0 ? (realizedPnl / totalBought) * 100 : 0;
-    
-    // Average entry price
-    const entryPriceCents = buyCount > 0 ? Math.round((avgBuyPrice / buyCount) * 1000) / 10 : 0;
-    
-    closedPositions.push({
-      platform: "polymarket",
-      conditionId: firstTrade.conditionId,
-      marketTitle: firstTrade.title || "",
-      marketSlug: firstTrade.slug || "",
-      eventSlug: firstTrade.eventSlug || "",
-      outcome: firstTrade.outcome || "",
-      side: firstTrade.outcome?.toUpperCase() === "YES" ? "YES" : 
-            firstTrade.outcome?.toLowerCase() === "no" ? "NO" : firstTrade.outcome?.toUpperCase(),
-      thumbnailUrl: firstTrade.icon || null,
-      marketUrl: firstTrade.eventSlug 
-        ? `https://polymarket.com/event/${firstTrade.eventSlug}` 
-        : (firstTrade.slug ? `https://polymarket.com/market/${firstTrade.slug}` : null),
-      
-      // Position metrics
-      shares: Math.round(totalSharesBought * 100) / 100, // Total shares bought
-      entryPriceCents,
-      avgPriceCents: entryPriceCents,
-      
-      // P&L
-      initialValueUsd: totalBought,
-      pnlUsd: realizedPnl,
-      pnlPercent: realizedPnlPercent,
-      
-      // Closed info
-      isClosed: true,
-      closedAt: lastTrade.timestamp ? lastTrade.timestamp * 1000 : Date.now(),
-      totalTrades: groupTrades.length,
-      
-      // Debug
-      _debug: { netShares, totalBought, totalSold }
-    });
   }
-  
+
   console.log("[Poly-Aggregate] Created", closedPositions.length, "closed positions");
   return closedPositions;
 }
 
 /**
  * Aggregate Opinion trades into closed positions
- * Groups by marketId + outcomeSide, calculates P&L
+ * Groups by marketId + outcome side and splits into closed rounds:
+ * open -> flat (closed) -> reopen
  */
 function aggregateOpinionTrades(trades, activeMarketIds = new Set()) {
   const closedPositions = [];
-  
+
   // Group trades by marketId + outcome side
   const tradeGroups = new Map();
   for (const trade of trades) {
@@ -580,329 +632,374 @@ function aggregateOpinionTrades(trades, activeMarketIds = new Set()) {
     }
     tradeGroups.get(key).push(trade);
   }
-  
+
   console.log("[Opinion-Aggregate] Found", tradeGroups.size, "trade groups");
-  
+
   for (const [key, groupTrades] of tradeGroups) {
-    // Calculate net position
-    let netShares = 0;
-    let totalBought = 0;
-    let totalSold = 0;
-    let avgBuyPrice = 0;
-    let buyCount = 0;
-    let totalProfit = 0; // Opinion already provides profit per trade
-    
     // Sort trades by timestamp (oldest first)
     groupTrades.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-    
+
+    let roundIndex = 0;
+    let roundNetShares = 0;
+    let round = null;
+    const canPracticalClose = () => (
+      Math.abs(roundNetShares) > CLOSED_NET_SHARES_EPSILON &&
+      Math.abs(roundNetShares) <= OPINION_PRACTICAL_CLOSE_SHARES &&
+      (round?.totalSold || 0) > 0 &&
+      (round?.totalBought || 0) > 0
+    );
+
+    const finalizeRound = (closeReason) => {
+      if (!round) return false;
+
+      const hasSells = round.totalSold > 0;
+      const hasBuys = round.totalBought > 0;
+      if (!hasSells || !hasBuys) return false;
+
+      const isFullyClosed = Math.abs(roundNetShares) < CLOSED_NET_SHARES_EPSILON;
+      const isPracticallyClosed = canPracticalClose();
+      if (!isFullyClosed && !isPracticallyClosed) return false;
+
+      const firstTrade = round.firstTrade;
+      const lastTrade = round.lastTrade;
+      const marketId = String(firstTrade?.marketId || "");
+      const isActiveMarket = activeMarketIds.has(marketId);
+
+      // Keep practically-closed rounds even if Opinion still reports tiny leftovers.
+      if (isActiveMarket && !isFullyClosed && !isPracticallyClosed) {
+        return false;
+      }
+
+      // Cash-flow realized P&L is more stable than per-trade profit fields.
+      const realizedPnl = round.totalSold - round.totalBought;
+      const realizedPnlPercent = round.totalBought > 0 ? (realizedPnl / round.totalBought) * 100 : 0;
+      const entryPrice = round.buySharesForAvg > 0 ? (round.buyPriceWeightedSum / round.buySharesForAvg) : 0;
+      const entryPriceCents = Math.round(entryPrice * 1000) / 10;
+      const outcomeSide = Number(firstTrade?.outcomeSide) || 0;
+
+      closedPositions.push({
+        platform: "opinion",
+        roundKey: `${marketId}:${outcomeSide}:r${roundIndex}`,
+        roundIndex,
+        marketId,
+        rootMarketId: String(firstTrade?.rootMarketId || firstTrade?.marketId || ""),
+        marketTitle: firstTrade?.rootMarketTitle || "",
+        outcomeName: firstTrade?.marketTitle || firstTrade?.outcome || "",
+        outcome: firstTrade?.outcome || "",
+        side: outcomeSide === 1 ? "YES" : "NO",
+        thumbnailUrl: null,
+        marketUrl: firstTrade?.rootMarketId && firstTrade?.rootMarketId !== firstTrade?.marketId
+          ? `https://app.opinion.trade/detail?topicId=${firstTrade.rootMarketId}&type=multi`
+          : `https://app.opinion.trade/detail?topicId=${firstTrade?.marketId}`,
+
+        // Position metrics
+        shares: Math.round(round.totalSharesBought * 100) / 100,
+        entryPriceCents,
+        avgPriceCents: entryPriceCents,
+
+        // P&L
+        initialValueUsd: round.totalBought,
+        pnlUsd: realizedPnl,
+        pnlPercent: realizedPnlPercent,
+
+        // Closed info
+        isClosed: true,
+        openedAt: firstTrade?.createdAt ? firstTrade.createdAt * 1000 : null,
+        closedAt: lastTrade?.createdAt ? lastTrade.createdAt * 1000 : Date.now(),
+        totalTrades: round.tradeCount,
+
+        // Debug
+        _debug: {
+          netShares: roundNetShares,
+          totalBought: round.totalBought,
+          totalSold: round.totalSold,
+          totalProfit: round.totalProfit,
+          isPracticallyClosed,
+          remainingShares: Math.round(Math.abs(roundNetShares) * 10000) / 10000,
+          closeReason,
+        },
+      });
+
+      roundIndex += 1;
+      round = null;
+      roundNetShares = 0;
+      return true;
+    };
+
     for (const trade of groupTrades) {
       const shares = Number(trade.shares) || 0;
       const price = Number(trade.price) || 0;
       const amount = Number(trade.amount) || 0;
       const profit = Number(trade.profit) || 0;
-      const side = (trade.side || '').toUpperCase();
-      
-      totalProfit += profit;
-      
-      if (side === 'BUY') {
-        netShares += shares;
-        totalBought += amount;
-        avgBuyPrice += price;
-        buyCount++;
-      } else if (side === 'SELL') {
-        netShares -= shares;
-        totalSold += amount;
+      const side = (trade.side || "").toUpperCase();
+
+      if (!Number.isFinite(shares) || shares <= 0) continue;
+      if (side !== "BUY" && side !== "SELL") continue;
+
+      // If a new BUY arrives after a practically-closed round, treat it as a reopen.
+      if (side === "BUY" && round && canPracticalClose()) {
+        finalizeRound("practical-reopen");
+      }
+
+      if (!round) {
+        round = {
+          firstTrade: trade,
+          lastTrade: trade,
+          totalBought: 0,
+          totalSold: 0,
+          buyPriceWeightedSum: 0,
+          buySharesForAvg: 0,
+          totalSharesBought: 0,
+          totalProfit: 0,
+          tradeCount: 0,
+        };
+      }
+
+      round.lastTrade = trade;
+      round.tradeCount += 1;
+      round.totalProfit += profit;
+
+      if (side === "BUY") {
+        roundNetShares += shares;
+        round.totalBought += amount;
+        round.totalSharesBought += shares;
+        round.buyPriceWeightedSum += price * shares;
+        round.buySharesForAvg += shares;
+      } else {
+        roundNetShares -= shares;
+        round.totalSold += amount;
+      }
+
+      const isRoundClosed = Math.abs(roundNetShares) < CLOSED_NET_SHARES_EPSILON;
+      const hasSells = round.totalSold > 0;
+      const hasBuys = round.totalBought > 0;
+
+      if (isRoundClosed && hasSells && hasBuys) {
+        finalizeRound("full-close");
       }
     }
-    
-    // Only include if position has been sold (partial or full)
-    const isClosed = Math.abs(netShares) < 1;
-    const hasSells = totalSold > 0;
-    
-    // Skip if still fully active
-    const marketId = groupTrades[0]?.marketId;
-    if (activeMarketIds.has(String(marketId)) && !hasSells) continue;
-    
-    // Only include positions with sells (realized P&L)
-    if (!hasSells) continue;
-    
-    const firstTrade = groupTrades[0];
-    const lastTrade = groupTrades[groupTrades.length - 1];
-    
-    // Use Opinion's profit calculation or derive from trades
-    const realizedPnl = totalProfit !== 0 ? totalProfit : (totalSold - totalBought);
-    const realizedPnlPercent = totalBought > 0 ? (realizedPnl / totalBought) * 100 : 0;
-    
-    // Average entry price
-    const entryPriceCents = buyCount > 0 ? Math.round((avgBuyPrice / buyCount) * 1000) / 10 : 0;
-    
-    // Calculate total shares bought (for display)
-    let totalSharesBought = 0;
-    for (const trade of groupTrades) {
-      if ((trade.side || '').toUpperCase() === 'BUY') {
-        totalSharesBought += Number(trade.shares) || 0;
-      }
+
+    // End of group: keep a practical-close round even with tiny leftovers.
+    if (round && canPracticalClose()) {
+      finalizeRound("practical-end");
     }
-    
-    closedPositions.push({
-      platform: "opinion",
-      marketId: String(firstTrade.marketId),
-      rootMarketId: String(firstTrade.rootMarketId || firstTrade.marketId),
-      marketTitle: firstTrade.rootMarketTitle || "",
-      outcomeName: firstTrade.marketTitle || firstTrade.outcome || "",
-      outcome: firstTrade.outcome || "",
-      side: firstTrade.outcomeSide === 1 ? "YES" : "NO",
-      thumbnailUrl: null,
-      marketUrl: firstTrade.rootMarketId && firstTrade.rootMarketId !== firstTrade.marketId
-        ? `https://app.opinion.trade/detail?topicId=${firstTrade.rootMarketId}&type=multi`
-        : `https://app.opinion.trade/detail?topicId=${firstTrade.marketId}`,
-      
-      // Position metrics
-      shares: Math.round(totalSharesBought * 100) / 100, // Total shares bought
-      entryPriceCents,
-      avgPriceCents: entryPriceCents,
-      
-      // P&L
-      initialValueUsd: totalBought,
-      pnlUsd: realizedPnl,
-      pnlPercent: realizedPnlPercent,
-      
-      // Closed info
-      isClosed: true,
-      closedAt: lastTrade.createdAt ? lastTrade.createdAt * 1000 : Date.now(),
-      totalTrades: groupTrades.length,
-      
-      // Debug
-      _debug: { netShares, totalBought, totalSold, totalProfit }
-    });
   }
-  
+
   console.log("[Opinion-Aggregate] Created", closedPositions.length, "closed positions");
   return closedPositions;
 }
 
-/**
- * Match closed positions between platforms to find completed arbitrage trades
- * Arbitrage = YES on one platform, NO on the other for the same market
- */
+function getClosedRoundTimeScore(polyClosedAt, opinionClosedAt) {
+  const polyTs = Number(polyClosedAt) || 0;
+  const opinionTs = Number(opinionClosedAt) || 0;
+  if (!polyTs || !opinionTs) return 0.5;
+
+  const gapMs = Math.abs(polyTs - opinionTs);
+  if (gapMs > CLOSED_ROUND_MAX_TIME_GAP_MS) return 0;
+  if (gapMs <= 60 * 60 * 1000) return 1.0;
+  if (gapMs <= 6 * 60 * 60 * 1000) return 0.95;
+  if (gapMs <= 24 * 60 * 60 * 1000) return 0.9;
+  if (gapMs <= 3 * 24 * 60 * 60 * 1000) return 0.75;
+  if (gapMs <= 7 * 24 * 60 * 60 * 1000) return 0.5;
+  return 0.35;
+}
+
 function matchClosedArbPositions(polyClosedPositions, opinionClosedPositions) {
   const closedArbPairs = [];
-  const usedPolyIds = new Set();
-  const usedOpinionIds = new Set();
-  
+  const usedOpinionRoundKeys = new Set();
+
   // DEBUG: Log all positions for debugging
   console.log("\n=== DEBUG: matchClosedArbPositions ===");
   console.log("Poly closed positions:", polyClosedPositions.length);
   polyClosedPositions.forEach(p => {
-    console.log(`  [POLY] "${p.marketTitle}" side=${p.side} outcome=${p.outcome} shares=${p.shares} pnl=${p.pnlUsd}`);
+    console.log(`  [POLY] "${p.marketTitle}" side=${p.side} outcome=${p.outcome} shares=${p.shares} pnl=${p.pnlUsd} closedAt=${p.closedAt} round=${p.roundKey}`);
   });
   console.log("Opinion closed positions:", opinionClosedPositions.length);
   opinionClosedPositions.forEach(p => {
-    console.log(`  [OPINION] "${p.marketTitle}" outcomeName=${p.outcomeName} side=${p.side} shares=${p.shares} pnl=${p.pnlUsd}`);
+    console.log(`  [OPINION] "${p.marketTitle}" outcomeName=${p.outcomeName} side=${p.side} shares=${p.shares} pnl=${p.pnlUsd} closedAt=${p.closedAt} round=${p.roundKey}`);
   });
+
   const SIMILARITY_THRESHOLD = 0.3;
-  
+
   console.log("[Matching-Closed] Matching", polyClosedPositions.length, "poly closed with", opinionClosedPositions.length, "opinion closed");
-  
-  // Match each Poly position with best Opinion match
-  for (const polyPos of polyClosedPositions) {
+
+  const sortedPoly = [...polyClosedPositions].sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0));
+  const sortedOpinion = [...opinionClosedPositions].sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0));
+
+  // Match each Poly closed round with best Opinion closed round
+  for (const polyPos of sortedPoly) {
     let bestMatch = null;
-    let bestScore = 0;
+    let bestCombinedScore = 0;
+    let bestTitleScore = 0;
+    let bestTimeScore = 0;
     let matchType = "standard";
-    
-    for (const opinionPos of opinionClosedPositions) {
-      if (usedOpinionIds.has(opinionPos.marketId)) continue;
-      
-      // ============================================================
-      // CASE 1: Poly binary market → Opinion categorical outcome
-      // Example: Poly "Will there be no change in Fed..." + Opinion "US Fed Decision in June?" outcome="No change"
-      // ============================================================
+
+    for (const opinionPos of sortedOpinion) {
+      const opinionRoundKey = opinionPos.roundKey || `${opinionPos.marketId}:${opinionPos.side}:${opinionPos.closedAt || 0}`;
+      if (usedOpinionRoundKeys.has(opinionRoundKey)) continue;
+
+      if (hasFdvSeriesMismatch(polyPos.marketTitle, opinionPos.marketTitle, opinionPos.outcomeName)) {
+        continue;
+      }
+
+      const timeScore = getClosedRoundTimeScore(polyPos.closedAt, opinionPos.closedAt);
+      if (timeScore <= 0) continue;
+      const opinionComparableTitle = buildOpinionComparableTitle(opinionPos.marketTitle, opinionPos.outcomeName);
+
+      // CASE 1: Poly binary market -> Opinion categorical outcome
       const binaryMatch = matchPolyBinaryToOpinionCategorical(
-        polyPos.marketTitle, 
-        opinionPos.marketTitle, 
+        polyPos.marketTitle,
+        opinionPos.marketTitle,
         opinionPos.outcomeName
       );
-      
+
       if (binaryMatch.matched) {
-        // For binary-to-categorical:
-        // - Poly YES = bet the outcome happens
-        // - Opinion NO = bet the outcome does NOT happen
-        // - Poly YES + Opinion NO = ARBITRAGE
-        // - Poly NO + Opinion YES = ARBITRAGE
         const isArbPair = (polyPos.side === "YES" && opinionPos.side === "NO") ||
-                         (polyPos.side === "NO" && opinionPos.side === "YES");
-        
+                          (polyPos.side === "NO" && opinionPos.side === "YES");
+
         if (isArbPair) {
-          console.log(`[Matching-Closed] Binary-to-Categorical match: "${polyPos.marketTitle.slice(0,40)}" ↔ "${opinionPos.outcomeName}"`);
-          bestMatch = opinionPos;
-          bestScore = 1.0;
-          matchType = "binary-to-categorical";
-          break; // Perfect match, no need to continue
+          console.log(`[Matching-Closed] Binary-to-Categorical match: "${polyPos.marketTitle.slice(0, 40)}" <-> "${opinionPos.outcomeName}"`);
+          const titleScore = 1.0;
+          const combinedScore = (titleScore * 0.85) + (timeScore * 0.15);
+
+          if (combinedScore > bestCombinedScore) {
+            bestMatch = opinionPos;
+            bestCombinedScore = combinedScore;
+            bestTitleScore = titleScore;
+            bestTimeScore = timeScore;
+            matchType = "binary-to-categorical";
+          }
+
+          continue;
         }
       }
-      
-      // ============================================================
+
       // CASE 2: Standard title matching with opposite sides
-      // ============================================================
       const isOppositeSide = polyPos.side !== opinionPos.side;
       if (!isOppositeSide) continue;
-      
-      // Compare titles
-      const score = titleSimilarity(polyPos.marketTitle, opinionPos.marketTitle);
-      
-      if (score > bestScore && score >= SIMILARITY_THRESHOLD) {
-        bestScore = score;
+
+      const titleScore = titleSimilarity(polyPos.marketTitle, opinionComparableTitle);
+      if (titleScore < SIMILARITY_THRESHOLD) continue;
+
+      const combinedScore = (titleScore * 0.85) + (timeScore * 0.15);
+      if (combinedScore > bestCombinedScore) {
+        bestCombinedScore = combinedScore;
+        bestTitleScore = titleScore;
+        bestTimeScore = timeScore;
         bestMatch = opinionPos;
         matchType = "standard";
       }
     }
-    
+
     if (bestMatch) {
-      usedPolyIds.add(polyPos.conditionId);
-      usedOpinionIds.add(bestMatch.marketId);
-      
-      // Create closed arb pair
-      const pair = createClosedArbPair(polyPos, bestMatch, bestScore);
+      const opinionRoundKey = bestMatch.roundKey || `${bestMatch.marketId}:${bestMatch.side}:${bestMatch.closedAt || 0}`;
+      usedOpinionRoundKeys.add(opinionRoundKey);
+
+      const pair = createClosedArbPair(polyPos, bestMatch, bestCombinedScore, {
+        matchType,
+        titleScore: bestTitleScore,
+        timeScore: bestTimeScore,
+      });
       closedArbPairs.push(pair);
-      
-      console.log(`[Matching-Closed] ✓ Matched (${matchType}): "${polyPos.marketTitle.slice(0,50)}" (score: ${bestScore.toFixed(2)})`);
+
+      console.log(`[Matching-Closed] matched (${matchType}): "${polyPos.marketTitle.slice(0, 50)}" (title=${bestTitleScore.toFixed(2)}, time=${bestTimeScore.toFixed(2)}, score=${bestCombinedScore.toFixed(2)})`);
     }
   }
-  
+
   console.log("[Matching-Closed] Found", closedArbPairs.length, "closed arb pairs");
   return closedArbPairs;
 }
 
-/**
- * Create a closed arbitrage pair object with realized P&L
- * 
- * For RESOLVED/CLAIMED arbitrage positions, we need to calculate P&L correctly:
- * - Arbitrage = YES on one platform + NO on the other for the same binary market
- * - When market resolves, ONE side always wins ($1 per share), ONE side always loses ($0)
- * - P&L = payout (matched shares × $1) - total cost
- * 
- * Individual platform P&L values may be incorrect for claimed positions because:
- * - Claims are NOT recorded as SELL trades
- * - aggregateXxxTrades() calculates pnlUsd = totalSold - totalBought
- * - For claimed positions: totalSold = 0, so pnlUsd = -totalBought (always negative, WRONG!)
- */
-function createClosedArbPair(polyPos, opinionPos, matchScore) {
+function createClosedArbPair(polyPos, opinionPos, matchScore, matchMeta = {}) {
   // Determine which was YES and which was NO
   const yesPos = polyPos.side === "YES" ? polyPos : opinionPos;
   const noPos = polyPos.side === "NO" ? polyPos : opinionPos;
-  
+
   // Entry prices (historical) - use avgPriceCents from each position
   const entryYesCents = yesPos.avgPriceCents || 0;
   const entryNoCents = noPos.avgPriceCents || 0;
   const entryTotalCents = entryYesCents + entryNoCents;
-  
+
   // Calculate entry arbitrage percentage
-  // Simple formula: if total = 98¢, arb = 2%
-  // If total >= 100 or invalid, arb = 0
   const entryArbPct = (entryTotalCents > 0 && entryTotalCents < 100)
     ? (100 - entryTotalCents)
     : 0;
-  
+
   // Total bet = sum of money spent buying on both exchanges
-  // Use initialValueUsd which represents the cost basis
   const polyBet = polyPos.initialValueUsd || 0;
   const opinionBet = opinionPos.initialValueUsd || 0;
   const totalBet = polyBet + opinionBet;
-  
-  // Get individual platform P&L (may be incorrect for claimed/resolved positions)
+
+  // Get individual platform P&L
   const polyPnl = polyPos.pnlUsd || 0;
   const opinionPnl = opinionPos.pnlUsd || 0;
   const summedPnl = polyPnl + opinionPnl;
-  
-  // Get raw cash flow data from _debug for more accurate calculation
+
+  // Get raw cash flow data
   const polyDebug = polyPos._debug || {};
   const opinionDebug = opinionPos._debug || {};
-  
-  // Calculate P&L from ACTUAL CASH FLOW (most accurate method)
-  // This works for both "sold early" and "claimed at resolution" cases
+
   const polyTotalBought = polyDebug.totalBought || polyPos.initialValueUsd || 0;
   const polyTotalSold = polyDebug.totalSold || 0;
   const opinionTotalBought = opinionDebug.totalBought || opinionPos.initialValueUsd || 0;
   const opinionTotalSold = opinionDebug.totalSold || 0;
-  
+
   const totalBoughtAll = polyTotalBought + opinionTotalBought;
   const totalSoldAll = polyTotalSold + opinionTotalSold;
   const cashFlowPnl = totalSoldAll - totalBoughtAll;
-  
-  // For valid arbitrage positions (entry < 100¢), P&L should not be significantly negative
-  const isValidArbitrage = entryTotalCents > 0 && entryTotalCents < 100;
-  
-  // Detect suspicious P&L: summedPnl is very different from cashFlowPnl, or both are very negative for valid arb
+
   const hasSells = polyTotalSold > 0 || opinionTotalSold > 0;
-  const pnlDifference = Math.abs(summedPnl - cashFlowPnl);
-  const pnlLooksSuspicious = isValidArbitrage && (
-    summedPnl < -totalBet * 0.05 ||  // summed P&L is way too negative for arb
-    (pnlDifference > totalBet * 0.1 && hasSells)  // big mismatch between methods when there are sells
-  );
-  
+  const isValidArbitrage = entryTotalCents > 0 && entryTotalCents < 100;
+
   let closedPnl;
   let usedArbCalculation = false;
-  let calculationMethod = "summed";
-  
-  if (pnlLooksSuspicious) {
-    // Try to use the most accurate method available
-    
-    if (hasSells && Math.abs(cashFlowPnl) < totalBet) {
-      // Use cash flow calculation if we have sell data and result is reasonable
-      closedPnl = cashFlowPnl;
-      calculationMethod = "cashflow";
-      
-      console.log(`[createClosedArbPair] Using CASH FLOW P&L for "${opinionPos.marketTitle}":`);
-      console.log(`  - Poly: bought=$${polyTotalBought.toFixed(2)}, sold=$${polyTotalSold.toFixed(2)}`);
-      console.log(`  - Opinion: bought=$${opinionTotalBought.toFixed(2)}, sold=$${opinionTotalSold.toFixed(2)}`);
-      console.log(`  - Total: bought=$${totalBoughtAll.toFixed(2)}, sold=$${totalSoldAll.toFixed(2)}`);
-      console.log(`  - Cash Flow P&L=$${cashFlowPnl.toFixed(2)} (vs summed=$${summedPnl.toFixed(2)})`);
-    } else if (!hasSells && isValidArbitrage) {
-      // No sells = claimed at resolution, use arb formula
-      const yesShares = yesPos.shares || 0;
-      const noShares = noPos.shares || 0;
-      const matchedShares = Math.min(yesShares, noShares);
-      const payout = matchedShares; // $1 per share at resolution
-      closedPnl = payout - totalBet;
-      usedArbCalculation = true;
-      calculationMethod = "arb-resolution";
-      
-      console.log(`[createClosedArbPair] Using ARB RESOLUTION P&L (no sells detected):`);
-      console.log(`  - matchedShares=${matchedShares}, payout=$${payout.toFixed(2)}`);
-      console.log(`  - P&L=$${closedPnl.toFixed(2)}`);
-    } else {
-      // Fallback to summed (best we can do)
-      closedPnl = summedPnl;
-      calculationMethod = "summed-fallback";
-      
-      console.log(`[createClosedArbPair] Falling back to summed P&L (suspicious but no better option):`);
-      console.log(`  - summedPnl=$${summedPnl.toFixed(2)}`);
-    }
+  let calculationMethod = "cashflow";
+
+  // Closed rounds with sells should use cash-flow P&L (money in - money out).
+  if (hasSells) {
+    closedPnl = cashFlowPnl;
+    console.log(`[createClosedArbPair] Using CASH FLOW P&L for "${opinionPos.marketTitle}":`);
+    console.log(`  - Poly: bought=${polyTotalBought.toFixed(2)}, sold=${polyTotalSold.toFixed(2)}`);
+    console.log(`  - Opinion: bought=${opinionTotalBought.toFixed(2)}, sold=${opinionTotalSold.toFixed(2)}`);
+    console.log(`  - Total: bought=${totalBoughtAll.toFixed(2)}, sold=${totalSoldAll.toFixed(2)}`);
+    console.log(`  - Cash Flow P&L=${cashFlowPnl.toFixed(2)} (vs summed=${summedPnl.toFixed(2)})`);
+  } else if (isValidArbitrage) {
+    const yesShares = yesPos.shares || 0;
+    const noShares = noPos.shares || 0;
+    const matchedShares = Math.min(yesShares, noShares);
+    const payout = matchedShares;
+    closedPnl = payout - totalBet;
+    usedArbCalculation = true;
+    calculationMethod = "arb-resolution";
+
+    console.log("[createClosedArbPair] Using ARB RESOLUTION P&L (no sells detected):");
+    console.log(`  - matchedShares=${matchedShares}, payout=${payout.toFixed(2)}`);
+    console.log(`  - P&L=${closedPnl.toFixed(2)}`);
   } else {
-    // Use summed P&L from individual platforms (seems reasonable)
+    calculationMethod = "summed-no-sells";
     closedPnl = summedPnl;
   }
-  
+
   const closedPnlPercent = totalBet > 0 ? (closedPnl / totalBet) * 100 : 0;
-  
-  // Determine result
   const result = closedPnl > 0.01 ? "won" : closedPnl < -0.01 ? "lost" : "even";
-  
-  // Closed timestamp (most recent)
   const closedAt = Math.max(polyPos.closedAt || 0, opinionPos.closedAt || 0);
-  
+
+  const safePolyKey = String(polyPos.roundKey || polyPos.conditionId || polyPos.marketId || "poly").replace(/[^a-zA-Z0-9_-]/g, "_");
+  const safeOpinionKey = String(opinionPos.roundKey || opinionPos.marketId || "opinion").replace(/[^a-zA-Z0-9_-]/g, "_");
+
   return {
-    id: `closed_${polyPos.marketId}_${opinionPos.marketId}`,
-    
+    id: `closed_${safePolyKey}_${safeOpinionKey}`,
+
     // Market info (use Opinion title - shorter format)
-    marketTitle: opinionPos.outcomeName 
+    marketTitle: opinionPos.outcomeName
       ? `${opinionPos.marketTitle} - ${opinionPos.outcomeName}`
       : opinionPos.marketTitle,
     marketTitleBase: opinionPos.marketTitle,
     outcomeDisplay: opinionPos.outcomeName || "",
     thumbnailUrl: polyPos.thumbnailUrl || opinionPos.thumbnailUrl,
     matchScore: matchScore,
-    
+    matchType: matchMeta.matchType || "standard",
+
     // Legs
     legs: [
       {
@@ -926,20 +1023,20 @@ function createClosedArbPair(polyPos, opinionPos, matchScore) {
         link: opinionPos.marketUrl,
       },
     ],
-    
+
     // Entry metrics
     entryTotalCents,
     entryYesCents,
     entryNoCents,
-    arbitragePct: Math.round(entryArbPct * 100) / 100, // e.g., 2.5 for 2.5%
+    arbitragePct: Math.round(entryArbPct * 100) / 100,
     entryArbPct: Math.round(entryArbPct * 100) / 100,
-    
+
     // Bet amounts
     polyBet: Math.round(polyBet * 100) / 100,
     opinionBet: Math.round(opinionBet * 100) / 100,
     totalBet: Math.round(totalBet * 100) / 100,
     totalCost: Math.round(totalBet * 100) / 100,
-    
+
     // Realized P&L
     polyPnl: Math.round(polyPnl * 100) / 100,
     opinionPnl: Math.round(opinionPnl * 100) / 100,
@@ -947,7 +1044,7 @@ function createClosedArbPair(polyPos, opinionPos, matchScore) {
     realizedPnl: Math.round(closedPnl * 100) / 100,
     closedPnlPercent: Math.round(closedPnlPercent * 100) / 100,
     realizedPnlPercent: Math.round(closedPnlPercent * 100) / 100,
-    
+
     // Cash flow debug info
     _cashFlow: {
       polyBought: Math.round(polyTotalBought * 100) / 100,
@@ -959,15 +1056,28 @@ function createClosedArbPair(polyPos, opinionPos, matchScore) {
       cashFlowPnl: Math.round(cashFlowPnl * 100) / 100,
       calculationMethod,
     },
-    
+
     // Timestamp
     closedAt: closedAt || Date.now(),
-    
+
     // Result
     result,
-    
+
     // Debug flag for arb-based P&L calculation
     usedArbCalculation,
+
+    // Round metadata (for multi-round debug)
+    roundMeta: {
+      polyRoundKey: polyPos.roundKey || null,
+      opinionRoundKey: opinionPos.roundKey || null,
+      polyClosedAt: polyPos.closedAt || null,
+      opinionClosedAt: opinionPos.closedAt || null,
+      closedGapMs: (polyPos.closedAt && opinionPos.closedAt)
+        ? Math.abs((polyPos.closedAt || 0) - (opinionPos.closedAt || 0))
+        : null,
+      titleScore: Number.isFinite(matchMeta.titleScore) ? Math.round(matchMeta.titleScore * 1000) / 1000 : null,
+      timeScore: Number.isFinite(matchMeta.timeScore) ? Math.round(matchMeta.timeScore * 1000) / 1000 : null,
+    },
   };
 }
 
@@ -1119,6 +1229,44 @@ function normalizeTitle(title) {
     .trim();
 }
 
+function buildOpinionComparableTitle(opinionTitle, opinionOutcome = "") {
+  const title = String(opinionTitle || "").trim();
+  const outcome = String(opinionOutcome || "").trim();
+  if (!outcome) return title;
+  return `${title} ${outcome}`.trim();
+}
+
+function extractFdvSeriesKey(title, outcome = "") {
+  const normalized = normalizeForWhitelist(`${title || ""} ${outcome || ""}`);
+  if (!normalized.includes("fdv above")) return null;
+
+  const projectMatch = normalized.match(/^(.*?)\s+fdv\s+above\b/i);
+  const project = projectMatch?.[1]?.replace(/\s+/g, " ").trim() || "";
+
+  const thresholdMatch = normalized.match(/\$\s*(\d+(?:\.\d+)?)\s*([kmbt])/i);
+  const threshold = thresholdMatch
+    ? `${thresholdMatch[1]}${thresholdMatch[2].toLowerCase()}`
+    : "";
+
+  return { project, threshold };
+}
+
+function hasFdvSeriesMismatch(polyTitle, opinionTitle, opinionOutcome = "") {
+  const polyKey = extractFdvSeriesKey(polyTitle, "");
+  const opinionKey = extractFdvSeriesKey(opinionTitle, opinionOutcome);
+  if (!polyKey || !opinionKey) return false;
+
+  if (polyKey.project && opinionKey.project && polyKey.project !== opinionKey.project) {
+    return true;
+  }
+
+  if (polyKey.threshold && opinionKey.threshold && polyKey.threshold !== opinionKey.threshold) {
+    return true;
+  }
+
+  return false;
+}
+
 /**
  * Calculate similarity between two titles
  * Uses whitelist first, then falls back to word overlap scoring
@@ -1192,6 +1340,12 @@ function matchArbPositions(polyPositions, opinionPositions) {
       if (usedOpinionIds.has(opinionPos.marketId)) continue;
       
       console.log(`  [Check] Opinion: "${opinionPos.marketTitle}" outcomeName="${opinionPos.outcomeName}" side="${opinionPos.side}"`);
+
+      if (hasFdvSeriesMismatch(polyPos.marketTitle, opinionPos.marketTitle, opinionPos.outcomeName)) {
+        console.log("    -> Skipped: FDV project/threshold mismatch");
+        continue;
+      }
+      const opinionComparableTitle = buildOpinionComparableTitle(opinionPos.marketTitle, opinionPos.outcomeName);
       
       // ============================================================
       // CASE 1: Poly binary market → Opinion categorical outcome
@@ -1263,13 +1417,13 @@ function matchArbPositions(polyPositions, opinionPositions) {
       }
       
       // Check whitelist (for direct title mappings)
-      const isWhitelisted = isWhitelistedMatch(polyPos.marketTitle, opinionPos.marketTitle);
+      const isWhitelisted = isWhitelistedMatch(polyPos.marketTitle, opinionComparableTitle);
       if (isWhitelisted) {
         console.log(`    -> WHITELIST MATCH!`);
       }
       
       // Calculate title similarity
-      const score = titleSimilarity(polyPos.marketTitle, opinionPos.marketTitle);
+      const score = titleSimilarity(polyPos.marketTitle, opinionComparableTitle);
       
       if (score > 0.1 || isWhitelisted) {
         console.log(`    -> Score: ${score.toFixed(3)} (threshold: ${SIMILARITY_THRESHOLD})`);

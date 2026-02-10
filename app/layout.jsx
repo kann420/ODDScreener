@@ -58,6 +58,8 @@ export default function RootLayout({ children }) {
             --text: #e9eef5;
             --muted: #94a3b8;
             --border: rgba(255,255,255,0.08);
+            --desktop-container-max-width: 1500px;
+            --desktop-container-padding-x: 14px;
           }
           *, *::before, *::after { box-sizing: border-box; }
           html, body { height: 100%; margin: 0; }
@@ -74,7 +76,27 @@ export default function RootLayout({ children }) {
             backdrop-filter: blur(10px);
             border-bottom: 1px solid var(--border);
           }
-          .container { max-width: 1500px; margin: 0 auto; padding: 12px 14px; }
+          .container {
+            max-width: var(--desktop-container-max-width);
+            margin: 0 auto;
+            padding: 12px var(--desktop-container-padding-x);
+          }
+          @media (min-width: 1024px) {
+            .topbar > .container,
+            body > .container {
+              width: 100% !important;
+              max-width: none !important;
+              margin: 0 !important;
+              padding-left: 4px !important;
+              padding-right: 4px !important;
+            }
+          }
+          @media (min-width: 1280px) {
+            :root {
+              --desktop-container-max-width: none;
+              --desktop-container-padding-x: 4px;
+            }
+          }
           /* Skeleton animation */
           @keyframes skeleton-pulse {
             0%, 100% { opacity: 1; }
@@ -181,7 +203,7 @@ export default function RootLayout({ children }) {
               <div style={{ flex: 1 }} />
 
               {/* RIGHT: Platform logos */}
-              <div className="platform-logos" style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <div className="platform-logos" style={{ display: "flex", alignItems: "center", gap: 16, marginRight: 28 }}>
                 <a href="https://app.opinion.trade?code=8YfTc9" target="_blank" rel="noopener noreferrer" title="Opinion">
                   <img
                     src="/2logo-opinion.webp"

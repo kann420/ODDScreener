@@ -25,12 +25,14 @@ const nextConfig = {
     // Enable modern formats (WebP, AVIF)
     formats: ['image/avif', 'image/webp'],
     
-    // Allow external images
+    // Allow external images (restricted to known domains)
     remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "**",
-      },
+      { protocol: "https", hostname: "**.opinion.trade" },
+      { protocol: "https", hostname: "**.polymarket.com" },
+      { protocol: "https", hostname: "polymarket-upload.s3.us-east-2.amazonaws.com" },
+      { protocol: "https", hostname: "**.kalshi.com" },
+      { protocol: "https", hostname: "**.cloudfront.net" },
+      { protocol: "https", hostname: "**.googleapis.com" },
     ],
     
     // Device sizes for responsive images (optimized for common breakpoints)
@@ -40,9 +42,8 @@ const nextConfig = {
     // Minimize image size - 30 days cache
     minimumCacheTTL: 60 * 60 * 24 * 30,
     
-    // Disable image optimization for SVGs (they're already optimized)
-    dangerouslyAllowSVG: true,
-    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+    // SVG optimization disabled for security
+    dangerouslyAllowSVG: false,
   },
 
   // ===== Compression (Gzip/Brotli) =====
@@ -91,12 +92,32 @@ const nextConfig = {
         ],
       },
       {
-        // API routes - short cache with stale-while-revalidate
-        source: '/api/:path*',
+        // Public API routes - short cache with stale-while-revalidate
+        source: '/api/opinion/:path*',
         headers: [
           {
             key: 'Cache-Control',
             value: 'public, s-maxage=10, stale-while-revalidate=30',
+          },
+        ],
+      },
+      {
+        // Public API routes
+        source: '/api/news/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, s-maxage=30, stale-while-revalidate=60',
+          },
+        ],
+      },
+      {
+        // User-specific / sensitive API routes - no public caching
+        source: '/api/arbitage/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'private, no-store',
           },
         ],
       },

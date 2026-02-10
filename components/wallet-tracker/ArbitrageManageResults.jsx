@@ -291,16 +291,16 @@ function ValueCell({ row }) {
   const opinionLeg = getLeg(row, "opinion");
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, width: "100%" }}>
         <PolymarketIcon />
-        <span style={{ color: "#fff", fontSize: 13, fontWeight: 500, minWidth: 50, textAlign: "right" }}>
+        <span style={{ color: "#fff", fontSize: 13, fontWeight: 500 }}>
           {formatUSD(polyLeg?.valueUsd || 0)}
         </span>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, width: "100%" }}>
         <OpinionIcon />
-        <span style={{ color: "#fff", fontSize: 13, fontWeight: 500, minWidth: 50, textAlign: "right" }}>
+        <span style={{ color: "#fff", fontSize: 13, fontWeight: 500 }}>
           {formatUSD(opinionLeg?.valueUsd || 0)}
         </span>
       </div>
@@ -313,16 +313,16 @@ function CurrentPriceCell({ row }) {
   const opinionLeg = getLeg(row, "opinion");
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, width: "100%" }}>
         <PolymarketIcon />
-        <span style={{ color: "#fff", fontSize: 13, fontWeight: 500, minWidth: 28, textAlign: "right" }}>
+        <span style={{ color: "#fff", fontSize: 13, fontWeight: 500 }}>
           {formatCents(polyLeg?.currentPriceCents || 0)}
         </span>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, width: "100%" }}>
         <OpinionIcon />
-        <span style={{ color: "#fff", fontSize: 13, fontWeight: 500, minWidth: 28, textAlign: "right" }}>
+        <span style={{ color: "#fff", fontSize: 13, fontWeight: 500 }}>
           {formatCents(opinionLeg?.currentPriceCents || 0)}
         </span>
       </div>
@@ -1313,7 +1313,7 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet }) {
 
         .arb-results-container :global(.arb-cell-value),
         .arb-results-container :global(.arb-cell-price) {
-          justify-content: flex-end;
+          justify-content: center;
         }
 
         .arb-no-results {
@@ -1843,6 +1843,59 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet }) {
           justify-content: space-between;
           font-size: 12px;
           color: rgba(255, 255, 255, 0.5);
+        }
+
+        @media (min-width: 1800px) {
+          .arb-tab {
+            font-size: 16px;
+            padding: 11px 22px;
+          }
+
+          .arb-search-input {
+            font-size: 16px;
+          }
+
+          .arb-table-header {
+            grid-template-columns: minmax(380px, 2.25fr) 140px 130px 112px 126px 126px 210px;
+            gap: 14px;
+            padding: 0 18px;
+          }
+
+          .arb-results-container :global(.arb-row) {
+            grid-template-columns: minmax(380px, 2.25fr) 140px 130px 112px 126px 126px 210px;
+            gap: 14px;
+            padding: 16px 18px;
+          }
+
+          .arb-results-container :global(.arb-market-title) {
+            font-size: 16px;
+          }
+
+          .arb-results-container :global(.arb-leg) {
+            font-size: 13px;
+          }
+
+          .arb-results-container :global(.arb-cell-value span),
+          .arb-results-container :global(.arb-cell-price span) {
+            font-size: 14px !important;
+          }
+
+          .arb-results-container :global(.arb-cell-arb > div) {
+            font-size: 16px !important;
+          }
+
+          .arb-results-container :global(.arb-cell-pnl > div),
+          .arb-results-container :global(.arb-cell-potential > div) {
+            font-size: 14px !important;
+          }
+
+          .arb-results-container :global(.closed-arb-title) {
+            font-size: 15px;
+          }
+
+          .arb-results-container :global(.closed-leg-mini) {
+            font-size: 12px;
+          }
         }
 
         @media (max-width: 900px) {

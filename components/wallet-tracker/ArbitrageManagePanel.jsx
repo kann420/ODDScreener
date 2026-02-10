@@ -553,6 +553,18 @@ export default function ArbitrageManagePanel() {
             background: rgba(255, 255, 255, 0.1);
             color: #fff;
           }
+
+          @media (min-width: 1800px) {
+            .arb-results-title {
+              font-size: 28px;
+            }
+
+            .arb-wallet-badge,
+            .arb-refresh-btn,
+            .arb-edit-btn {
+              font-size: 14px;
+            }
+          }
           
           @media (max-width: 600px) {
             .arb-results-header {

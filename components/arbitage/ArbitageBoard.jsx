@@ -1037,7 +1037,8 @@ export default function ArbitageBoard() {
         style={{
           padding: "12px 14px",
           display: "grid",
-          gridTemplateColumns: "1.25fr 0.65fr 0.42fr 0.28fr",
+          gridTemplateColumns:
+            "var(--arbitrage-desktop-grid-columns, 1.25fr 0.65fr 0.42fr 0.28fr)",
           gap: 14,
           alignItems: "center",
           borderBottom: "2px solid rgba(255,255,255,0.06)",
@@ -1282,7 +1283,8 @@ function Row({ r, priceMode, isBonus, onCalculatorClick }) {
       style={{
         padding: 12,
         display: "grid",
-        gridTemplateColumns: "1.25fr 0.65fr 0.42fr 0.28fr",
+        gridTemplateColumns:
+          "var(--arbitrage-desktop-grid-columns, 1.25fr 0.65fr 0.42fr 0.28fr)",
         gap: 14,
         alignItems: "stretch",
       }}
