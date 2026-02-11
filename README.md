@@ -4,10 +4,12 @@ ODDScreeners is a prediction market dashboard that aggregates data from Opinion,
 
 ## Getting Started
 Prerequisites
-Node.js 18+
-npm or yarn
+- Node.js 18+
+- npm or yarn
+- 
 Environment Variables
 Create a .env.local file in the root:
+```bash
 # Opinion API
 OPINION_API_KEY=your_opinion_api_key
 OPINION_BASE_URL=https://openapi.opinion.trade/openapi
@@ -21,6 +23,7 @@ ADMIN_SECRET=your_admin_secret
 # Optional
 OPINION_WS_URL=wss://ws.opinion.trade
 OPINION_OPENAPI_BASE=https://openapi.opinion.trade/openapi
+```
 
 ```bash
 npm install
