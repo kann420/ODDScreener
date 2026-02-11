@@ -33,5 +33,11 @@ poly_*.json
 poly_*.txt
 server.log
 
-# Agent skills (local AI config)
+# Agent skills & IDE settings (local-only, not needed on GitHub)
 .agents/
+.claude/
+.codex/
+.opencode/
+.github/skills/
+.vscode/
+
