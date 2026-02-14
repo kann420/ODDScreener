@@ -13,6 +13,7 @@ import {
   formatUSD,
   formatUSDSigned,
   formatPercentSigned,
+  formatShares,
   num,
 } from "@/lib/walletTracker/format";
 import { sortClosedPositions } from "@/lib/walletTracker/deriveClosed";
@@ -169,7 +170,7 @@ function ClosedRowDesktop({ position }) {
           <div className="closed-title" title={displayTitle}>{displayTitle}</div>
           <div className="closed-meta">
             <span className={`badge-${isYes ? 'yes' : 'no'}`}>{outcomeBadgeText}</span>
-            <span className="shares-text">{num(position.totalShares).toFixed(1)} shares at {formatCents(avgPrice)}</span>
+            <span className="shares-text">{formatShares(position.totalShares)} at {formatCents(avgPrice)}</span>
           </div>
         </div>
       </div>
@@ -232,7 +233,7 @@ function ClosedCardMobile({ position }) {
             <ResultBadge result={position.result} small />
             <span className={`badge-${isYes ? 'yes' : 'no'}`}>{outcomeBadgeText}</span>
           </div>
-          <div className="closed-card-shares">{num(position.totalShares).toFixed(1)} shares · Bet {formatUSD(totalBet)}</div>
+          <div className="closed-card-shares">{formatShares(position.totalShares)} · Bet {formatUSD(totalBet)}</div>
         </div>
         
         <div className="closed-card-right">
@@ -250,10 +251,17 @@ export default function ClosedPositionsTable({
   searchQuery,
   onLoadMoreHistory,
   loadingMore,
-  hasMore
+  hasMore,
+  sortBy: externalSortBy,
+  sortOrder: externalSortOrder,
+  onSortChange: externalOnSortChange,
+  hideDesktopControls = false,
+  hideMobileControls = false,
 }) {
-  const [sortBy, setSortBy] = useState("date");
-  const [sortOrder, setSortOrder] = useState("desc");
+  const [internalSortBy, setInternalSortBy] = useState("date");
+  const [internalSortOrder, setInternalSortOrder] = useState("desc");
+  const sortBy = externalSortBy || internalSortBy;
+  const sortOrder = externalSortOrder || internalSortOrder;
   const scrollContainerRef = useRef(null);
   
   const handleScroll = useCallback(() => {
@@ -277,16 +285,22 @@ export default function ClosedPositionsTable({
   }, [closedPositions, searchQuery, sortBy, sortOrder]);
   
   const handleSortChange = (newSortBy, newOrder) => {
-    setSortBy(newSortBy);
-    setSortOrder(newOrder);
+    if (externalOnSortChange) {
+      externalOnSortChange(newSortBy, newOrder);
+    } else {
+      setInternalSortBy(newSortBy);
+      setInternalSortOrder(newOrder);
+    }
   };
   
   return (
     <>
       <div className="closed-container">
-        <div className="closed-controls">
-          <SortDropdown sortBy={sortBy} sortOrder={sortOrder} onSortChange={handleSortChange} />
-        </div>
+        {!hideDesktopControls && (
+          <div className="closed-controls">
+            <SortDropdown sortBy={sortBy} sortOrder={sortOrder} onSortChange={handleSortChange} />
+          </div>
+        )}
         
         <div className="closed-header-desktop">
           <div>RESULT</div>
@@ -314,9 +328,11 @@ export default function ClosedPositionsTable({
       </div>
       
       <div className="closed-mobile">
-        <div className="closed-mobile-controls">
-          <SortDropdown sortBy={sortBy} sortOrder={sortOrder} onSortChange={handleSortChange} />
-        </div>
+        {!hideMobileControls && (
+          <div className="closed-mobile-controls">
+            <SortDropdown sortBy={sortBy} sortOrder={sortOrder} onSortChange={handleSortChange} />
+          </div>
+        )}
         {isLoading ? (
           <>{[1,2,3].map(i => <ClosedRowSkeleton key={i} isMobile={true} />)}</>
         ) : displayPositions.length > 0 ? (
@@ -744,3 +760,4 @@ export default function ClosedPositionsTable({
     </>
   );
 }
+

@@ -28,6 +28,7 @@ const OPINION_OPENAPI_BASE = process.env.OPINION_OPENAPI_BASE || "https://openap
 const OPINION_API_KEY = process.env.OPINION_API_KEY || "";
 const CLOSED_NET_SHARES_EPSILON = 0.01;
 const OPINION_PRACTICAL_CLOSE_SHARES = 3;
+const OPINION_PRACTICAL_CLOSE_VALUE_USD = 1;
 const CLOSED_ROUND_MAX_TIME_GAP_MS = 14 * 24 * 60 * 60 * 1000;
 
 // ============================================================================
@@ -520,7 +521,10 @@ function aggregatePolymarketTrades(trades, activeConditionIds = new Set()) {
           totalSold: 0,
           buyPriceWeightedSum: 0,
           buySharesForAvg: 0,
+          sellPriceWeightedSum: 0,
+          sellSharesForAvg: 0,
           totalSharesBought: 0,
+          totalSharesSold: 0,
           tradeCount: 0,
         };
       }
@@ -537,6 +541,9 @@ function aggregatePolymarketTrades(trades, activeConditionIds = new Set()) {
       } else {
         roundNetShares -= shares;
         round.totalSold += amount;
+        round.totalSharesSold += shares;
+        round.sellPriceWeightedSum += price * shares;
+        round.sellSharesForAvg += shares;
       }
 
       const isRoundClosed = Math.abs(roundNetShares) < CLOSED_NET_SHARES_EPSILON;
@@ -559,6 +566,8 @@ function aggregatePolymarketTrades(trades, activeConditionIds = new Set()) {
       const realizedPnlPercent = round.totalBought > 0 ? (realizedPnl / round.totalBought) * 100 : 0;
       const entryPrice = round.buySharesForAvg > 0 ? (round.buyPriceWeightedSum / round.buySharesForAvg) : 0;
       const entryPriceCents = Math.round(entryPrice * 1000) / 10;
+      const exitPrice = round.sellSharesForAvg > 0 ? (round.sellPriceWeightedSum / round.sellSharesForAvg) : entryPrice;
+      const exitPriceCents = Math.round(exitPrice * 1000) / 10;
       const outcomeRaw = firstTrade?.outcome || "";
       const outcomeNorm = String(outcomeRaw).toLowerCase();
 
@@ -585,6 +594,8 @@ function aggregatePolymarketTrades(trades, activeConditionIds = new Set()) {
         shares: Math.round(round.totalSharesBought * 100) / 100,
         entryPriceCents,
         avgPriceCents: entryPriceCents,
+        exitPriceCents,
+        avgExitPriceCents: exitPriceCents,
 
         // P&L
         initialValueUsd: round.totalBought,
@@ -602,6 +613,7 @@ function aggregatePolymarketTrades(trades, activeConditionIds = new Set()) {
           netShares: roundNetShares,
           totalBought: round.totalBought,
           totalSold: round.totalSold,
+          totalSharesSold: round.totalSharesSold,
         },
       });
 
@@ -620,7 +632,7 @@ function aggregatePolymarketTrades(trades, activeConditionIds = new Set()) {
  * Groups by marketId + outcome side and splits into closed rounds:
  * open -> flat (closed) -> reopen
  */
-function aggregateOpinionTrades(trades, activeMarketIds = new Set()) {
+function aggregateOpinionTrades(trades, activePositionsByKey = new Map()) {
   const closedPositions = [];
 
   // Group trades by marketId + outcome side
@@ -638,16 +650,41 @@ function aggregateOpinionTrades(trades, activeMarketIds = new Set()) {
   for (const [key, groupTrades] of tradeGroups) {
     // Sort trades by timestamp (oldest first)
     groupTrades.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    const activePosition = activePositionsByKey.get(key) || null;
 
     let roundIndex = 0;
     let roundNetShares = 0;
     let round = null;
-    const canPracticalClose = () => (
-      Math.abs(roundNetShares) > CLOSED_NET_SHARES_EPSILON &&
-      Math.abs(roundNetShares) <= OPINION_PRACTICAL_CLOSE_SHARES &&
-      (round?.totalSold || 0) > 0 &&
-      (round?.totalBought || 0) > 0
-    );
+
+    const estimateResidualValueUsd = (preferActiveValue = false) => {
+      const remainingShares = Math.abs(roundNetShares);
+      if (!round || remainingShares <= CLOSED_NET_SHARES_EPSILON) return 0;
+
+      if (preferActiveValue) {
+        const activeValue = Number(activePosition?.currentValueUsd);
+        if (Number.isFinite(activeValue) && activeValue >= 0) {
+          return activeValue;
+        }
+      }
+
+      const lastTradePrice = Number(round.lastTrade?.price) || 0;
+      if (lastTradePrice <= 0) return 0;
+      return remainingShares * lastTradePrice;
+    };
+
+    const canPracticalClose = (preferActiveValue = false) => {
+      const hasSells = (round?.totalSold || 0) > 0;
+      const hasBuys = (round?.totalBought || 0) > 0;
+      if (!hasSells || !hasBuys) return false;
+
+      const remainingShares = Math.abs(roundNetShares);
+      if (remainingShares <= CLOSED_NET_SHARES_EPSILON) return false;
+
+      if (remainingShares <= OPINION_PRACTICAL_CLOSE_SHARES) return true;
+
+      const remainingValueUsd = estimateResidualValueUsd(preferActiveValue);
+      return remainingValueUsd > 0 && remainingValueUsd < OPINION_PRACTICAL_CLOSE_VALUE_USD;
+    };
 
     const finalizeRound = (closeReason) => {
       if (!round) return false;
@@ -657,24 +694,27 @@ function aggregateOpinionTrades(trades, activeMarketIds = new Set()) {
       if (!hasSells || !hasBuys) return false;
 
       const isFullyClosed = Math.abs(roundNetShares) < CLOSED_NET_SHARES_EPSILON;
-      const isPracticallyClosed = canPracticalClose();
+      const preferActiveResidual = closeReason === "practical-end";
+      const isPracticallyClosed = canPracticalClose(preferActiveResidual);
       if (!isFullyClosed && !isPracticallyClosed) return false;
 
       const firstTrade = round.firstTrade;
       const lastTrade = round.lastTrade;
       const marketId = String(firstTrade?.marketId || "");
-      const isActiveMarket = activeMarketIds.has(marketId);
-
-      // Keep practically-closed rounds even if Opinion still reports tiny leftovers.
-      if (isActiveMarket && !isFullyClosed && !isPracticallyClosed) {
-        return false;
-      }
-
-      // Cash-flow realized P&L is more stable than per-trade profit fields.
-      const realizedPnl = round.totalSold - round.totalBought;
+      const residualValueUsd = isPracticallyClosed
+        ? estimateResidualValueUsd(preferActiveResidual)
+        : 0;
+      const avgBuyPrice = round.totalSharesBought > 0 ? (round.totalBought / round.totalSharesBought) : 0;
+      const soldSharesForPnl = Math.min(round.totalSharesSold || 0, round.totalSharesBought || 0);
+      // For practical close with leftovers, use realized-only P&L on sold shares.
+      const realizedPnl = (isPracticallyClosed && !isFullyClosed)
+        ? (round.totalSold - (soldSharesForPnl * avgBuyPrice))
+        : (round.totalSold - round.totalBought);
       const realizedPnlPercent = round.totalBought > 0 ? (realizedPnl / round.totalBought) * 100 : 0;
       const entryPrice = round.buySharesForAvg > 0 ? (round.buyPriceWeightedSum / round.buySharesForAvg) : 0;
       const entryPriceCents = Math.round(entryPrice * 1000) / 10;
+      const exitPrice = round.sellSharesForAvg > 0 ? (round.sellPriceWeightedSum / round.sellSharesForAvg) : entryPrice;
+      const exitPriceCents = Math.round(exitPrice * 1000) / 10;
       const outcomeSide = Number(firstTrade?.outcomeSide) || 0;
 
       closedPositions.push({
@@ -696,6 +736,8 @@ function aggregateOpinionTrades(trades, activeMarketIds = new Set()) {
         shares: Math.round(round.totalSharesBought * 100) / 100,
         entryPriceCents,
         avgPriceCents: entryPriceCents,
+        exitPriceCents,
+        avgExitPriceCents: exitPriceCents,
 
         // P&L
         initialValueUsd: round.totalBought,
@@ -713,6 +755,11 @@ function aggregateOpinionTrades(trades, activeMarketIds = new Set()) {
           netShares: roundNetShares,
           totalBought: round.totalBought,
           totalSold: round.totalSold,
+          totalSharesBought: round.totalSharesBought,
+          totalSharesSold: round.totalSharesSold,
+          avgBuyPrice,
+          soldSharesForPnl,
+          residualValueUsd,
           totalProfit: round.totalProfit,
           isPracticallyClosed,
           remainingShares: Math.round(Math.abs(roundNetShares) * 10000) / 10000,
@@ -749,7 +796,10 @@ function aggregateOpinionTrades(trades, activeMarketIds = new Set()) {
           totalSold: 0,
           buyPriceWeightedSum: 0,
           buySharesForAvg: 0,
+          sellPriceWeightedSum: 0,
+          sellSharesForAvg: 0,
           totalSharesBought: 0,
+          totalSharesSold: 0,
           totalProfit: 0,
           tradeCount: 0,
         };
@@ -768,6 +818,9 @@ function aggregateOpinionTrades(trades, activeMarketIds = new Set()) {
       } else {
         roundNetShares -= shares;
         round.totalSold += amount;
+        round.totalSharesSold += shares;
+        round.sellPriceWeightedSum += price * shares;
+        round.sellSharesForAvg += shares;
       }
 
       const isRoundClosed = Math.abs(roundNetShares) < CLOSED_NET_SHARES_EPSILON;
@@ -780,7 +833,7 @@ function aggregateOpinionTrades(trades, activeMarketIds = new Set()) {
     }
 
     // End of group: keep a practical-close round even with tiny leftovers.
-    if (round && canPracticalClose()) {
+    if (round && canPracticalClose(true)) {
       finalizeRound("practical-end");
     }
   }
@@ -938,6 +991,7 @@ function createClosedArbPair(polyPos, opinionPos, matchScore, matchMeta = {}) {
   // Get raw cash flow data
   const polyDebug = polyPos._debug || {};
   const opinionDebug = opinionPos._debug || {};
+  const hasPracticalClose = Boolean(polyDebug.isPracticallyClosed || opinionDebug.isPracticallyClosed);
 
   const polyTotalBought = polyDebug.totalBought || polyPos.initialValueUsd || 0;
   const polyTotalSold = polyDebug.totalSold || 0;
@@ -955,8 +1009,13 @@ function createClosedArbPair(polyPos, opinionPos, matchScore, matchMeta = {}) {
   let usedArbCalculation = false;
   let calculationMethod = "cashflow";
 
-  // Closed rounds with sells should use cash-flow P&L (money in - money out).
-  if (hasSells) {
+  // Practical close keeps tiny leftovers, so use leg-level realized P&L sum.
+  if (hasPracticalClose) {
+    closedPnl = summedPnl;
+    calculationMethod = "summed-practical";
+    console.log(`[createClosedArbPair] Using SUMMED PRACTICAL P&L for "${opinionPos.marketTitle}":`);
+    console.log(`  - Poly P&L=${polyPnl.toFixed(2)}, Opinion P&L=${opinionPnl.toFixed(2)}, Total=${summedPnl.toFixed(2)}`);
+  } else if (hasSells) {
     closedPnl = cashFlowPnl;
     console.log(`[createClosedArbPair] Using CASH FLOW P&L for "${opinionPos.marketTitle}":`);
     console.log(`  - Poly: bought=${polyTotalBought.toFixed(2)}, sold=${polyTotalSold.toFixed(2)}`);
@@ -1007,6 +1066,7 @@ function createClosedArbPair(polyPos, opinionPos, matchScore, matchMeta = {}) {
         side: polyPos.side,
         shares: polyPos.shares,
         entryPriceCents: polyPos.avgPriceCents,
+        exitPriceCents: polyPos.exitPriceCents ?? polyPos.avgPriceCents,
         currentPriceCents: polyPos.currentPriceCents,
         valueUsd: polyPos.initialValueUsd,
         pnlUsd: polyPos.pnlUsd,
@@ -1017,6 +1077,7 @@ function createClosedArbPair(polyPos, opinionPos, matchScore, matchMeta = {}) {
         side: opinionPos.side,
         shares: opinionPos.shares,
         entryPriceCents: opinionPos.avgPriceCents,
+        exitPriceCents: opinionPos.exitPriceCents ?? opinionPos.avgPriceCents,
         currentPriceCents: opinionPos.currentPriceCents,
         valueUsd: opinionPos.initialValueUsd,
         pnlUsd: opinionPos.pnlUsd,
@@ -1619,11 +1680,15 @@ export async function GET(request) {
       
       // Get active position IDs to exclude
       const activePolyConditionIds = new Set(polyPositions.map(p => p.conditionId));
-      const activeOpinionMarketIds = new Set(opinionPositions.map(p => String(p.marketId)));
+      const activeOpinionPositionsByKey = new Map();
+      for (const pos of opinionPositions) {
+        const outcomeSide = pos.side === "YES" ? 1 : 2;
+        activeOpinionPositionsByKey.set(`${String(pos.marketId)}:${outcomeSide}`, pos);
+      }
       
       // Aggregate trades into closed positions
       const polyClosedPositions = aggregatePolymarketTrades(polyTrades, activePolyConditionIds);
-      const opinionClosedPositions = aggregateOpinionTrades(opinionTrades, activeOpinionMarketIds);
+      const opinionClosedPositions = aggregateOpinionTrades(opinionTrades, activeOpinionPositionsByKey);
       
       // Match closed positions to find completed arb trades
       closedArbPositions = matchClosedArbPositions(polyClosedPositions, opinionClosedPositions);

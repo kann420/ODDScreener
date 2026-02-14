@@ -14,6 +14,7 @@ import {
   formatUSD,
   formatUSDSigned,
   formatPercentSigned,
+  formatShares,
   num,
 } from "@/lib/walletTracker/format";
 
@@ -102,7 +103,7 @@ function PositionRowDesktop({ position }) {
           <div className="position-title" title={displayTitle}>{displayTitle}</div>
           <div className="position-meta">
             <span className={`badge-${isYes ? 'yes' : 'no'}`}>{outcomeSideStr}</span>
-            <span className="shares-text">{num(position.sharesOwned).toFixed(1)} shares at {formatCents(avgPrice)}</span>
+            <span className="shares-text">{formatShares(position.sharesOwned)} at {formatCents(avgPrice)}</span>
           </div>
         </div>
       </div>
@@ -158,7 +159,7 @@ function PositionCardMobile({ position }) {
           <div className="position-card-title">{displayTitle}</div>
           <div className="position-card-meta">
             <span className={`badge-${isYes ? 'yes' : 'no'}`}>{outcomeSideStr}</span>
-            <span className="shares-text-mobile">{num(position.sharesOwned).toFixed(1)} shares at {formatCents(avgPrice)}</span>
+            <span className="shares-text-mobile">{formatShares(position.sharesOwned)} at {formatCents(avgPrice)}</span>
           </div>
         </div>
         
@@ -181,9 +182,12 @@ export default function PositionsTable({
   onSearchChange,
   onLoadMore,
   hasMore,
-  loadingMore
+  loadingMore,
+  sortOrder: externalSortOrder,
+  onToggleSort: externalToggleSort,
 }) {
-  const [sortOrder, setSortOrder] = useState("desc");
+  const [internalSortOrder, setInternalSortOrder] = useState("desc");
+  const sortOrder = externalSortOrder || internalSortOrder;
   const scrollContainerRef = useRef(null);
   
   const handleScroll = useCallback(() => {
@@ -210,7 +214,7 @@ export default function PositionsTable({
     });
   }, [positions, searchQuery, sortOrder]);
   
-  const toggleSort = () => setSortOrder(prev => prev === "desc" ? "asc" : "desc");
+  const toggleSort = externalToggleSort || (() => setInternalSortOrder(prev => prev === "desc" ? "asc" : "desc"));
   const [sortHovered, setSortHovered] = useState(false);
   
   return (

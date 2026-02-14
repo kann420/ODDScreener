@@ -85,10 +85,114 @@ function SubTabButton({ active, onClick, children }) {
   );
 }
 
+function ValueSortButton({ sortOrder = "desc", onClick, disabled = false }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      style={{
+        background: "rgba(255, 255, 255, 0.03)",
+        border: "1px solid rgba(255,255,255,0.12)",
+        padding: "8px 14px",
+        fontSize: 13,
+        fontWeight: 600,
+        color: disabled ? "rgba(255,255,255,0.35)" : (hovered ? "#fff" : "rgba(255,255,255,0.8)"),
+        cursor: disabled ? "not-allowed" : "pointer",
+        borderRadius: 8,
+        transition: "all 0.15s",
+        minWidth: 96,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+      }}
+      onClick={() => !disabled && onClick?.()}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      disabled={disabled}
+    >
+      Value {sortOrder === "desc" ? "↓" : "↑"}
+    </button>
+  );
+}
+
+function ClosedSortDropdown({ sortBy = "date", sortOrder = "desc", onSortChange }) {
+  const [hovered, setHovered] = useState(false);
+  const [open, setOpen] = useState(false);
+  const label = sortBy === "pnl" ? "Profit/Loss" : "Date";
+  return (
+    <div style={{ position: "relative" }}>
+      <button
+        style={{
+          background: "rgba(255, 255, 255, 0.03)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          padding: "8px 12px",
+          fontSize: 13,
+          fontWeight: 600,
+          color: hovered ? "#fff" : "rgba(255,255,255,0.8)",
+          cursor: "pointer",
+          borderRadius: 8,
+          transition: "all 0.15s",
+          minWidth: 120,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 6,
+        }}
+        onClick={() => setOpen(v => !v)}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        {label} {sortOrder === "desc" ? "↓" : "↑"}
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute",
+          top: "calc(100% + 6px)",
+          right: 0,
+          zIndex: 20,
+          minWidth: 148,
+          background: "rgba(12,14,18,0.98)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 8,
+          overflow: "hidden",
+          boxShadow: "0 8px 20px rgba(0,0,0,0.3)",
+        }}>
+          {[
+            { value: "date", text: "Date" },
+            { value: "pnl", text: "Profit/Loss" },
+          ].map((opt) => (
+            <button
+              key={opt.value}
+              style={{
+                width: "100%",
+                textAlign: "left",
+                padding: "9px 10px",
+                background: "transparent",
+                border: "none",
+                color: sortBy === opt.value ? "#fff" : "rgba(255,255,255,0.7)",
+                fontSize: 12,
+                fontWeight: sortBy === opt.value ? 600 : 500,
+                cursor: "pointer",
+              }}
+              onClick={() => {
+                const nextOrder = opt.value === sortBy ? (sortOrder === "desc" ? "asc" : "desc") : "desc";
+                onSortChange?.(opt.value, nextOrder);
+                setOpen(false);
+              }}
+            >
+              {opt.text} {sortBy === opt.value ? (sortOrder === "desc" ? "↓" : "↑") : ""}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Search input component
  */
-function SearchInput({ value, onChange, placeholder }) {
+function SearchInput({ value, onChange, placeholder, fullWidth = false, stretch = false }) {
   const [focused, setFocused] = useState(false);
   
   return (
@@ -101,7 +205,8 @@ function SearchInput({ value, onChange, placeholder }) {
       borderRadius: 8,
       padding: "10px 14px",
       flex: 1,
-      maxWidth: 280,
+      width: (fullWidth || stretch) ? "100%" : "auto",
+      maxWidth: (fullWidth || stretch) ? "100%" : 280,
       transition: "border-color 0.15s",
     }}>
       <svg 
@@ -287,8 +392,12 @@ export default function WalletPage() {
   // State
   const [activeTab, setActiveTab] = useState("positions"); // positions | activity
   const [positionsSubTab, setPositionsSubTab] = useState("active"); // active | closed
+  const [positionsSortOrder, setPositionsSortOrder] = useState("desc");
+  const [closedSortBy, setClosedSortBy] = useState("date");
+  const [closedSortOrder, setClosedSortOrder] = useState("desc");
   const [searchQuery, setSearchQuery] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   
   // Data state
   const [positions, setPositions] = useState([]);
@@ -664,6 +773,13 @@ export default function WalletPage() {
       backfillTrades();
     }
   }, [wallet, chainId, fetchPositions, backfillTrades]);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth <= 900);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
   
   // Validate wallet address
   if (!isValidWalletAddress(wallet)) {
@@ -725,31 +841,63 @@ export default function WalletPage() {
             {/* Sub-tabs and Search */}
             <div style={{ 
               display: "flex", 
-              alignItems: "center", 
+              alignItems: "stretch", 
               gap: 16, 
               marginBottom: 16,
               flexWrap: "wrap",
+              flexDirection: isMobile ? "column" : "row",
             }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <SubTabButton
-                  active={positionsSubTab === "active"}
-                  onClick={() => setPositionsSubTab("active")}
-                >
-                  Active
-                </SubTabButton>
-                <SubTabButton
-                  active={positionsSubTab === "closed"}
-                  onClick={() => setPositionsSubTab("closed")}
-                >
-                  Closed
-                </SubTabButton>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", width: isMobile ? "100%" : "auto" }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flex: isMobile ? 1 : "initial" }}>
+                  <SubTabButton
+                    active={positionsSubTab === "active"}
+                    onClick={() => setPositionsSubTab("active")}
+                  >
+                    Active
+                  </SubTabButton>
+                  <SubTabButton
+                    active={positionsSubTab === "closed"}
+                    onClick={() => setPositionsSubTab("closed")}
+                  >
+                    Closed
+                  </SubTabButton>
+                </div>
+                {isMobile && (
+                  positionsSubTab === "active" ? (
+                    <ValueSortButton
+                      sortOrder={positionsSortOrder}
+                      onClick={() => setPositionsSortOrder(prev => prev === "desc" ? "asc" : "desc")}
+                    />
+                  ) : (
+                    <ClosedSortDropdown
+                      sortBy={closedSortBy}
+                      sortOrder={closedSortOrder}
+                      onSortChange={(nextBy, nextOrder) => {
+                        setClosedSortBy(nextBy);
+                        setClosedSortOrder(nextOrder);
+                      }}
+                    />
+                  )
+                )}
               </div>
               
               <SearchInput
                 value={searchQuery}
                 onChange={setSearchQuery}
                 placeholder="Search positions"
+                fullWidth={isMobile}
+                stretch={!isMobile && positionsSubTab === "closed"}
               />
+              {!isMobile && positionsSubTab === "closed" && (
+                <ClosedSortDropdown
+                  sortBy={closedSortBy}
+                  sortOrder={closedSortOrder}
+                  onSortChange={(nextBy, nextOrder) => {
+                    setClosedSortBy(nextBy);
+                    setClosedSortOrder(nextOrder);
+                  }}
+                />
+              )}
             </div>
             
             {/* Active Positions (filtered to exclude "practically closed" ones) */}
@@ -767,6 +915,8 @@ export default function WalletPage() {
                   onLoadMore={handleLoadMorePositions}
                   hasMore={hasMorePositions}
                   loadingMore={positionsLoadingMore}
+                  sortOrder={positionsSortOrder}
+                  onToggleSort={() => setPositionsSortOrder(prev => prev === "desc" ? "asc" : "desc")}
                 />
               )
             )}
@@ -785,6 +935,14 @@ export default function WalletPage() {
                   searchQuery={searchQuery}
                   onLoadMoreHistory={handleLoadMoreHistory}
                   loadingMore={tradesLoadingMore}
+                  sortBy={closedSortBy}
+                  sortOrder={closedSortOrder}
+                  onSortChange={(nextBy, nextOrder) => {
+                    setClosedSortBy(nextBy);
+                    setClosedSortOrder(nextOrder);
+                  }}
+                  hideDesktopControls={!isMobile}
+                  hideMobileControls={isMobile}
                 />
               )
             )}

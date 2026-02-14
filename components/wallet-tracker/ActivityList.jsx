@@ -111,7 +111,7 @@ function ActivityRowDesktop({ trade, chainId }) {
           <div className="activity-title" title={displayTitle}>{displayTitle}</div>
           <div className="activity-meta">
             <span className={`badge-${isYes ? 'yes' : 'no'}`}>{outcomeSideStr}</span>
-            <span className="meta-text">{formatCents(price)} · {shares.toFixed(1)} shares</span>
+            <span className="meta-text">{formatCents(price)} · {formatShares(shares)}</span>
           </div>
         </div>
       </div>
@@ -177,7 +177,7 @@ function ActivityCardMobile({ trade, chainId }) {
           <div className="activity-card-meta">
             <span className={`badge-${isBuy ? 'buy' : 'sell'}`}>{isBuy ? "Buy" : "Sell"}</span>
             <span className={`badge-${isYes ? 'yes' : 'no'}`}>{outcomeSideStr}</span>
-            <span className="meta-text-mobile">{shares.toFixed(1)} at {formatCents(price)}</span>
+            <span className="meta-text-mobile">{formatShares(shares)} at {formatCents(price)}</span>
           </div>
         </div>
         
@@ -556,3 +556,4 @@ export default function ActivityList({
     </>
   );
 }
+

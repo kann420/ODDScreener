@@ -52,6 +52,25 @@ function SearchIcon() {
   );
 }
 
+/** Info icon for column tooltip */
+function InfoIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      style={{ display: "block" }}
+    >
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="16" x2="12" y2="12" />
+      <line x1="12" y1="8" x2="12.01" y2="8" />
+    </svg>
+  );
+}
+
 /** External link icon for market links */
 function ExternalLinkIcon() {
   return (
@@ -171,6 +190,23 @@ function formatUSD(value) {
   return `$${value.toFixed(2)}`;
 }
 
+function formatUSDCompact(value) {
+  const num = Number(value) || 0;
+  return `$${num.toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1")}`;
+}
+
+function formatUSDSigned(value, { showPlus = false } = {}) {
+  const num = Number(value) || 0;
+  const sign = num < 0 ? "-" : (showPlus && num > 0 ? "+" : "");
+  return `${sign}${formatUSD(Math.abs(num))}`;
+}
+
+function formatUSDDelta(value) {
+  const num = Number(value) || 0;
+  const sign = num < 0 ? "-" : "+";
+  return `${sign}${formatUSD(Math.abs(num))}`;
+}
+
 function formatCents(cents) {
   const num = Number(cents);
   if (!Number.isFinite(num)) return "0¢";
@@ -194,10 +230,11 @@ function getLeg(row, platform) {
 // Sub-Components
 // ============================================================================
 
-function ColumnHeader({ label, sortKey, sortConfig, onSort, align = "center" }) {
+function ColumnHeader({ label, sortKey, sortConfig, onSort, align = "center", infoTooltip = null, labelOffsetX = 0 }) {
   const isSortable = sortKey !== null;
   const isActive = sortConfig.key === sortKey;
   const direction = isActive ? sortConfig.direction : null;
+  const [showInfo, setShowInfo] = useState(false);
 
   const handleClick = () => {
     if (!isSortable) return;
@@ -221,8 +258,70 @@ function ColumnHeader({ label, sortKey, sortConfig, onSort, align = "center" }) 
         whiteSpace: "nowrap",
       }}
     >
-      {label}
-      {isSortable && <SortIcon direction={direction} />}
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, position: "relative", transform: `translateX(${labelOffsetX}px)` }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, position: "relative" }}>
+          {label}
+          {infoTooltip && (
+            <span
+              style={{ position: "relative", display: "inline-flex", alignItems: "center" }}
+              onMouseEnter={() => setShowInfo(true)}
+              onMouseLeave={() => setShowInfo(false)}
+            >
+              <button
+                type="button"
+                aria-label="Column info"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowInfo((prev) => !prev);
+                }}
+                onFocus={() => setShowInfo(true)}
+                onBlur={() => setShowInfo(false)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: "rgba(255,255,255,0.5)",
+                  padding: 0,
+                  cursor: "pointer",
+                  lineHeight: 0,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <InfoIcon />
+              </button>
+              {showInfo && (
+                <span
+                  role="tooltip"
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 8px)",
+                    right: -8,
+                    minWidth: 240,
+                    maxWidth: 280,
+                    background: "rgba(15, 23, 42, 0.98)",
+                    border: "1px solid rgba(255,255,255,0.15)",
+                    borderRadius: 8,
+                    padding: "8px 10px",
+                    color: "rgba(255,255,255,0.88)",
+                    fontSize: 12,
+                    fontWeight: 500,
+                    lineHeight: 1.35,
+                    textTransform: "none",
+                    letterSpacing: 0,
+                    whiteSpace: "normal",
+                    zIndex: 50,
+                    boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+                  }}
+                >
+                  {infoTooltip}
+                </span>
+              )}
+            </span>
+          )}
+        </span>
+        {isSortable && <SortIcon direction={direction} />}
+      </span>
     </div>
   );
 }
@@ -290,20 +389,31 @@ function ValueCell({ row }) {
   const polyLeg = getLeg(row, "polymarket");
   const opinionLeg = getLeg(row, "opinion");
 
+  const renderLegValue = (platform, leg) => {
+    const shares = Number(leg?.shares) || 0;
+    const entryPriceCents = Number(leg?.entryPriceCents) || 0;
+    const currentValue = Number(leg?.valueUsd) || 0;
+    const investedValue = (shares * entryPriceCents) / 100;
+    const deltaValue = currentValue - investedValue;
+    const positive = deltaValue >= 0;
+
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", justifyContent: "center", whiteSpace: "nowrap" }}>
+        {getPlatformIcon(platform)}
+        <span style={{ color: "#fff", fontSize: 14, fontWeight: 700, lineHeight: 1.25 }}>
+          {formatUSDCompact(currentValue)}
+        </span>
+        <span style={{ fontSize: 14, fontWeight: 700, color: positive ? "#22c55e" : "#ef4444", lineHeight: 1.25 }}>
+          ({formatUSDDelta(deltaValue)})
+        </span>
+      </div>
+    );
+  };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, width: "100%" }}>
-        <PolymarketIcon />
-        <span style={{ color: "#fff", fontSize: 13, fontWeight: 500 }}>
-          {formatUSD(polyLeg?.valueUsd || 0)}
-        </span>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, width: "100%" }}>
-        <OpinionIcon />
-        <span style={{ color: "#fff", fontSize: 13, fontWeight: 500 }}>
-          {formatUSD(opinionLeg?.valueUsd || 0)}
-        </span>
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+      {renderLegValue("polymarket", polyLeg)}
+      {renderLegValue("opinion", opinionLeg)}
     </div>
   );
 }
@@ -311,19 +421,31 @@ function ValueCell({ row }) {
 function CurrentPriceCell({ row }) {
   const polyLeg = getLeg(row, "polymarket");
   const opinionLeg = getLeg(row, "opinion");
+  const rowStyle = {
+    display: "grid",
+    gridTemplateColumns: "18px 1fr",
+    alignItems: "center",
+    justifyItems: "start",
+    columnGap: 6,
+    width: "fit-content",
+  };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, width: "100%" }}>
-        <PolymarketIcon />
-        <span style={{ color: "#fff", fontSize: 13, fontWeight: 500 }}>
-          {formatCents(polyLeg?.currentPriceCents || 0)}
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4, width: "fit-content", margin: "0 auto" }}>
+      <div style={rowStyle}>
+        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 18 }}>
+          <PolymarketIcon />
+        </span>
+        <span style={{ color: "#fff", fontSize: 14, fontWeight: 700, lineHeight: 1.25, whiteSpace: "nowrap" }}>
+          {formatCents(polyLeg?.entryPriceCents || 0)} {"->"} {formatCents(polyLeg?.currentPriceCents || 0)}
         </span>
       </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, width: "100%" }}>
-        <OpinionIcon />
-        <span style={{ color: "#fff", fontSize: 13, fontWeight: 500 }}>
-          {formatCents(opinionLeg?.currentPriceCents || 0)}
+      <div style={rowStyle}>
+        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 18 }}>
+          <OpinionIcon />
+        </span>
+        <span style={{ color: "#fff", fontSize: 14, fontWeight: 700, lineHeight: 1.25, whiteSpace: "nowrap" }}>
+          {formatCents(opinionLeg?.entryPriceCents || 0)} {"->"} {formatCents(opinionLeg?.currentPriceCents || 0)}
         </span>
       </div>
     </div>
@@ -482,6 +604,14 @@ function ArbRowMobile({ row }) {
   const canSellNow = totalCents >= 100;
   const neededPct = calcNeededPct(totalCents);
 
+  const getLegDeltaUsd = (leg) => {
+    const shares = Number(leg?.shares) || 0;
+    const entryPriceCents = Number(leg?.entryPriceCents) || 0;
+    const currentValue = Number(leg?.valueUsd) || 0;
+    const investedValue = (shares * entryPriceCents) / 100;
+    return currentValue - investedValue;
+  };
+
   return (
     <div className="arb-card-mobile">
       {/* Header: Thumbnail + Title + Arb% */}
@@ -510,7 +640,12 @@ function ArbRowMobile({ row }) {
           <div className="arb-card-leg">
             <PolymarketIcon />
             <span>{polyLeg.shares.toFixed(0)} shares <SideBadge side={polyLeg.side} /> at {formatCents(polyLeg.entryPriceCents)}</span>
-            <span className="arb-card-leg-value">{formatUSD(polyLeg.valueUsd || 0)}</span>
+            <div className="arb-card-leg-value-wrap">
+              <span className="arb-card-leg-value">{formatUSD(polyLeg.valueUsd || 0)}</span>
+              <span className={`arb-card-leg-delta ${getLegDeltaUsd(polyLeg) >= 0 ? "positive" : "negative"}`}>
+                ({formatUSDDelta(getLegDeltaUsd(polyLeg))})
+              </span>
+            </div>
             {polyLeg.link && (
               <a 
                 href={polyLeg.link} 
@@ -529,7 +664,12 @@ function ArbRowMobile({ row }) {
           <div className="arb-card-leg">
             <OpinionIcon />
             <span>{opinionLeg.shares.toFixed(0)} shares <SideBadge side={opinionLeg.side} /> at {formatCents(opinionLeg.entryPriceCents)}</span>
-            <span className="arb-card-leg-value">{formatUSD(opinionLeg.valueUsd || 0)}</span>
+            <div className="arb-card-leg-value-wrap">
+              <span className="arb-card-leg-value">{formatUSD(opinionLeg.valueUsd || 0)}</span>
+              <span className={`arb-card-leg-delta ${getLegDeltaUsd(opinionLeg) >= 0 ? "positive" : "negative"}`}>
+                ({formatUSDDelta(getLegDeltaUsd(opinionLeg))})
+              </span>
+            </div>
             {opinionLeg.link && (
               <a 
                 href={opinionLeg.link} 
@@ -615,13 +755,13 @@ function ClosedArbRow({ row }) {
             {polyLeg && (
               <span className="closed-leg-mini">
                 <PolymarketIcon />
-                <span>{polyLeg.shares?.toFixed(0) || 0} <SideBadge side={polyLeg.side} /> @{formatCents(polyLeg.entryPriceCents || 0)}</span>
+                <span>{polyLeg.shares?.toFixed(0) || 0} <SideBadge side={polyLeg.side} /> @{formatCents(polyLeg.exitPriceCents ?? polyLeg.entryPriceCents ?? 0)}</span>
               </span>
             )}
             {opinionLeg && (
               <span className="closed-leg-mini">
                 <OpinionIcon />
-                <span>{opinionLeg.shares?.toFixed(0) || 0} <SideBadge side={opinionLeg.side} /> @{formatCents(opinionLeg.entryPriceCents || 0)}</span>
+                <span>{opinionLeg.shares?.toFixed(0) || 0} <SideBadge side={opinionLeg.side} /> @{formatCents(opinionLeg.exitPriceCents ?? opinionLeg.entryPriceCents ?? 0)}</span>
               </span>
             )}
           </div>
@@ -641,7 +781,7 @@ function ClosedArbRow({ row }) {
       {/* Realized P&L */}
       <div className="closed-arb-cell closed-arb-pnl">
         <div className={`pnl-value ${isPositive ? 'positive' : 'negative'}`}>
-          {isPositive ? '+' : ''}{formatUSD(pnl)}
+          {formatUSDSigned(pnl, { showPlus: true })}
         </div>
         <div className={`pnl-percent ${isPositive ? 'positive' : 'negative'}`}>
           {isPositive ? '+' : ''}{pnlPercent.toFixed(1)}%
@@ -686,7 +826,7 @@ function ClosedArbCardMobile({ row }) {
         </div>
         <div className="closed-arb-card-pnl">
           <div className={`pnl-value ${isPositive ? 'positive' : 'negative'}`}>
-            {isPositive ? '+' : ''}{formatUSD(Math.abs(pnl))}
+            {formatUSDSigned(pnl, { showPlus: true })}
           </div>
           <div className={`pnl-percent ${isPositive ? 'positive' : 'negative'}`}>
             {isPositive ? '+' : ''}{pnlPercent.toFixed(1)}%
@@ -698,13 +838,13 @@ function ClosedArbCardMobile({ row }) {
         {polyLeg && (
           <div className="closed-leg-mini">
             <PolymarketIcon />
-            <span>{polyLeg.shares?.toFixed(0) || 0} shares <SideBadge side={polyLeg.side} /> @{formatCents(polyLeg.entryPriceCents || 0)}</span>
+            <span>{polyLeg.shares?.toFixed(0) || 0} shares <SideBadge side={polyLeg.side} /> @{formatCents(polyLeg.exitPriceCents ?? polyLeg.entryPriceCents ?? 0)}</span>
           </div>
         )}
         {opinionLeg && (
           <div className="closed-leg-mini">
             <OpinionIcon />
-            <span>{opinionLeg.shares?.toFixed(0) || 0} shares <SideBadge side={opinionLeg.side} /> @{formatCents(opinionLeg.entryPriceCents || 0)}</span>
+            <span>{opinionLeg.shares?.toFixed(0) || 0} shares <SideBadge side={opinionLeg.side} /> @{formatCents(opinionLeg.exitPriceCents ?? opinionLeg.entryPriceCents ?? 0)}</span>
           </div>
         )}
       </div>
@@ -988,12 +1128,15 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet }) {
             sortKey="value"
             sortConfig={sortConfig}
             onSort={handleSort}
+            align="left"
+            labelOffsetX={24}
           />
           <ColumnHeader
-            label="Current Price"
+            label="Avg -> Now"
             sortKey={null}
             sortConfig={sortConfig}
             onSort={handleSort}
+            infoTooltip="Your average buy price per share vs current price"
           />
           <ColumnHeader
             label="Arbitrage"
@@ -1086,7 +1229,7 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet }) {
               <div className="summary-stat">
                 <span className="summary-label">Total P&L</span>
                 <span className={`summary-value ${closedSummary.totalPnl >= 0 ? 'positive' : 'negative'}`}>
-                  {closedSummary.totalPnl >= 0 ? '+' : ''}{formatUSD(closedSummary.totalPnl)}
+                  {formatUSDSigned(closedSummary.totalPnl, { showPlus: true })}
                 </span>
               </div>
               <div className="summary-stat">
@@ -1232,7 +1375,7 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet }) {
 
         .arb-table-header {
           display: grid;
-          grid-template-columns: minmax(280px, 2fr) 100px 90px 80px 90px 90px 140px;
+          grid-template-columns: minmax(280px, 2fr) 130px 130px 80px 90px 90px 140px;
           gap: 8px;
           background: rgba(255, 255, 255, 0.03);
           border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -1245,7 +1388,7 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet }) {
         /* Desktop row grid */
         .arb-results-container :global(.arb-row) {
           display: grid;
-          grid-template-columns: minmax(280px, 2fr) 100px 90px 80px 90px 90px 140px;
+          grid-template-columns: minmax(280px, 2fr) 130px 130px 80px 90px 90px 140px;
           gap: 8px;
           align-items: center;
           padding: 14px 16px;
@@ -1314,6 +1457,11 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet }) {
         .arb-results-container :global(.arb-cell-value),
         .arb-results-container :global(.arb-cell-price) {
           justify-content: center;
+        }
+
+        .arb-results-container :global(.arb-cell-value) {
+          justify-content: flex-start;
+          padding-left: 6px;
         }
 
         .arb-no-results {
@@ -1464,9 +1612,32 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet }) {
         }
 
         .arb-results-container :global(.arb-card-leg-value) {
-          margin-left: auto;
+          margin-left: 0;
           color: #fff;
           font-weight: 500;
+        }
+
+        .arb-results-container :global(.arb-card-leg-value-wrap) {
+          margin-left: auto;
+          display: flex;
+          flex-direction: row;
+          align-items: center;
+          gap: 4px;
+          white-space: nowrap;
+        }
+
+        .arb-results-container :global(.arb-card-leg-delta) {
+          font-size: 12px;
+          font-weight: 600;
+          line-height: 1;
+        }
+
+        .arb-results-container :global(.arb-card-leg-delta.positive) {
+          color: #22c55e;
+        }
+
+        .arb-results-container :global(.arb-card-leg-delta.negative) {
+          color: #ef4444;
         }
 
         .arb-results-container :global(.arb-card-stats) {
@@ -1856,13 +2027,13 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet }) {
           }
 
           .arb-table-header {
-            grid-template-columns: minmax(380px, 2.25fr) 140px 130px 112px 126px 126px 210px;
+            grid-template-columns: minmax(380px, 2.25fr) 170px 180px 112px 126px 126px 210px;
             gap: 14px;
             padding: 0 18px;
           }
 
           .arb-results-container :global(.arb-row) {
-            grid-template-columns: minmax(380px, 2.25fr) 140px 130px 112px 126px 126px 210px;
+            grid-template-columns: minmax(380px, 2.25fr) 170px 180px 112px 126px 126px 210px;
             gap: 14px;
             padding: 16px 18px;
           }
