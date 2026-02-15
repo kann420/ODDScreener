@@ -166,7 +166,7 @@ export default function LineChart({ pts, color = "rgba(34,211,238,0.95)", range 
             y={g.yy + 4}
             fill="rgba(148,163,184,0.95)"
             fontSize="11"
-            fontFamily='ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+            fontFamily='"Space Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
           >
             {fmtPct(g.val)}
           </text>
@@ -182,7 +182,7 @@ export default function LineChart({ pts, color = "rgba(34,211,238,0.95)", range 
             y={h - padB + 18}
             fill="rgba(148,163,184,0.95)"
             fontSize="11"
-            fontFamily='ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+            fontFamily='"Space Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
             textAnchor="middle"
           >
             {tick.label}
@@ -197,7 +197,7 @@ export default function LineChart({ pts, color = "rgba(34,211,238,0.95)", range 
       {selY !== null && selY >= padT && selY <= h - padB && (
         <g>
           <line x1={padL} x2={w - padR} y1={selY} y2={selY} stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeDasharray="4 4" />
-          <text x={padL + 6} y={selY - 6} fill="rgba(255,255,255,0.85)" fontSize="11" fontFamily="ui-monospace">
+          <text x={padL + 6} y={selY - 6} fill="rgba(255,255,255,0.85)" fontSize="11" fontFamily="'Space Mono', ui-monospace, monospace">
             SEL {selectedCents.toFixed(0)}¢
           </text>
         </g>
@@ -218,7 +218,7 @@ export default function LineChart({ pts, color = "rgba(34,211,238,0.95)", range 
             y={tipY + 40}
             fill="rgba(148,163,184,0.95)"
             fontSize="11"
-            fontFamily='ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+            fontFamily='"Space Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
           >
             {formatTooltipLabel(hv.t)}
           </text>

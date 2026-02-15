@@ -374,6 +374,7 @@ function MarketRowV2({
   onChanceLoaded,
   onVolumeLoaded,
   onBonusDetected,
+  onLiquidityLoaded,
   volumeOverride,
 }) {
   const tokenId = useMemo(() => pickYesTokenId(market), [market]);
@@ -404,6 +405,9 @@ function MarketRowV2({
 
   // Bonus state - check from detail API if not provided via prop
   const [detectedBonus, setDetectedBonus] = useState(false);
+
+  // Liquidity state - computed from orderbook bids + asks sizes
+  const [liquidity, setLiquidity] = useState(0);
 
   const interval = "1d";
 
@@ -451,6 +455,13 @@ function MarketRowV2({
 
         const m = computeMidFromOrderbook(obJson);
         const pts = parseHistory(phJson?.result);
+
+        // Compute liquidity: sum(bids.size) + sum(asks.size)
+        const ob = normalizeOrderbook(obJson?.result ?? obJson);
+        const totalLiq = (ob.bids || []).reduce((s, b) => s + b.shares, 0)
+          + (ob.asks || []).reduce((s, a) => s + a.shares, 0);
+        setLiquidity(totalLiq);
+        if (totalLiq > 0 && onLiquidityLoaded) onLiquidityLoaded(market?.marketId, totalLiq);
 
         setMid(m);
         setSparkPts((pts || []).slice(-90));
@@ -573,7 +584,7 @@ function MarketRowV2({
         style={{
           display: "grid",
           gridTemplateColumns:
-            "var(--market-desktop-grid-columns, minmax(320px, 1.6fr) 140px 110px 140px 130px)",
+            "var(--market-desktop-grid-columns, minmax(280px, 1.8fr) 140px 100px 120px 100px 120px)",
           gap: "var(--market-desktop-grid-gap, 12px)",
           alignItems: "center",
         }}
@@ -631,6 +642,8 @@ function MarketRowV2({
         </div>
 
         <div className="mono">{volText}</div>
+
+        <div className="mono">{liquidity > 0 ? fmtUsdCompact(liquidity) : "—"}</div>
 
         <div className="mono muted">{expiresText}</div>
       </div>
@@ -725,6 +738,9 @@ function MarketRowV2({
         }}>
           <span className="mono" style={{ fontWeight: 600 }}>{volText} Vol.</span>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span className="mono" style={{ fontWeight: 600 }}>
+              {liquidity > 0 ? fmtUsdCompact(liquidity) : "—"} Liq.
+            </span>
             <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="10"/>

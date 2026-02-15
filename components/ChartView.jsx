@@ -245,7 +245,7 @@ export default function ChartView({ tokenId, mid, selectedCents }) {
 
       ctx.globalAlpha = 0.95;
       ctx.fillStyle = "rgba(255,255,255,0.85)";
-      ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+      ctx.font = '12px "Space Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
       ctx.fillText(
         `SEL ${String(selectedCents.toFixed(1)).replace(/\.0$/, "")}¢`,
         padX + 6,
@@ -255,7 +255,7 @@ export default function ChartView({ tokenId, mid, selectedCents }) {
     }
 
     ctx.fillStyle = "rgba(255,255,255,0.75)";
-    ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+    ctx.font = '12px "Space Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
     ctx.fillText(fmtCentsFromPrice01(max), padX, 12);
     ctx.fillText(fmtCentsFromPrice01(min), padX, h - 4);
 

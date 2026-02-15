@@ -494,7 +494,7 @@ export default function ArbitrageManagePanel() {
           
           .arb-wallet-addr {
             color: #fff;
-            font-family: monospace;
+            font-family: 'Space Mono', monospace;
           }
           
           .arb-button-group {
@@ -764,7 +764,7 @@ export default function ArbitrageManagePanel() {
           outline: none;
           color: var(--text, #fff);
           font-size: 14px;
-          font-family: monospace;
+          font-family: 'Space Mono', monospace;
           min-width: 0;
         }
         

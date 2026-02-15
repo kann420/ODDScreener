@@ -178,7 +178,7 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
             y={g.yy+4}
             fill="rgba(148,163,184,0.95)"
             fontSize="11"
-            fontFamily='ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+            fontFamily='"Space Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
           >
             {fmtPct(g.val)}
           </text>
@@ -224,7 +224,7 @@ function LineChart({ candles, color="rgba(34,211,238,0.95)" }){
             y={tipY+40}
             fill="rgba(148,163,184,0.95)"
             fontSize="11"
-            fontFamily='ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+            fontFamily='"Space Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
           >
             {utcLabel(hv.t)}
           </text>

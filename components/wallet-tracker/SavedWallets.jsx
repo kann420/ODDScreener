@@ -162,7 +162,7 @@ export default function SavedWalletsDropdown({ onSelect, currentValue }) {
                 border: "none",
                 color: "rgba(255,255,255,0.9)",
                 fontSize: 13,
-                fontFamily: "monospace",
+                fontFamily: "'Space Mono', monospace",
                 textAlign: "left",
                 cursor: "pointer",
                 transition: "background 0.15s",

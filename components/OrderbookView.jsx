@@ -621,6 +621,13 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
   const bidsD = useMemo(() => buildBidsDepth(bids), [bids]);
   const asksD = useMemo(() => buildAsksDepth(asks), [asks]);
 
+  // Compute total liquidity: sum of all bid sizes + all ask sizes
+  const totalLiquidity = useMemo(() => {
+    const bidLiq = (bids || []).reduce((s, b) => s + (b.shares || 0), 0);
+    const askLiq = (asks || []).reduce((s, a) => s + (a.shares || 0), 0);
+    return bidLiq + askLiq;
+  }, [bids, asks]);
+
   useEffect(() => {
     if (asksScrollRef.current && asksD.length > 0) {
       asksScrollRef.current.scrollTop = asksScrollRef.current.scrollHeight;
@@ -712,6 +719,10 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                   <span className="muted">Total Vol</span>
                   <span style={{ fontWeight: 700, color: "#fff" }}>{totalVolume ? `$${fmtQty(totalVolume)}` : "-"}</span>
                 </div>
+                <div>
+                  <span className="muted">Liquidity</span>
+                  <span style={{ fontWeight: 700, color: "#fff" }}>{totalLiquidity > 0 ? fmtUsdCompact(totalLiquidity) : "-"}</span>
+                </div>
               </div>
               
               {/* Buttons section - shown on desktop, hidden on mobile */}
@@ -767,6 +778,10 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
           <div>
             <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Total Volume</div>
             <div style={{ fontWeight: 700, color: "#fff" }}>{totalVolume ? `$${fmtQty(totalVolume)}` : "-"}</div>
+          </div>
+          <div>
+            <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Liquidity</div>
+            <div style={{ fontWeight: 700, color: "#fff" }}>{totalLiquidity > 0 ? fmtUsdCompact(totalLiquidity) : "-"}</div>
           </div>
         </div>
 

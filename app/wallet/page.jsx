@@ -307,7 +307,7 @@ function WalletLandingContent() {
           outline: none;
           color: var(--text);
           font-size: 15px;
-          font-family: monospace;
+          font-family: 'Space Mono', monospace;
         }
         
         .wallet-input::placeholder {

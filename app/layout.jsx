@@ -37,9 +37,9 @@ export default function RootLayout({ children }) {
         {/* ===== Google Fonts with preconnect for fast loading ===== */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        {/* Optimized: Only load weights actually used (400, 500, 600, 700) with display=optional for better LCP */}
+        {/* Opinion font stack: Manrope (headings), Open Sans (body), Space Mono (mono) */}
         <link 
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=optional" 
+          href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Open+Sans:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" 
           rel="stylesheet" 
         />
 
@@ -66,7 +66,7 @@ export default function RootLayout({ children }) {
           body {
             background: var(--bg);
             color: var(--text);
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: 'Open Sans', 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
           }
           .topbar {
             position: sticky;
@@ -273,7 +273,7 @@ export default function RootLayout({ children }) {
         <div className="container">{children}</div>
 
         {/* New Premium Footer Bar (replaces old bottom-left & bottom-right footers) */}
-        <FooterBar version="1.3.1" live />
+        <FooterBar version="1.3.2" live />
       </body>
     </html>
   );

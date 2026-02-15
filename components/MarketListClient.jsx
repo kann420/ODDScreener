@@ -374,6 +374,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
 
   const [chanceMap, setChanceMap] = useState({});
   const [volumeMap, setVolumeMap] = useState({});
+  const [liquidityMap, setLiquidityMap] = useState({});
   const [search, setSearch] = useState("");
 
   // Use initialBonusIds for SSR-safe first render, then hydrate from cache on mount
@@ -407,6 +408,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
       if (cached.sortConfig) setSortConfig(cached.sortConfig);
       if (cached.chanceMap) setChanceMap(cached.chanceMap);
       if (cached.volumeMap) setVolumeMap(cached.volumeMap);
+      if (cached.liquidityMap) setLiquidityMap(cached.liquidityMap);
       if (cached.search !== undefined) setSearch(cached.search);
       if (cached.allTabLoaded !== undefined) setAllTabLoaded(cached.allTabLoaded);
       if (cached.freshNewMarkets) setFreshNewMarkets(cached.freshNewMarkets);
@@ -441,6 +443,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
         sortConfig,
         chanceMap,
         volumeMap,
+        liquidityMap,
         search,
         allTabLoaded,
         freshNewMarkets,
@@ -450,7 +453,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [activeTab, volMode, currentPage, visible, sortConfig, chanceMap, volumeMap, search, allTabLoaded, freshNewMarkets]);
+  }, [activeTab, volMode, currentPage, visible, sortConfig, chanceMap, volumeMap, liquidityMap, search, allTabLoaded, freshNewMarkets]);
 
   // ✅ Poll NEW markets every 2 minutes when on "new" tab (to catch recently created markets quickly)
   useEffect(() => {
@@ -684,6 +687,11 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     });
   }, []);
 
+  const handleLiquidityLoaded = useCallback((marketId, liq) => {
+    if (!marketId || !Number.isFinite(liq)) return;
+    setLiquidityMap((prev) => (prev[marketId] === liq ? prev : { ...prev, [marketId]: liq }));
+  }, []);
+
   const handleBonusDetected = useCallback((marketId) => {
     if (!marketId) return;
     setBonusIds((prev) => {
@@ -867,6 +875,9 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
           aVal = (aOv?.volume ?? 0) || getVolumeValue(a, "all");
           bVal = (bOv?.volume ?? 0) || getVolumeValue(b, "all");
         }
+      } else if (effectiveSortKey === "liquidity") {
+        aVal = liquidityMap[String(a.marketId)] ?? 0;
+        bVal = liquidityMap[String(b.marketId)] ?? 0;
       } else if (effectiveSortKey === "expires") {
         const aTsSeconds = getExpiresTimestamp(a);
         const bTsSeconds = getExpiresTimestamp(b);
@@ -878,7 +889,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     });
 
     return arr;
-  }, [activeTab, filteredMarkets, sortConfig, chanceMap, volumeMap, displayVolMode]);
+  }, [activeTab, filteredMarkets, sortConfig, chanceMap, volumeMap, liquidityMap, displayVolMode]);
 
   // ===== pagination =====
   const totalPages = Math.ceil((sortedMarkets.length || 0) / ITEMS_PER_PAGE);
@@ -1167,7 +1178,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
           style={{
             display: "grid",
             gridTemplateColumns:
-              "var(--market-desktop-grid-columns, minmax(320px, 1.6fr) 140px 110px 140px 130px)",
+              "var(--market-desktop-grid-columns, minmax(280px, 1.8fr) 140px 100px 120px 100px 120px)",
             gap: "var(--market-desktop-grid-gap, 12px)",
             alignItems: "center",
             fontSize: 12,
@@ -1210,6 +1221,24 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
           >
             Volume ({displayVolMode === "all" ? "All" : "24h"})
             <SortIcon sortKey="volume" />
+          </div>
+
+          <div
+            className="muted"
+            onClick={() => handleSort("liquidity")}
+            style={{
+              cursor: "pointer",
+              userSelect: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              color: sortConfig.key === "liquidity" ? "rgba(255,180,50,1)" : undefined,
+              fontWeight: sortConfig.key === "liquidity" ? 700 : undefined,
+            }}
+            title="Sort by liquidity"
+          >
+            Liquidity
+            <SortIcon sortKey="liquidity" />
           </div>
 
           <div
@@ -1269,6 +1298,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
               onChanceLoaded={handleChanceLoaded}
               onVolumeLoaded={handleVolumeLoaded}
               onBonusDetected={handleBonusDetected}
+              onLiquidityLoaded={handleLiquidityLoaded}
               isBonus={bonusSet.has(String(m.marketId))}
               onOpen={(mk) => (window.location.href = `/market/${mk.marketId}`)}
             />

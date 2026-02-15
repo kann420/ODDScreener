@@ -1,5 +1,10 @@
 :root{
   color-scheme: dark;
+  /* ===== Opinion Font Stack ===== */
+  --font-heading: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Open Sans', 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /* ===== Colors ===== */
   --bg: #0b0d10;
   --bg-gradient-1: rgba(34,211,238,0.12);
   --bg-gradient-2: rgba(34,197,94,0.10);
@@ -29,7 +34,7 @@
   --orderbook-bid-bg: rgba(34,197,94,0.18);
   --desktop-container-max-width: 1500px;
   --desktop-container-padding-x: 14px;
-  --market-desktop-grid-columns: minmax(320px, 1.95fr) 160px 110px 140px 130px;
+  --market-desktop-grid-columns: minmax(280px, 1.8fr) 140px 100px 120px 100px 120px;
   --market-desktop-grid-gap: 12px;
   --smart-money-desktop-grid-columns: 120px 140px minmax(0, 1fr) 140px 90px;
   --arbitrage-desktop-grid-columns: 1.25fr 0.65fr 0.42fr 0.28fr;
@@ -410,9 +415,9 @@ body{
               radial-gradient(900px 600px at 75% 20%, rgba(34,197,94,0.10), transparent 55%),
               var(--bg);
   color: var(--text);
-  /* Google Fonts CDN - exact original rendering */
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  /* Opinion font stack: Open Sans (body), Manrope (headings) */
+  font-family: var(--font-body);
+  font-feature-settings: normal;
   letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -534,7 +539,11 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
 .badge{ font-weight:900; font-size:12px; }
 .green{ color: var(--accent); }
 .red{ color: var(--danger); }
-.mono{ font-family: 'Inter', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-variant-numeric: tabular-nums; }
+.mono{ font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+/* Heading font utility - use for titles/headings that should use Manrope */
+h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
+.font-heading { font-family: var(--font-heading); }
+.font-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .select{
   appearance:none;
   padding: 9px 34px 9px 10px;
@@ -572,7 +581,7 @@ tr:hover td{ background: rgba(255,255,255,0.04); }
   :root{
     --desktop-container-max-width: none;
     --desktop-container-padding-x: 4px;
-    --market-desktop-grid-columns: minmax(520px, 2.35fr) 180px 140px 190px 170px;
+    --market-desktop-grid-columns: minmax(480px, 2.2fr) 160px 130px 170px 140px 150px;
     --market-desktop-grid-gap: 14px;
     --smart-money-desktop-grid-columns: 150px 190px minmax(0, 1fr) 190px 122px;
     --arbitrage-desktop-grid-columns: 1.44fr 0.75fr 0.49fr 0.33fr;
