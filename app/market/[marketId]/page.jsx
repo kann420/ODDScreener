@@ -252,6 +252,10 @@ export default async function MarketPage({ params, searchParams }) {
   // ✅ Check if market has bonus (incentiveFactor field exists in raw API response)
   const hasBonus = checkHasBonus(m);
 
+  // ✅ Outcome labels – some binary markets use custom names (e.g. "NAVI" / "FNC") instead of YES/NO
+  const yesLabel = m.yesLabel || m.yes_label || "YES";
+  const noLabel  = m.noLabel  || m.no_label  || "NO";
+
   return (
     <OrderbookView
       marketId={marketId}
@@ -260,6 +264,8 @@ export default async function MarketPage({ params, searchParams }) {
       noTokenId={noTokenId}
       marketData={m}
       hasBonus={hasBonus}
+      yesLabel={yesLabel}
+      noLabel={noLabel}
     />
   );
 }

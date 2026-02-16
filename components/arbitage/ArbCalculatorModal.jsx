@@ -313,16 +313,40 @@ export default function ArbCalculatorModal({ row, onClose }) {
   const strategy = Array.isArray(row?.strategy) ? row.strategy : [];
   
   // Determine which sides based on strategy
-  // Strategy like ["Buy YES (Poly)", "Buy NO (Opinion)"]
+  // Strategy can be like ["Buy YES (Poly)", "Buy NO (Opinion)"]
+  // or ["Buy KC (Poly-Moneyline)", "Buy GX (Opinion)"] for custom outcomes
   const strategyStr = strategy.join(" ");
-  const polyBuySide = strategyStr.includes("YES (Poly)") ? "YES" : "NO";
-  const opinionBuySide = strategyStr.includes("YES (Opinion)") || strategyStr.includes("YES (Op)") ? "YES" : "NO";
+  
+  // Extract labels from prices (set by engine) - fallback to YES/NO
+  const polyYesLabel = prices.polyYesLabel || "YES";
+  const polyNoLabel = prices.polyNoLabel || "NO";
+  const opYesLabel = prices.opYesLabel || "YES";
+  const opNoLabel = prices.opNoLabel || "NO";
+  const polyTag = prices.polyTag || "Poly";
+  const opTag = prices.opTag || "Opinion";
+  
+  // Detect which side to buy: check if the Poly strategy line contains the "yes" label
+  // Strategy[0] is always the Poly side, Strategy[1] is always the Opinion side
+  const polyStrategyLine = strategy[0] || "";
+  const opinionStrategyLine = strategy[1] || "";
+  
+  // If the poly strategy line contains the yesLabel, we buy the "yes" side (index 0)
+  const polyBuysYesSide = polyStrategyLine.includes(polyYesLabel);
+  const opinionBuysYesSide = opinionStrategyLine.includes(opYesLabel);
+  
+  // Labels to display on the badge
+  const polyBuySideLabel = polyBuysYesSide ? polyYesLabel : polyNoLabel;
+  const opinionBuySideLabel = opinionBuysYesSide ? opYesLabel : opNoLabel;
+  
+  // For internal calculation purposes, map to YES/NO
+  const polyBuySide = polyBuysYesSide ? "YES" : "NO";
+  const opinionBuySide = opinionBuysYesSide ? "YES" : "NO";
   
   // Get prices based on sides (these are ASK prices for buying)
-  const polyPrice = polyBuySide === "YES" 
+  const polyPrice = polyBuysYesSide 
     ? (prices.polyYes || 0) / 100  // Convert cents to decimal
     : (prices.polyNo || 0) / 100;
-  const opinionPrice = opinionBuySide === "YES"
+  const opinionPrice = opinionBuysYesSide
     ? (prices.opYes || 0) / 100
     : (prices.opNo || 0) / 100;
   
@@ -514,7 +538,7 @@ export default function ArbCalculatorModal({ row, onClose }) {
                   background: polyBuySide === "YES" ? "rgba(80,200,120,0.2)" : "rgba(255,100,100,0.2)",
                   color: polyBuySide === "YES" ? "rgba(80,200,120,1)" : "rgba(255,100,100,1)",
                 }}>
-                  {polyBuySide}
+                  {polyBuySideLabel}
                 </span>
               </div>
               
@@ -578,7 +602,7 @@ export default function ArbCalculatorModal({ row, onClose }) {
                   background: opinionBuySide === "YES" ? "rgba(80,200,120,0.2)" : "rgba(255,100,100,0.2)",
                   color: opinionBuySide === "YES" ? "rgba(80,200,120,1)" : "rgba(255,100,100,1)",
                 }}>
-                  {opinionBuySide}
+                  {opinionBuySideLabel}
                 </span>
               </div>
               

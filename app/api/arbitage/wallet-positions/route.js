@@ -146,7 +146,7 @@ async function fetchPolymarketPositions(wallet) {
         
         // IDs
         assetId: pos.asset,
-        marketId: pos.market,
+        marketId: pos.market || pos.conditionId || pos.asset,
         conditionId: pos.conditionId,
         
         // Market info
@@ -1198,6 +1198,73 @@ const POLY_BINARY_TO_OPINION_CATEGORICAL = [
 ];
 
 /**
+ * Special mapping for Polymarket categorical team markets → Opinion binary markets
+ * Polymarket esports markets are categorical (outcome = team full name),
+ * while Opinion markets are binary (YES = first team, NO = second team).
+ *
+ * Format: {
+ *   polyKeywords: [...],     // keywords to match in Poly title
+ *   opinionKeywords: [...],  // keywords to match in Opinion title
+ *   teamYes: "full name",   // Poly outcome that maps to Opinion YES (first team)
+ *   teamNo: "full name",    // Poly outcome that maps to Opinion NO (second team)
+ * }
+ */
+const POLY_CATEGORICAL_TO_OPINION_BINARY = [
+  // ── LEC 2026 ──
+  {
+    polyKeywords: ["karmine corp", "giantx"],
+    opinionKeywords: ["kc", "gx"],
+    teamYes: "karmine corp",
+    teamNo: "giantx",
+  },
+  {
+    polyKeywords: ["team heretics", "g2 esports"],
+    opinionKeywords: ["th", "g2"],
+    teamYes: "team heretics",
+    teamNo: "g2 esports",
+  },
+  {
+    polyKeywords: ["natus vincere", "fnatic"],
+    opinionKeywords: ["navi", "fnc"],
+    teamYes: "natus vincere",
+    teamNo: "fnatic",
+  },
+  {
+    polyKeywords: ["team vitality", "movistar koi"],
+    opinionKeywords: ["vit", "mkoi"],
+    teamYes: "team vitality",
+    teamNo: "movistar koi",
+  },
+  // ── LPL 2026 ──
+  {
+    polyKeywords: ["anyone's legend", "team we"],
+    opinionKeywords: ["al", "team we"],
+    teamYes: "anyone's legend",
+    teamNo: "team we",
+  },
+  {
+    polyKeywords: ["bilibili gaming", "ninjas in pyjamas"],
+    opinionKeywords: ["blg", "nip"],
+    teamYes: "bilibili gaming",
+    teamNo: "ninjas in pyjamas",
+  },
+  // ── CBLOL 2026 ──
+  {
+    polyKeywords: ["loud", "red canids"],
+    opinionKeywords: ["loud", "red canids"],
+    teamYes: "loud",
+    teamNo: "red canids",
+  },
+  // ── LCK 2026 ──
+  {
+    polyKeywords: ["dn freecs", "drx"],
+    opinionKeywords: ["dnf", "drx"],
+    teamYes: "dn freecs",
+    teamNo: "drx",
+  },
+];
+
+/**
  * Normalize title for whitelist comparison
  * Remove punctuation, extra spaces, convert to lowercase
  */
@@ -1246,6 +1313,67 @@ function matchPolyBinaryToOpinionCategorical(polyTitle, opinionTitle, opinionOut
   }
   
   return { matched: false };
+}
+
+/**
+ * Check if Poly categorical team market matches Opinion binary esports market
+ * Returns { matched: true, polyMapsToOpinionSide: "YES"|"NO" } or { matched: false }
+ *
+ * Polymarket esports outcomes are full team names (e.g. "Natus Vincere"),
+ * while Opinion uses short abbreviations with binary YES/NO sides
+ * where YES = first team, NO = second team.
+ */
+function matchPolyCategoricalToOpinionBinary(polyTitle, polyOutcome, opinionTitle) {
+  const polyNorm = normalizeForWhitelist(polyTitle);
+  const opinionNorm = normalizeForWhitelist(opinionTitle);
+  const polyOutcomeNorm = normalizeForWhitelist(polyOutcome);
+
+  for (const mapping of POLY_CATEGORICAL_TO_OPINION_BINARY) {
+    // Check if Poly title contains all polyKeywords
+    const polyMatch = mapping.polyKeywords.every(kw =>
+      polyNorm.includes(kw.toLowerCase())
+    );
+    if (!polyMatch) continue;
+
+    // Check if Opinion title contains all opinionKeywords
+    const opinionMatch = mapping.opinionKeywords.every(kw =>
+      opinionNorm.includes(kw.toLowerCase())
+    );
+    if (!opinionMatch) continue;
+
+    // Determine which Opinion side this Poly outcome maps to
+    const teamYesNorm = normalizeForWhitelist(mapping.teamYes);
+    const teamNoNorm = normalizeForWhitelist(mapping.teamNo);
+
+    if (polyOutcomeNorm === teamYesNorm || polyOutcomeNorm.includes(teamYesNorm) || teamYesNorm.includes(polyOutcomeNorm)) {
+      console.log(`[Whitelist-Esports] ✓ Poly "${polyOutcome}" → Opinion YES (${mapping.teamYes})`);
+      console.log(`  Poly: "${polyTitle}"`);
+      console.log(`  Opinion: "${opinionTitle}"`);
+      return { matched: true, polyMapsToOpinionSide: "YES" };
+    }
+
+    if (polyOutcomeNorm === teamNoNorm || polyOutcomeNorm.includes(teamNoNorm) || teamNoNorm.includes(polyOutcomeNorm)) {
+      console.log(`[Whitelist-Esports] ✓ Poly "${polyOutcome}" → Opinion NO (${mapping.teamNo})`);
+      console.log(`  Poly: "${polyTitle}"`);
+      console.log(`  Opinion: "${opinionTitle}"`);
+      return { matched: true, polyMapsToOpinionSide: "NO" };
+    }
+  }
+
+  return { matched: false };
+}
+
+/**
+ * Parse team names from Opinion esports title
+ * e.g. "LEC: NAVI vs FNC (Feb. 16 10:45AM ET)" → { yes: "NAVI", no: "FNC" }
+ * YES = first team, NO = second team
+ */
+function parseEsportsTeamNames(title) {
+  if (!title) return null;
+  // Match "PREFIX: TEAM1 vs TEAM2 (...)" pattern
+  const m = title.match(/:\s*(.+?)\s+vs\s+(.+?)(?:\s*\(|$)/i);
+  if (!m) return null;
+  return { yes: m[1].trim(), no: m[2].trim() };
 }
 
 /**
@@ -1441,6 +1569,36 @@ function matchArbPositions(polyPositions, opinionPositions) {
       }
       
       // ============================================================
+      // CASE 1.5: Poly categorical team → Opinion binary esports
+      // Example: Poly "LoL: Natus Vincere vs Fnatic" outcome="Natus Vincere"
+      //        + Opinion "LEC: NAVI vs FNC" side="NO" (=FNC)
+      // ============================================================
+      if (polyPos.isCategorical) {
+        const esportsMatch = matchPolyCategoricalToOpinionBinary(
+          polyPos.marketTitle, polyPos.outcome, opinionPos.marketTitle
+        );
+        
+        if (esportsMatch.matched) {
+          // polyMapsToOpinionSide tells us which Opinion side the Poly outcome corresponds to
+          // For arb, Opinion must be on the OPPOSITE side
+          const isArbPair = opinionPos.side !== esportsMatch.polyMapsToOpinionSide;
+          
+          if (!isArbPair) {
+            console.log(`    -> Skipped: same effective side (Poly "${polyPos.outcome}" = Opinion ${esportsMatch.polyMapsToOpinionSide}, user has Opinion ${opinionPos.side})`);
+            continue;
+          }
+          
+          console.log(`    -> ESPORTS MATCH! Poly "${polyPos.outcome}" (=${esportsMatch.polyMapsToOpinionSide}) + Opinion ${opinionPos.side}`);
+          bestMatch = opinionPos;
+          bestScore = 1.0;
+          matchType = "esports-categorical";
+          // Store which side Poly maps to for createArbPair
+          polyPos._esportsPolyMapsTo = esportsMatch.polyMapsToOpinionSide;
+          break;
+        }
+      }
+      
+      // ============================================================
       // CASE 2: Poly categorical (outcome in outcome field)
       // ============================================================
       if (polyPos.isCategorical) {
@@ -1529,6 +1687,19 @@ function createArbPair(polyPos, opinionPos, matchScore, matchType = "standard") 
       yesPos = opinionPos;
       noPos = polyPos;
     }
+  } else if (matchType === "esports-categorical") {
+    // Poly categorical team ↔ Opinion binary esports
+    // Poly outcome (e.g. "Natus Vincere") maps to an Opinion side via whitelist
+    // _esportsPolyMapsTo tells us which Opinion side the Poly outcome corresponds to
+    if (polyPos._esportsPolyMapsTo === "YES") {
+      // Poly bought first team (= Opinion YES), Opinion is on NO → arb
+      yesPos = polyPos;
+      noPos = opinionPos;
+    } else {
+      // Poly bought second team (= Opinion NO), Opinion is on YES → arb
+      yesPos = opinionPos;
+      noPos = polyPos;
+    }
   } else if (polyPos.isCategorical || matchType === "categorical") {
     // Poly categorical: Poly = YES on outcome, Opinion has explicit side
     yesPos = polyPos;  // Poly buying categorical outcome = YES
@@ -1570,23 +1741,43 @@ function createArbPair(polyPos, opinionPos, matchScore, matchType = "standard") 
   const canSellNow = currentTotalCents >= 100;
   const needsPctToClose = canSellNow ? 0 : ((100 - currentTotalCents) / currentTotalCents) * 100;
   
+  // For esports-categorical, parse team names from Opinion title for display
+  let polySideLabel = null;
+  let opinionSideLabel = null;
+  if (matchType === "esports-categorical") {
+    const teamNames = parseEsportsTeamNames(opinionPos.marketTitle);
+    if (teamNames) {
+      // Poly side label = the outcome name (full team name)
+      polySideLabel = polyPos.outcome;
+      // Opinion side label = the team the user bet on
+      opinionSideLabel = opinionPos.side === "YES" ? teamNames.yes : teamNames.no;
+    }
+  }
+
+  // outcomeDisplay: skip if same as marketTitle (e.g. binary esports)
+  const outcomeDisplay = (opinionPos.outcomeName && opinionPos.outcomeName !== opinionPos.marketTitle)
+    ? opinionPos.outcomeName
+    : "";
+
   return {
     id: `${polyPos.marketId}_${opinionPos.marketId}`,
     
-    // Market info (use Opinion title - shorter format, append outcome name if available)
-    marketTitle: opinionPos.outcomeName 
-      ? `${opinionPos.marketTitle} - ${opinionPos.outcomeName}`
+    // Market info (use Opinion title - shorter format, append outcome name if different)
+    marketTitle: outcomeDisplay
+      ? `${opinionPos.marketTitle} - ${outcomeDisplay}`
       : opinionPos.marketTitle,
     marketTitleBase: opinionPos.marketTitle,
-    outcomeDisplay: opinionPos.outcomeName || "",
+    outcomeDisplay,
     thumbnailUrl: polyPos.thumbnailUrl || opinionPos.thumbnailUrl,
     matchScore: matchScore,
+    matchType: matchType,
     
     // Legs
     legs: [
       {
         platform: "polymarket",
         side: polyPos.side,
+        sideLabel: polySideLabel,
         shares: polyPos.shares,
         entryPriceCents: polyPos.avgPriceCents,
         currentPriceCents: polyPos.currentPriceCents,
@@ -1596,6 +1787,7 @@ function createArbPair(polyPos, opinionPos, matchScore, matchType = "standard") 
       {
         platform: "opinion",
         side: opinionPos.side,
+        sideLabel: opinionSideLabel,
         shares: opinionPos.shares,
         entryPriceCents: opinionPos.avgPriceCents,
         currentPriceCents: opinionPos.currentPriceCents,

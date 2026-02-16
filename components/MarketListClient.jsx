@@ -302,14 +302,28 @@ function isActiveNotExpired(m, nowMs) {
   }
 
   // 4) Check cutoffAt - đã hết hạn đặt cược
+  //    Grace period: keep status=2 markets within 48h of cutoff (for same-day
+  //    esports events). Beyond 48h, treat as stale even if still Activated.
+  const CUTOFF_GRACE_SEC = 48 * 60 * 60; // 48 hours in seconds
   const nowSec = Math.floor(nowMs / 1000);
   const cutoffAt = m?.cutoffAt ?? m?.cutoff_at ?? 0;
+  const statusForCutoff = Number(m?.status);
   if (cutoffAt && Number(cutoffAt) > 0 && Number(cutoffAt) <= nowSec) {
-    return false;
+    const pastCutoffSec = nowSec - Number(cutoffAt);
+    if (statusForCutoff !== 2 || pastCutoffSec > CUTOFF_GRACE_SEC) {
+      return false;
+    }
   }
 
   // 5) Check by expiry from title or other fields
-  if (isExpiredMarket(m, nowSec)) return false;
+  //    Same grace period logic
+  if (isExpiredMarket(m, nowSec)) {
+    const expSec = getExpiresTimestamp(m);
+    const pastExpSec = expSec ? nowSec - expSec : Infinity;
+    if (statusForCutoff !== 2 || pastExpSec > CUTOFF_GRACE_SEC) {
+      return false;
+    }
+  }
 
   return true;
 }

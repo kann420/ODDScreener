@@ -448,11 +448,14 @@ function extractExpiresFromTitle(title) {
   return 0;
 }
 
-export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, marketData = {}, hasBonus = false }) {
+export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, marketData = {}, hasBonus = false, yesLabel = "YES", noLabel = "NO" }) {
   const [outcome, setOutcome] = useState(yesTokenId ? "YES" : "NO");
   const tokenId = outcome === "YES" ? yesTokenId : noTokenId;
 
   const otherTokenId = outcome === "YES" ? noTokenId : yesTokenId;
+
+  // Display labels for the two outcomes (e.g. "NAVI" / "FNC")
+  const outcomeDisplayLabel = outcome === "YES" ? yesLabel : noLabel;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -812,6 +815,8 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
               mid={mid}
               selectedCents={selectedCents}
               onOutcomeChange={setOutcome}
+              yesLabel={yesLabel}
+              noLabel={noLabel}
             />
           </div>
 
@@ -869,8 +874,8 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
 
                         const outcomeSideRaw = trade?.outcomeSide ?? trade?.outcome_side ?? trade?.outcome;
                         const outcomeLabel = Number(outcomeSideRaw) === 1 || String(outcomeSideRaw).toUpperCase() === "YES"
-                          ? "YES"
-                          : "NO";
+                          ? yesLabel
+                          : noLabel;
 
                         const price = Number(trade?.price ?? 0);
                         const shares = Number(trade?.shares ?? trade?.size ?? 0);
@@ -925,7 +930,7 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                               <span style={{
                                 fontSize: 13,
                                 fontWeight: 600,
-                                color: outcomeLabel === "YES" ? "#22d3ee" : "#a855f7"
+                                color: outcomeLabel === yesLabel ? "#22d3ee" : "#a855f7"
                               }}>
                                 {outcomeLabel}
                               </span>
@@ -991,13 +996,13 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                 onClick={() => setOutcome("YES")}
                 className={`outcome-btn outcome-btn-yes ${outcome === "YES" ? "active" : ""}`}
               >
-                YES
+                {yesLabel}
               </button>
               <button
                 onClick={() => setOutcome("NO")}
                 className={`outcome-btn outcome-btn-no ${outcome === "NO" ? "active" : ""}`}
               >
-                NO
+                {noLabel}
               </button>
             </div>
           </div>
@@ -1018,7 +1023,7 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
 
           <div style={{ marginTop: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <span className="pill" style={{ color: "#fff", background: "rgba(239,68,68,0.18)" }}>Asks ({outcome})</span>
+              <span className="pill" style={{ color: "#fff", background: "rgba(239,68,68,0.18)" }}>Asks ({outcomeDisplayLabel})</span>
             </div>
             <div ref={asksScrollRef} style={{ maxHeight: 5 * 56, overflowY: "auto", paddingRight: 6 }}>
               {loading && asks.length === 0 ? (
@@ -1064,7 +1069,7 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
 
           <div style={{ marginTop: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <span className="pill" style={{ color: "#fff", background: "rgba(34,197,94,0.18)" }}>Bids ({outcome})</span>
+              <span className="pill" style={{ color: "#fff", background: "rgba(34,197,94,0.18)" }}>Bids ({outcomeDisplayLabel})</span>
             </div>
             <div style={{ maxHeight: 5 * 56, overflowY: "auto", paddingRight: 6 }}>
               {loading && bids.length === 0 ? (

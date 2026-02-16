@@ -206,19 +206,32 @@ function isExpiredFast(market) {
   }
 
   // 4) Check cutoffAt if available - market đã hết hạn betting
+  //    Grace period: if status=2 (Activated) and cutoff was < 48h ago, keep showing.
+  //    Esports/event markets set cutoffAt to midnight on match day while the event
+  //    runs later that day. But if cutoff was > 48h ago and still status=2,
+  //    it's a stale market that Opinion forgot to resolve.
+  const CUTOFF_GRACE_MS = 48 * 60 * 60 * 1000; // 48 hours
   const cutoffAtRaw = market?.cutoffAt ?? market?.cutoff_at;
   if (cutoffAtRaw !== null && cutoffAtRaw !== undefined) {
     const cutoffAtMs = toMs(cutoffAtRaw);
     if (cutoffAtMs && cutoffAtMs > 0 && cutoffAtMs < now) {
-      return true;
+      const pastCutoffMs = now - cutoffAtMs;
+      // Keep status=2 markets within grace period, filter everything else
+      if (statusNum !== TOPIC_STATUS.ACTIVATED || pastCutoffMs > CUTOFF_GRACE_MS) {
+        return true;
+      }
     }
   }
 
   // 5) Extract date from title - for markets without proper timestamps
+  //    Same grace period logic for status=2
   const title = market?.marketTitle ?? market?.tittle ?? market?.title ?? "";
   const titleDateMs = extractDateFromTitle(title);
   if (titleDateMs && titleDateMs < now) {
-    return true;
+    const pastTitleMs = now - titleDateMs;
+    if (statusNum !== TOPIC_STATUS.ACTIVATED || pastTitleMs > CUTOFF_GRACE_MS) {
+      return true;
+    }
   }
 
   // 6) If status is a meaningful number, only keep ACTIVATED (2)

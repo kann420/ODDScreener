@@ -67,7 +67,7 @@ function sanitizeMaxHistory(sorted) {
   return sorted;
 }
 
-export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents, onOutcomeChange }) {
+export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents, onOutcomeChange, yesLabel = "YES", noLabel = "NO" }) {
   const [range, setRange] = useState("ALL");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -257,7 +257,7 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
                 border: outcome === "YES" ? "1px solid rgba(34,211,238,0.30)" : "1px solid transparent",
               }}
             >
-              YES
+              {yesLabel}
             </button>
             <button
               className="btn"
@@ -270,7 +270,7 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
                 border: outcome === "NO" ? "1px solid rgba(168,85,247,0.28)" : "1px solid transparent",
               }}
             >
-              NO
+              {noLabel}
             </button>
           </div>
 

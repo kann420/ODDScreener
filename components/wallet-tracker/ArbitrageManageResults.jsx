@@ -370,17 +370,22 @@ function MarketThumbnail({ url, title, size = 56 }) {
   );
 }
 
-function SideBadge({ side }) {
-  const isYes = side === "YES";
+function SideBadge({ side, sideLabel }) {
+  const display = sideLabel || side;
+  // For non-YES/NO sides (e.g. categorical team names), use neutral white
+  const isStandard = side === "YES" || side === "NO";
+  const color = isStandard
+    ? (side === "YES" ? "#22c55e" : "#ef4444")
+    : "#e2e8f0"; // neutral for categorical team names (e.g. "Natus Vincere")
   return (
     <span
       style={{
-        color: isYes ? "#22c55e" : "#ef4444",
+        color,
         fontWeight: 700,
         fontSize: 13,
       }}
     >
-      {side}
+      {display}
     </span>
   );
 }
@@ -526,7 +531,7 @@ function ArbRow({ row }) {
             {polyLeg && (
               <span className="arb-leg">
                 <PolymarketIcon />
-                <span>{polyLeg.shares.toFixed(0)} shares <SideBadge side={polyLeg.side} /> at {formatCents(polyLeg.entryPriceCents)}</span>
+                <span>{polyLeg.shares.toFixed(0)} shares <SideBadge side={polyLeg.side} sideLabel={polyLeg.sideLabel} /> at {formatCents(polyLeg.entryPriceCents)}</span>
                 {polyLeg.link && (
                   <a 
                     href={polyLeg.link} 
@@ -544,7 +549,7 @@ function ArbRow({ row }) {
             {opinionLeg && (
               <span className="arb-leg">
                 <OpinionIcon />
-                <span>{opinionLeg.shares.toFixed(0)} shares <SideBadge side={opinionLeg.side} /> at {formatCents(opinionLeg.entryPriceCents)}</span>
+                <span>{opinionLeg.shares.toFixed(0)} shares <SideBadge side={opinionLeg.side} sideLabel={opinionLeg.sideLabel} /> at {formatCents(opinionLeg.entryPriceCents)}</span>
                 {opinionLeg.link && (
                   <a 
                     href={opinionLeg.link} 
@@ -639,7 +644,7 @@ function ArbRowMobile({ row }) {
         {polyLeg && (
           <div className="arb-card-leg">
             <PolymarketIcon />
-            <span>{polyLeg.shares.toFixed(0)} shares <SideBadge side={polyLeg.side} /> at {formatCents(polyLeg.entryPriceCents)}</span>
+            <span>{polyLeg.shares.toFixed(0)} shares <SideBadge side={polyLeg.side} sideLabel={polyLeg.sideLabel} /> at {formatCents(polyLeg.entryPriceCents)}</span>
             <div className="arb-card-leg-value-wrap">
               <span className="arb-card-leg-value">{formatUSD(polyLeg.valueUsd || 0)}</span>
               <span className={`arb-card-leg-delta ${getLegDeltaUsd(polyLeg) >= 0 ? "positive" : "negative"}`}>
@@ -663,7 +668,7 @@ function ArbRowMobile({ row }) {
         {opinionLeg && (
           <div className="arb-card-leg">
             <OpinionIcon />
-            <span>{opinionLeg.shares.toFixed(0)} shares <SideBadge side={opinionLeg.side} /> at {formatCents(opinionLeg.entryPriceCents)}</span>
+            <span>{opinionLeg.shares.toFixed(0)} shares <SideBadge side={opinionLeg.side} sideLabel={opinionLeg.sideLabel} /> at {formatCents(opinionLeg.entryPriceCents)}</span>
             <div className="arb-card-leg-value-wrap">
               <span className="arb-card-leg-value">{formatUSD(opinionLeg.valueUsd || 0)}</span>
               <span className={`arb-card-leg-delta ${getLegDeltaUsd(opinionLeg) >= 0 ? "positive" : "negative"}`}>
@@ -755,13 +760,13 @@ function ClosedArbRow({ row }) {
             {polyLeg && (
               <span className="closed-leg-mini">
                 <PolymarketIcon />
-                <span>{polyLeg.shares?.toFixed(0) || 0} <SideBadge side={polyLeg.side} /> @{formatCents(polyLeg.exitPriceCents ?? polyLeg.entryPriceCents ?? 0)}</span>
+                <span>{polyLeg.shares?.toFixed(0) || 0} <SideBadge side={polyLeg.side} sideLabel={polyLeg.sideLabel} /> @{formatCents(polyLeg.exitPriceCents ?? polyLeg.entryPriceCents ?? 0)}</span>
               </span>
             )}
             {opinionLeg && (
               <span className="closed-leg-mini">
                 <OpinionIcon />
-                <span>{opinionLeg.shares?.toFixed(0) || 0} <SideBadge side={opinionLeg.side} /> @{formatCents(opinionLeg.exitPriceCents ?? opinionLeg.entryPriceCents ?? 0)}</span>
+                <span>{opinionLeg.shares?.toFixed(0) || 0} <SideBadge side={opinionLeg.side} sideLabel={opinionLeg.sideLabel} /> @{formatCents(opinionLeg.exitPriceCents ?? opinionLeg.entryPriceCents ?? 0)}</span>
               </span>
             )}
           </div>
@@ -838,13 +843,13 @@ function ClosedArbCardMobile({ row }) {
         {polyLeg && (
           <div className="closed-leg-mini">
             <PolymarketIcon />
-            <span>{polyLeg.shares?.toFixed(0) || 0} shares <SideBadge side={polyLeg.side} /> @{formatCents(polyLeg.exitPriceCents ?? polyLeg.entryPriceCents ?? 0)}</span>
+            <span>{polyLeg.shares?.toFixed(0) || 0} shares <SideBadge side={polyLeg.side} sideLabel={polyLeg.sideLabel} /> @{formatCents(polyLeg.exitPriceCents ?? polyLeg.entryPriceCents ?? 0)}</span>
           </div>
         )}
         {opinionLeg && (
           <div className="closed-leg-mini">
             <OpinionIcon />
-            <span>{opinionLeg.shares?.toFixed(0) || 0} shares <SideBadge side={opinionLeg.side} /> @{formatCents(opinionLeg.exitPriceCents ?? opinionLeg.entryPriceCents ?? 0)}</span>
+            <span>{opinionLeg.shares?.toFixed(0) || 0} shares <SideBadge side={opinionLeg.side} sideLabel={opinionLeg.sideLabel} /> @{formatCents(opinionLeg.exitPriceCents ?? opinionLeg.entryPriceCents ?? 0)}</span>
           </div>
         )}
       </div>

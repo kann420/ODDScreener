@@ -500,14 +500,21 @@ export default function ArbitageBoard() {
       // Filter by min shares at best bid/ask level
       // Both sides of the arbitrage trade must have at least minShares
       if (minShares > 0 && r.sizes) {
-        const strategyStr = Array.isArray(r.strategy) ? r.strategy.join(" ") : (r.strategy || "");
         const relevantSizes = [];
+        const polyLine = Array.isArray(r.strategy) ? (r.strategy[0] || "") : "";
+        const opLine = Array.isArray(r.strategy) ? (r.strategy[1] || "") : "";
         
-        // Check which sides are involved in this arb strategy
-        if (strategyStr.includes("YES (Poly)")) relevantSizes.push(r.sizes.polyYes);
-        if (strategyStr.includes("NO (Poly)")) relevantSizes.push(r.sizes.polyNo);
-        if (strategyStr.includes("YES (Opinion)") || strategyStr.includes("YES (Op)")) relevantSizes.push(r.sizes.opYes);
-        if (strategyStr.includes("NO (Opinion)") || strategyStr.includes("NO (Op)")) relevantSizes.push(r.sizes.opNo);
+        // Determine which side is bought on each platform using the labels from prices
+        const polyYesLabel = r.prices?.polyYesLabel || "YES";
+        const opYesLabel = r.prices?.opYesLabel || "YES";
+        
+        // Poly side: if strategy line contains the "yes" label → polyYes size, else polyNo size
+        if (polyLine.includes(polyYesLabel)) relevantSizes.push(r.sizes.polyYes);
+        else relevantSizes.push(r.sizes.polyNo);
+        
+        // Opinion side: if strategy line contains the "yes" label → opYes size, else opNo size
+        if (opLine.includes(opYesLabel)) relevantSizes.push(r.sizes.opYes);
+        else relevantSizes.push(r.sizes.opNo);
         
         // Filter out if we have no size data or any relevant side has less than minShares
         const validSizes = relevantSizes.filter(s => Number.isFinite(s) && s > 0);
@@ -1365,10 +1372,10 @@ function Row({ r, priceMode, isBonus, onCalculatorClick }) {
         {r.prices && (
           <div className="arb-row-prices" style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
             <div className="muted" style={{ fontSize: 11, fontWeight: 700 }}>
-              Poly: YES {formatCents(r.prices.polyYes)} · NO {formatCents(r.prices.polyNo)}
+              {r.prices.polyTag || "Poly"}: {r.prices.polyYesLabel || "YES"} {formatCents(r.prices.polyYes)} · {r.prices.polyNoLabel || "NO"} {formatCents(r.prices.polyNo)}
             </div>
             <div className="muted" style={{ fontSize: 11, fontWeight: 700 }}>
-              Opinion: YES {formatCents(r.prices.opYes)} · NO {formatCents(r.prices.opNo)}
+              {r.prices.opTag || "Opinion"}: {r.prices.opYesLabel || "YES"} {formatCents(r.prices.opYes)} · {r.prices.opNoLabel || "NO"} {formatCents(r.prices.opNo)}
             </div>
           </div>
         )}
