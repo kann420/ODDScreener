@@ -1171,6 +1171,19 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
   margin-top: 8px;
 }
 
+/* Watch Stream (Twitch) button */
+.btn-stream {
+  background: rgba(145, 70, 255, 0.15) !important;
+  border: 1px solid rgba(145, 70, 255, 0.4) !important;
+  color: #bf94ff !important;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-stream:hover {
+  background: rgba(145, 70, 255, 0.3) !important;
+  border-color: rgba(145, 70, 255, 0.7) !important;
+  color: #fff !important;
+}
+
 /* Mobile stats - hidden on desktop */
 .detail-stats-mobile {
   display: none;

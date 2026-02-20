@@ -349,9 +349,10 @@ async function fetchPolymarketTrades(wallet) {
       // Create a Set of trade hashes for deduplication
       const tradeHashes = new Set(trades.map(t => t.transactionHash));
       
-      // Filter for TRADE activities that are not in trades
+      // Filter for TRADE and REDEEM activities that are not already in trades.
+      // REDEEM = Polymarket settled the position (losing side redeemed at $0, or winning auto-payout).
       const tradeActivities = activities.filter(a => 
-        a.type === 'TRADE' && 
+        (a.type === 'TRADE' || a.type === 'REDEEM') && 
         a.transactionHash && 
         !tradeHashes.has(a.transactionHash)
       );
@@ -363,6 +364,12 @@ async function fetchPolymarketTrades(wallet) {
         for (const activity of tradeActivities) {
           // Activity API has direct side field (BUY/SELL) - use it directly
           // Also use activity.size (not activity.shares)
+          const isRedeem = activity.type === 'REDEEM';
+          // REDEEM activities usually have empty outcome - look it up from existing trades
+          // for the same conditionId so it maps to the correct group.
+          const redeemOutcome = isRedeem && !activity.outcome
+            ? (trades.find(t => t.conditionId === activity.conditionId)?.outcome || '')
+            : activity.outcome;
           const convertedTrade = {
             transactionHash: activity.transactionHash,
             timestamp: normalizeUnixSeconds(activity.timestamp),
@@ -370,13 +377,19 @@ async function fetchPolymarketTrades(wallet) {
             title: activity.title,
             slug: activity.slug,
             eventSlug: activity.eventSlug,
-            outcome: activity.outcome,
-            side: activity.side, // Activity API already provides BUY/SELL
-            size: Math.abs(Number(activity.size) || 0), // Field is 'size' not 'shares'
-            price: Number(activity.price) || 0,
+            outcome: redeemOutcome,
+            // REDEEM = implicit SELL at settlement price.
+            // Winning REDEEM: usdcSize > 0, price = usdcSize / size ($1/share for binary).
+            // Losing REDEEM: size=0 (filtered out by size > 0 check below).
+            side: isRedeem ? 'SELL' : activity.side,
+            size: Math.abs(Number(activity.size) || 0),
+            price: isRedeem
+              ? (Number(activity.size) > 0 ? Number(activity.usdcSize) / Number(activity.size) : 0)
+              : (Number(activity.price) || 0),
             usdcSize: Number(activity.usdcSize) || 0,
             icon: activity.icon,
-            _fromActivity: true, // Flag for debugging
+            _fromActivity: true,
+            _fromRedeem: isRedeem, // Flag for debugging
           };
           
           console.log(`[Polymarket-Activity] Adding trade: ${activity.side} ${activity.size} @ ${activity.price} for "${activity.title?.substring(0, 30)}..."`);
@@ -547,7 +560,8 @@ function aggregatePolymarketTrades(trades, activeConditionIds = new Set()) {
       }
 
       const isRoundClosed = Math.abs(roundNetShares) < CLOSED_NET_SHARES_EPSILON;
-      const hasSells = round.totalSold > 0;
+      // hasSells: use share count (not dollar amount) so REDEEM at $0 (losing settlement) still counts
+      const hasSells = (round.totalSharesSold || 0) > 0;
       const hasBuys = round.totalBought > 0;
 
       if (!isRoundClosed || !hasSells || !hasBuys) {
@@ -621,6 +635,58 @@ function aggregatePolymarketTrades(trades, activeConditionIds = new Set()) {
       round = null;
       roundNetShares = 0;
     }
+
+    // End of group: partial-expiry close.
+    // Handles cases like: user sold some shares before market resolved, remaining expired worthless
+    // (e.g. REDEEM with size=0, meaning nothing to claim — the inactive conditionId confirms expiry).
+    // Use totalSharesSold > 0 so REDEEM (price=0) still counts as a sell event.
+    if (round && round.totalBought > 0 && (round.totalSharesSold || 0) > 0) {
+      const conditionIdEoG = round.firstTrade?.conditionId;
+      if (conditionIdEoG && !activeConditionIds.has(conditionIdEoG)) {
+        const firstTrade = round.firstTrade;
+        const lastTrade = round.lastTrade;
+        // Remaining shares expired at $0 — P&L is only what we actually sold
+        const realizedPnl = round.totalSold - round.totalBought;
+        const realizedPnlPercent = round.totalBought > 0 ? (realizedPnl / round.totalBought) * 100 : 0;
+        const entryPrice = round.buySharesForAvg > 0 ? (round.buyPriceWeightedSum / round.buySharesForAvg) : 0;
+        const entryPriceCents = Math.round(entryPrice * 1000) / 10;
+        const exitPrice = round.sellSharesForAvg > 0 ? (round.sellPriceWeightedSum / round.sellSharesForAvg) : 0;
+        const exitPriceCents = Math.round(exitPrice * 1000) / 10;
+        const outcomeRaw = firstTrade?.outcome || "";
+        const outcomeNorm = String(outcomeRaw).toLowerCase();
+        closedPositions.push({
+          platform: "polymarket",
+          roundKey: `${conditionIdEoG}:${outcomeNorm}:r${roundIndex}`,
+          roundIndex,
+          conditionId: conditionIdEoG,
+          marketTitle: firstTrade?.title || "",
+          marketSlug: firstTrade?.slug || "",
+          eventSlug: firstTrade?.eventSlug || "",
+          outcome: outcomeRaw,
+          side: outcomeRaw?.toUpperCase() === "YES" ? "YES" : outcomeRaw?.toLowerCase() === "no" ? "NO" : String(outcomeRaw || "").toUpperCase(),
+          thumbnailUrl: firstTrade?.icon || null,
+          marketUrl: firstTrade?.eventSlug
+            ? `https://polymarket.com/event/${firstTrade.eventSlug}`
+            : (firstTrade?.slug ? `https://polymarket.com/market/${firstTrade.slug}` : null),
+          shares: Math.round(round.totalSharesBought * 100) / 100,
+          entryPriceCents,
+          avgPriceCents: entryPriceCents,
+          exitPriceCents,
+          avgExitPriceCents: exitPriceCents,
+          initialValueUsd: round.totalBought,
+          pnlUsd: realizedPnl,
+          pnlPercent: realizedPnlPercent,
+          isClosed: true,
+          _isPartialExpiry: true,
+          openedAt: firstTrade?.timestamp ? firstTrade.timestamp * 1000 : null,
+          closedAt: lastTrade?.timestamp ? lastTrade.timestamp * 1000 : Date.now(),
+          totalTrades: round.tradeCount,
+          _debug: { netShares: roundNetShares, totalBought: round.totalBought, totalSold: round.totalSold, totalSharesSold: round.totalSharesSold },
+        });
+        console.log(`[Poly-Aggregate] Partial-expiry close: "${firstTrade?.title?.slice(0, 40)}" outcome=${outcomeRaw} P&L=${realizedPnl.toFixed(2)}`);
+        roundIndex += 1;
+      }
+    }
   }
 
   console.log("[Poly-Aggregate] Created", closedPositions.length, "closed positions");
@@ -682,6 +748,11 @@ function aggregateOpinionTrades(trades, activePositionsByKey = new Map()) {
 
       if (remainingShares <= OPINION_PRACTICAL_CLOSE_SHARES) return true;
 
+      // If the market is no longer in active positions (resolved/settled),
+      // close any partial round regardless of residual share value.
+      const _closePractKey = `${round?.firstTrade?.marketId}:${round?.firstTrade?.outcomeSide}`;
+      if (!activePositionsByKey.has(_closePractKey)) return true;
+
       const remainingValueUsd = estimateResidualValueUsd(preferActiveValue);
       return remainingValueUsd > 0 && remainingValueUsd < OPINION_PRACTICAL_CLOSE_VALUE_USD;
     };
@@ -723,12 +794,18 @@ function aggregateOpinionTrades(trades, activePositionsByKey = new Map()) {
         roundIndex,
         marketId,
         rootMarketId: String(firstTrade?.rootMarketId || firstTrade?.marketId || ""),
-        marketTitle: firstTrade?.rootMarketTitle || "",
-        outcomeName: firstTrade?.marketTitle || firstTrade?.outcome || "",
+        // Binary markets (rootMarketId=0 or absent): the primary title IS marketTitle
+        // Categorical sub-markets (rootMarketId≠0): rootMarketTitle is the parent event title
+        marketTitle: (firstTrade?.rootMarketId && Number(firstTrade.rootMarketId) !== 0)
+          ? (firstTrade?.rootMarketTitle || "")
+          : (firstTrade?.marketTitle || ""),
+        outcomeName: (firstTrade?.rootMarketId && Number(firstTrade.rootMarketId) !== 0)
+          ? (firstTrade?.marketTitle || firstTrade?.outcome || "")
+          : "",
         outcome: firstTrade?.outcome || "",
         side: outcomeSide === 1 ? "YES" : "NO",
         thumbnailUrl: null,
-        marketUrl: firstTrade?.rootMarketId && firstTrade?.rootMarketId !== firstTrade?.marketId
+        marketUrl: (firstTrade?.rootMarketId && Number(firstTrade.rootMarketId) !== 0)
           ? `https://app.opinion.trade/detail?topicId=${firstTrade.rootMarketId}&type=multi`
           : `https://app.opinion.trade/detail?topicId=${firstTrade?.marketId}`,
 
@@ -836,6 +913,51 @@ function aggregateOpinionTrades(trades, activePositionsByKey = new Map()) {
     if (round && canPracticalClose(true)) {
       finalizeRound("practical-end");
     }
+
+    // Settlement detection: BUY-only round not in current active positions.
+    // Occurs when market resolves without the user explicitly selling
+    // (winning payout or losing expiry with no manual sell).
+    if (round && round.totalBought > 0 && round.totalSold === 0 && round.totalSharesBought > 0) {
+      const settleKey = `${round.firstTrade?.marketId}:${round.firstTrade?.outcomeSide}`;
+      if (!activePositionsByKey.has(settleKey)) {
+        const firstTrade = round.firstTrade;
+        const marketId = String(firstTrade?.marketId || "");
+        const outcomeSide = Number(firstTrade?.outcomeSide) || 0;
+        const _isSubMkt = firstTrade?.rootMarketId && Number(firstTrade.rootMarketId) !== 0;
+        const entryPrice = round.buySharesForAvg > 0 ? (round.buyPriceWeightedSum / round.buySharesForAvg) : 0;
+        const entryPriceCents = Math.round(entryPrice * 1000) / 10;
+        closedPositions.push({
+          platform: "opinion",
+          roundKey: `${marketId}:${outcomeSide}:r${roundIndex}`,
+          roundIndex,
+          marketId,
+          rootMarketId: String(firstTrade?.rootMarketId || firstTrade?.marketId || ""),
+          marketTitle: _isSubMkt ? (firstTrade?.rootMarketTitle || "") : (firstTrade?.marketTitle || ""),
+          outcomeName: _isSubMkt ? (firstTrade?.marketTitle || firstTrade?.outcome || "") : "",
+          outcome: firstTrade?.outcome || "",
+          side: outcomeSide === 1 ? "YES" : "NO",
+          thumbnailUrl: null,
+          marketUrl: _isSubMkt
+            ? `https://app.opinion.trade/detail?topicId=${firstTrade?.rootMarketId}&type=multi`
+            : `https://app.opinion.trade/detail?topicId=${firstTrade?.marketId}`,
+          shares: Math.round(round.totalSharesBought * 100) / 100,
+          entryPriceCents,
+          avgPriceCents: entryPriceCents,
+          exitPriceCents: null,   // Settlement price unknown without market resolution data
+          avgExitPriceCents: null,
+          initialValueUsd: round.totalBought,
+          pnlUsd: null,           // P&L unknown - market settled, no manual sell recorded
+          pnlPercent: null,
+          isClosed: true,
+          _isSettlement: true,
+          openedAt: firstTrade?.createdAt ? firstTrade.createdAt * 1000 : null,
+          closedAt: null,         // Settlement time not available from trade API
+          totalTrades: round.tradeCount,
+        });
+        console.log(`[Opinion-Aggregate] Settlement close (no sell): "${firstTrade?.marketTitle}" outcomeSide=${outcomeSide}`);
+        roundIndex += 1;
+      }
+    }
   }
 
   console.log("[Opinion-Aggregate] Created", closedPositions.length, "closed positions");
@@ -879,6 +1001,25 @@ function matchClosedArbPositions(polyClosedPositions, opinionClosedPositions) {
   const sortedPoly = [...polyClosedPositions].sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0));
   const sortedOpinion = [...opinionClosedPositions].sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0));
 
+  // Detect Opinion markets with positions on BOTH sides (e.g. VIT+MKOI).
+  // These are too complex for clean arb display, so skip them.
+  const opinionBothSidesMarkets = new Set();
+  {
+    const marketSides = new Map(); // marketId -> Set<side>
+    for (const op of sortedOpinion) {
+      const mid = op.marketId;
+      if (!mid) continue;
+      if (!marketSides.has(mid)) marketSides.set(mid, new Set());
+      marketSides.get(mid).add(op.side);
+    }
+    for (const [mid, sides] of marketSides) {
+      if (sides.size > 1) {
+        opinionBothSidesMarkets.add(mid);
+        console.log(`[Matching-Closed] Skipping Opinion market ${mid} — has positions on both sides (too complex)`);
+      }
+    }
+  }
+
   // Match each Poly closed round with best Opinion closed round
   for (const polyPos of sortedPoly) {
     let bestMatch = null;
@@ -890,6 +1031,9 @@ function matchClosedArbPositions(polyClosedPositions, opinionClosedPositions) {
     for (const opinionPos of sortedOpinion) {
       const opinionRoundKey = opinionPos.roundKey || `${opinionPos.marketId}:${opinionPos.side}:${opinionPos.closedAt || 0}`;
       if (usedOpinionRoundKeys.has(opinionRoundKey)) continue;
+
+      // Skip Opinion markets with positions on both sides (too complex for clean arb)
+      if (opinionPos.marketId && opinionBothSidesMarkets.has(opinionPos.marketId)) continue;
 
       if (hasFdvSeriesMismatch(polyPos.marketTitle, opinionPos.marketTitle, opinionPos.outcomeName)) {
         continue;
@@ -923,6 +1067,30 @@ function matchClosedArbPositions(polyClosedPositions, opinionClosedPositions) {
             matchType = "binary-to-categorical";
           }
 
+          continue;
+        }
+      }
+
+      // CASE 1.5: Poly categorical (team name outcome) ↔ Opinion binary (YES/NO) — esports arb
+      const catBinaryMatch = matchPolyCategoricalToOpinionBinary(
+        polyPos.marketTitle,
+        polyPos.outcome,
+        opinionPos.marketTitle
+      );
+      if (catBinaryMatch.matched) {
+        const polyMapsToOpinionSide = catBinaryMatch.polyMapsToOpinionSide;
+        const isArbPairCat = (polyMapsToOpinionSide === "YES" && opinionPos.side === "NO") ||
+                             (polyMapsToOpinionSide === "NO" && opinionPos.side === "YES");
+        if (isArbPairCat) {
+          const titleScore = 0.95;
+          const combinedScore = (titleScore * 0.85) + (timeScore * 0.15);
+          if (combinedScore > bestCombinedScore) {
+            bestMatch = opinionPos;
+            bestCombinedScore = combinedScore;
+            bestTitleScore = titleScore;
+            bestTimeScore = timeScore;
+            matchType = "esports-categorical";
+          }
           continue;
         }
       }
@@ -995,8 +1163,29 @@ function createClosedArbPair(polyPos, opinionPos, matchScore, matchMeta = {}) {
 
   const polyTotalBought = polyDebug.totalBought || polyPos.initialValueUsd || 0;
   const polyTotalSold = polyDebug.totalSold || 0;
-  const opinionTotalBought = opinionDebug.totalBought || opinionPos.initialValueUsd || 0;
-  const opinionTotalSold = opinionDebug.totalSold || 0;
+  let opinionTotalBought = opinionDebug.totalBought || opinionPos.initialValueUsd || 0;
+  let opinionTotalSold = opinionDebug.totalSold || 0;
+
+  // --- Settlement inference ---
+  // When Opinion leg is a settlement (BUY only, no SELL), we infer the outcome
+  // from the Poly leg's P&L: if Poly profited → Poly outcome won → Opinion lost ($0),
+  // if Poly lost → Opinion won ($1/share payout).
+  let opinionSettlementPriceCents = null;
+
+  if (opinionPos._isSettlement && opinionTotalSold === 0) {
+    const polyNetProfit = polyTotalSold - polyTotalBought;
+    if (polyNetProfit > 0) {
+      // Poly won → Opinion lost → payout = $0
+      opinionTotalSold = 0;
+      opinionSettlementPriceCents = 0;
+      console.log(`[createClosedArbPair] Opinion settlement: LOST (Poly profited +${polyNetProfit.toFixed(2)}) → payout $0`);
+    } else {
+      // Poly lost → Opinion won → payout = shares × $1
+      opinionTotalSold = (opinionPos.shares || 0) * 1.0;
+      opinionSettlementPriceCents = 100;
+      console.log(`[createClosedArbPair] Opinion settlement: WON (Poly lost ${polyNetProfit.toFixed(2)}) → payout $${opinionTotalSold.toFixed(2)}`);
+    }
+  }
 
   const totalBoughtAll = polyTotalBought + opinionTotalBought;
   const totalSoldAll = polyTotalSold + opinionTotalSold;
@@ -1060,30 +1249,53 @@ function createClosedArbPair(polyPos, opinionPos, matchScore, matchMeta = {}) {
     matchType: matchMeta.matchType || "standard",
 
     // Legs
-    legs: [
-      {
-        platform: "polymarket",
-        side: polyPos.side,
-        shares: polyPos.shares,
-        entryPriceCents: polyPos.avgPriceCents,
-        exitPriceCents: polyPos.exitPriceCents ?? polyPos.avgPriceCents,
-        currentPriceCents: polyPos.currentPriceCents,
-        valueUsd: polyPos.initialValueUsd,
-        pnlUsd: polyPos.pnlUsd,
-        link: polyPos.marketUrl,
-      },
-      {
-        platform: "opinion",
-        side: opinionPos.side,
-        shares: opinionPos.shares,
-        entryPriceCents: opinionPos.avgPriceCents,
-        exitPriceCents: opinionPos.exitPriceCents ?? opinionPos.avgPriceCents,
-        currentPriceCents: opinionPos.currentPriceCents,
-        valueUsd: opinionPos.initialValueUsd,
-        pnlUsd: opinionPos.pnlUsd,
-        link: opinionPos.marketUrl,
-      },
-    ],
+    legs: (() => {
+      let polySideLabel = undefined;
+      let opinionSideLabel = undefined;
+
+      if (matchMeta.matchType === "esports-categorical") {
+        // Poly side = team name outcome (e.g. "NATUS VINCERE"), keep as sideLabel
+        polySideLabel = polyPos.outcome || polyPos.side;
+        // Opinion side = YES/NO → parse team name from marketTitle
+        const teams = parseEsportsTeamNames(opinionPos.marketTitle);
+        if (teams) {
+          opinionSideLabel = opinionPos.side === "YES" ? teams.yes : teams.no;
+        }
+      }
+
+      // Exit price overrides for settlement
+      const polyExitCents = polyPos.exitPriceCents ?? polyPos.avgPriceCents;
+      const opinionExitCents = opinionSettlementPriceCents != null
+        ? opinionSettlementPriceCents
+        : (opinionPos.exitPriceCents ?? opinionPos.avgPriceCents);
+
+      return [
+        {
+          platform: "polymarket",
+          side: polyPos.side,
+          sideLabel: polySideLabel,
+          shares: polyPos.shares,
+          entryPriceCents: polyPos.avgPriceCents,
+          exitPriceCents: polyExitCents,
+          currentPriceCents: polyPos.currentPriceCents,
+          valueUsd: polyPos.initialValueUsd,
+          pnlUsd: polyPos.pnlUsd,
+          link: polyPos.marketUrl,
+        },
+        {
+          platform: "opinion",
+          side: opinionPos.side,
+          sideLabel: opinionSideLabel,
+          shares: opinionPos.shares,
+          entryPriceCents: opinionPos.avgPriceCents,
+          exitPriceCents: opinionExitCents,
+          currentPriceCents: opinionPos.currentPriceCents,
+          valueUsd: opinionPos.initialValueUsd,
+          pnlUsd: opinionPos.pnlUsd,
+          link: opinionPos.marketUrl,
+        },
+      ];
+    })(),
 
     // Entry metrics
     entryTotalCents,
@@ -1261,6 +1473,127 @@ const POLY_CATEGORICAL_TO_OPINION_BINARY = [
     opinionKeywords: ["dnf", "drx"],
     teamYes: "dn freecs",
     teamNo: "drx",
+  },
+  {
+    polyKeywords: ["dplus kia", "dn freecs"],
+    opinionKeywords: ["dk", "dns"],
+    teamYes: "dplus kia",
+    teamNo: "dn freecs",
+  },
+  {
+    polyKeywords: ["gen.g", "bnk fearx"],
+    opinionKeywords: ["gen", "bfx"],
+    teamYes: "gen.g",
+    teamNo: "bnk fearx",
+  },
+  // ── LEC 2026 (new matchups) ──
+  {
+    polyKeywords: ["natus vincere", "movistar koi"],
+    opinionKeywords: ["navi", "mkoi"],
+    teamYes: "natus vincere",
+    teamNo: "movistar koi",
+  },
+  {
+    polyKeywords: ["karmine corp", "g2 esports"],
+    opinionKeywords: ["kc", "g2"],
+    teamYes: "karmine corp",
+    teamNo: "g2 esports",
+  },
+  {
+    polyKeywords: ["fnatic", "team vitality"],
+    opinionKeywords: ["fnc", "vit"],
+    teamYes: "fnatic",
+    teamNo: "team vitality",
+  },
+  {
+    polyKeywords: ["giantx", "team heretics"],
+    opinionKeywords: ["gx", "th"],
+    teamYes: "giantx",
+    teamNo: "team heretics",
+  },
+  // ── LCS 2026 ──
+  {
+    polyKeywords: ["disguised", "team liquid"],
+    opinionKeywords: ["tlaw", "dsg"],
+    teamYes: "team liquid",
+    teamNo: "disguised",
+  },
+  {
+    polyKeywords: ["lyon", "flyquest"],
+    opinionKeywords: ["lyon", "fly"],
+    teamYes: "lyon",
+    teamNo: "flyquest",
+  },
+  {
+    polyKeywords: ["sentinels", "cloud9"],
+    opinionKeywords: ["sen", "c9"],
+    teamYes: "sentinels",
+    teamNo: "cloud9",
+  },
+  // ── LPL 2026 (new matchups) ──
+  {
+    polyKeywords: ["jd gaming", "top esports"],
+    opinionKeywords: ["jdg", "tes"],
+    teamYes: "jd gaming",
+    teamNo: "top esports",
+  },
+  // ── LCP 2026 ──
+  {
+    polyKeywords: ["team secret whales", "deep cross gaming"],
+    opinionKeywords: ["tsw", "dcg"],
+    teamYes: "team secret whales",
+    teamNo: "deep cross gaming",
+  },
+  {
+    polyKeywords: ["softbank hawks", "ground zero"],
+    opinionKeywords: ["shg", "gz"],
+    teamYes: "fukuoka softbank hawks gaming",
+    teamNo: "ground zero gaming",
+  },
+  // ── CBLOL 2026 (new matchups) ──
+  {
+    polyKeywords: ["los", "furia"],
+    opinionKeywords: ["los", "fur"],
+    teamYes: "los",
+    teamNo: "furia",
+  },
+  // ── CS2 - PGL 2026 ──
+  {
+    polyKeywords: ["falcons", "parivision"],
+    opinionKeywords: ["prv", "fal"],
+    teamYes: "parivision",
+    teamNo: "team falcons",
+  },
+  {
+    polyKeywords: ["mouz", "natus vincere"],
+    opinionKeywords: ["mouz", "navi"],
+    teamYes: "mouz",
+    teamNo: "natus vincere",
+  },
+  {
+    polyKeywords: ["vitality", "aurora gaming"],
+    opinionKeywords: ["vit", "aur"],
+    teamYes: "vitality",
+    teamNo: "aurora gaming",
+  },
+  {
+    polyKeywords: ["furia", "themongolz"],
+    opinionKeywords: ["fur", "mglz"],
+    teamYes: "furia",
+    teamNo: "themongolz",
+  },
+  // ── Valorant - VCT Masters 2026 ──
+  {
+    polyKeywords: ["g2 esports", "paper rex"],
+    opinionKeywords: ["g2", "prx"],
+    teamYes: "g2 esports",
+    teamNo: "paper rex",
+  },
+  {
+    polyKeywords: ["t1", "team liquid"],
+    opinionKeywords: ["t1", "tl"],
+    teamYes: "t1",
+    teamNo: "team liquid",
   },
 ];
 

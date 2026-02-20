@@ -57,6 +57,38 @@ function MarketThumbnailDetail({ url, size = 100, radius = 14 }) {
   );
 }
 
+/* =========================
+   Esport Stream Link Helper
+   - Extracts tournament name from market title
+   - Maps to Twitch stream URL
+========================= */
+const TOURNAMENT_TWITCH_MAP = {
+  pgl:         "https://www.twitch.tv/pgl",
+  lec:         "https://www.twitch.tv/lec",
+  lck:         "https://www.twitch.tv/lck",
+  lcs:         "https://www.twitch.tv/lcs",
+  lpl:         "https://www.twitch.tv/lpl",
+  esl:         "https://www.twitch.tv/esl_csgo",
+  blast:       "https://www.twitch.tv/blastpremier",
+  cblol:       "https://www.twitch.tv/cblol",
+  lcp:         "https://www.twitch.tv/lcp",
+  kpl:         "https://www.twitch.tv/kpl",
+  "vct masters": "https://www.twitch.tv/valorant",
+  vct:         "https://www.twitch.tv/valorant",
+};
+
+function getStreamUrl(title) {
+  if (!title) return null;
+  // Match "Valorant - VCT Masters: ..." pattern first
+  const vct = title.match(/^Valorant\s*-\s*(VCT\s*Masters)\s*:/i);
+  if (vct) return TOURNAMENT_TWITCH_MAP[vct[1].toLowerCase()] || null;
+  // Match patterns like "CS2 - PGL: ..." or "LEC: ..." or "LCK: ..."
+  const m = title.match(/^(?:CS2\s*-\s*)?(\w+)\s*:/i);
+  if (!m) return null;
+  const tournament = m[1].toLowerCase();
+  return TOURNAMENT_TWITCH_MAP[tournament] || null;
+}
+
 function SkeletonOrderbookRow() {
   return (
     <tr>
@@ -684,6 +716,23 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                     <img src="/opinion-logo.svg" alt="Opinion" width="14" height="14" />
                     <span className="btn-text-mobile">View on Opinion</span>
                   </a>
+                  {(() => {
+                    const streamUrl = getStreamUrl(title);
+                    if (!streamUrl) return null;
+                    return (
+                      <a
+                        href={streamUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-small-mobile btn-stream"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M11.64 5.93h1.43v4.28h-1.43m3.93-4.28H17v4.28h-1.43M7 2L3.43 5.57v12.86h4.28V22l3.58-3.57h2.85L20.57 12V2m-1.43 9.29l-2.85 2.85h-2.86l-2.5 2.5v-2.5H7.71V3.43h11.43Z" />
+                        </svg>
+                        <span className="btn-text-mobile">Stream</span>
+                      </a>
+                    );
+                  })()}
                   {hasBonus && (
                     <img 
                       src="/gift_icon_24.svg" 
@@ -740,6 +789,25 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                   <img src="/opinion-logo.svg" alt="Opinion" width="16" height="16" />
                   View on Opinion
                 </a>
+                {/* Watch Stream button - shown for esport markets with known Twitch channels */}
+                {(() => {
+                  const streamUrl = getStreamUrl(title);
+                  if (!streamUrl) return null;
+                  return (
+                    <a
+                      href={streamUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-stream"
+                      style={{ fontSize: 11, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M11.64 5.93h1.43v4.28h-1.43m3.93-4.28H17v4.28h-1.43M7 2L3.43 5.57v12.86h4.28V22l3.58-3.57h2.85L20.57 12V2m-1.43 9.29l-2.85 2.85h-2.86l-2.5 2.5v-2.5H7.71V3.43h11.43Z" />
+                      </svg>
+                      Watch Stream
+                    </a>
+                  );
+                })()}
                 {/* ✅ Bonus Icon - positioned after View on Opinion button */}
                 {hasBonus && (
                   <img 
