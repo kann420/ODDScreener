@@ -141,15 +141,15 @@ function ClosedRowDesktop({ position }) {
   const avgPrice = num(position.avgPrice);
   const isPositive = pnl >= 0;
   
-  const rawOutcomeSide = position.outcomeSideEnum || position.outcomeSide || position.outcome || "";
-  const outcomeSideStr = typeof rawOutcomeSide === "number" 
-    ? (rawOutcomeSide === 1 ? "Yes" : "No")
-    : String(rawOutcomeSide);
-  const isYes = outcomeSideStr.toLowerCase() === "yes" || rawOutcomeSide === 1;
+  // Use outcome for display (e.g. "SEN", "C9", "UP"), outcomeSide for badge color
+  const outcomeDisplay = position.outcome || position.outcomeSideEnum || 
+    (position.outcomeSide === 1 ? "Yes" : position.outcomeSide === 2 ? "No" : "");
+  const isYes = position.outcomeSide === 1 || 
+    (position.outcomeSideEnum || "").toLowerCase() === "yes";
   
   const imageUrl = position.thumbnailUrl || position.marketIcon || position.coverUrl;
   const displayTitle = position.displayTitle || position.rootMarketTitle || position.marketTitle || "Unknown";
-  const outcomeBadgeText = position.outcomeName || position.marketTitle || outcomeSideStr;
+  const outcomeBadgeText = position.outcome || outcomeDisplay;
   
   return (
     <div className="closed-row-desktop"
@@ -205,15 +205,15 @@ function ClosedCardMobile({ position }) {
   const avgPrice = num(position.avgPrice);
   const isPositive = pnl >= 0;
   
-  const rawOutcomeSide = position.outcomeSideEnum || position.outcomeSide || position.outcome || "";
-  const outcomeSideStr = typeof rawOutcomeSide === "number" 
-    ? (rawOutcomeSide === 1 ? "Yes" : "No")
-    : String(rawOutcomeSide);
-  const isYes = outcomeSideStr.toLowerCase() === "yes" || rawOutcomeSide === 1;
+  // Use outcome for display (e.g. "SEN", "C9", "UP"), outcomeSide for badge color
+  const outcomeDisplay = position.outcome || position.outcomeSideEnum || 
+    (position.outcomeSide === 1 ? "Yes" : position.outcomeSide === 2 ? "No" : "");
+  const isYes = position.outcomeSide === 1 || 
+    (position.outcomeSideEnum || "").toLowerCase() === "yes";
   
   const imageUrl = position.thumbnailUrl || position.marketIcon || position.coverUrl;
   const displayTitle = position.displayTitle || position.rootMarketTitle || position.marketTitle || "Unknown";
-  const outcomeBadgeText = position.outcomeName || position.marketTitle || outcomeSideStr;
+  const outcomeBadgeText = position.outcome || outcomeDisplay;
   
   return (
     <div className="closed-card-mobile">

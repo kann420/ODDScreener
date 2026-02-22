@@ -67,18 +67,23 @@ function ActivityRowDesktop({ trade, chainId }) {
   // Use normalizeUsdAmount to handle wei format from Opinion API
   const amount = normalizeUsdAmount(trade.usdAmount, trade.amount);
   
-  const rawOutcomeSide = trade.outcomeSideEnum || trade.outcomeSide || trade.outcome || "";
-  const outcomeSideStr = typeof rawOutcomeSide === "number" 
-    ? (rawOutcomeSide === 1 ? "Yes" : "No")
-    : String(rawOutcomeSide);
-  const isYes = outcomeSideStr.toLowerCase() === "yes" || rawOutcomeSide === 1;
+  // Use outcome for display (e.g. "SEN", "C9", "UP"), outcomeSide for badge color
+  const outcomeDisplay = trade.outcome || trade.outcomeSideEnum || 
+    (trade.outcomeSide === 1 ? "Yes" : trade.outcomeSide === 2 ? "No" : "");
+  const isYes = trade.outcomeSide === 1 || 
+    (trade.outcomeSideEnum || "").toLowerCase() === "yes";
   
   const explorerUrl = getExplorerTxUrl(trade.txHash, chainId);
   const createdAtDate = typeof trade.createdAt === "number" 
     ? new Date(trade.createdAt * 1000) 
     : new Date(trade.createdAt);
   
-  const isBuy = (trade.side || "").toUpperCase() === "BUY";
+  const sideUpper = (trade.side || "").toUpperCase();
+  const isBuy = sideUpper === "BUY";
+  const isMerge = sideUpper === "MERGE";
+  const isSplit = sideUpper === "SPLIT";
+  const badgeClass = isBuy ? "buy" : isMerge ? "merge" : isSplit ? "split" : "sell";
+  const badgeLabel = isBuy ? "Buy" : isMerge ? "Merge" : isSplit ? "Split" : "Sell";
   const marketImage = trade.thumbnailUrl || trade.marketIcon || trade.coverUrl || null;
   const displayTitle = trade.displayTitle || trade.marketTitle || trade.outcomeName || "Unknown";
   
@@ -92,7 +97,7 @@ function ActivityRowDesktop({ trade, chainId }) {
       onMouseLeave={() => setHovered(false)}
     >
       <div>
-        <span className={`badge-${isBuy ? 'buy' : 'sell'}`}>{isBuy ? "Buy" : "Sell"}</span>
+        <span className={`badge-${badgeClass}`}>{badgeLabel}</span>
       </div>
       
       <div className="activity-market-cell">
@@ -110,7 +115,7 @@ function ActivityRowDesktop({ trade, chainId }) {
         <div className="activity-info">
           <div className="activity-title" title={displayTitle}>{displayTitle}</div>
           <div className="activity-meta">
-            <span className={`badge-${isYes ? 'yes' : 'no'}`}>{outcomeSideStr}</span>
+            <span className={`badge-${isYes ? 'yes' : 'no'}`}>{outcomeDisplay}</span>
             <span className="meta-text">{formatCents(price)} · {formatShares(shares)}</span>
           </div>
         </div>
@@ -141,18 +146,23 @@ function ActivityCardMobile({ trade, chainId }) {
   // Use normalizeUsdAmount to handle wei format from Opinion API
   const amount = normalizeUsdAmount(trade.usdAmount, trade.amount);
   
-  const rawOutcomeSide = trade.outcomeSideEnum || trade.outcomeSide || trade.outcome || "";
-  const outcomeSideStr = typeof rawOutcomeSide === "number" 
-    ? (rawOutcomeSide === 1 ? "Yes" : "No")
-    : String(rawOutcomeSide);
-  const isYes = outcomeSideStr.toLowerCase() === "yes" || rawOutcomeSide === 1;
+  // Use outcome for display (e.g. "SEN", "C9", "UP"), outcomeSide for badge color
+  const outcomeDisplay = trade.outcome || trade.outcomeSideEnum || 
+    (trade.outcomeSide === 1 ? "Yes" : trade.outcomeSide === 2 ? "No" : "");
+  const isYes = trade.outcomeSide === 1 || 
+    (trade.outcomeSideEnum || "").toLowerCase() === "yes";
   
   const explorerUrl = getExplorerTxUrl(trade.txHash, chainId);
   const createdAtDate = typeof trade.createdAt === "number" 
     ? new Date(trade.createdAt * 1000) 
     : new Date(trade.createdAt);
   
-  const isBuy = (trade.side || "").toUpperCase() === "BUY";
+  const sideUpper = (trade.side || "").toUpperCase();
+  const isBuy = sideUpper === "BUY";
+  const isMerge = sideUpper === "MERGE";
+  const isSplit = sideUpper === "SPLIT";
+  const badgeClass = isBuy ? "buy" : isMerge ? "merge" : isSplit ? "split" : "sell";
+  const badgeLabel = isBuy ? "Buy" : isMerge ? "Merge" : isSplit ? "Split" : "Sell";
   const marketImage = trade.thumbnailUrl || trade.marketIcon || trade.coverUrl || null;
   const displayTitle = trade.displayTitle || trade.marketTitle || trade.outcomeName || "Unknown";
   
@@ -175,8 +185,8 @@ function ActivityCardMobile({ trade, chainId }) {
         <div className="activity-card-info">
           <div className="activity-card-title">{displayTitle}</div>
           <div className="activity-card-meta">
-            <span className={`badge-${isBuy ? 'buy' : 'sell'}`}>{isBuy ? "Buy" : "Sell"}</span>
-            <span className={`badge-${isYes ? 'yes' : 'no'}`}>{outcomeSideStr}</span>
+            <span className={`badge-${badgeClass}`}>{badgeLabel}</span>
+            <span className={`badge-${isYes ? 'yes' : 'no'}`}>{outcomeDisplay}</span>
             <span className="meta-text-mobile">{formatShares(shares)} at {formatCents(price)}</span>
           </div>
         </div>
@@ -260,7 +270,7 @@ export default function ActivityList({
         }
         .activity-header-desktop {
           display: grid;
-          grid-template-columns: 60px 1fr 110px 40px;
+          grid-template-columns: 70px 1fr 110px 40px;
           gap: 12px;
           padding: 12px 20px;
           background: rgba(0, 0, 0, 0.3);
@@ -277,7 +287,7 @@ export default function ActivityList({
         }
         .activity-container :global(.activity-row-desktop) {
           display: grid;
-          grid-template-columns: 60px 1fr 110px 40px;
+          grid-template-columns: 70px 1fr 110px 40px;
           gap: 12px;
           padding: 14px 20px;
           border-bottom: 1px solid rgba(255,255,255,0.06);
@@ -343,6 +353,22 @@ export default function ActivityList({
           font-weight: 600;
           background: rgba(239, 68, 68, 0.15);
           color: #ef4444;
+        }
+        .activity-container :global(.badge-merge) {
+          padding: 4px 10px;
+          border-radius: 6px;
+          font-size: 12px;
+          font-weight: 600;
+          background: rgba(168, 85, 247, 0.15);
+          color: #a855f7;
+        }
+        .activity-container :global(.badge-split) {
+          padding: 4px 10px;
+          border-radius: 6px;
+          font-size: 12px;
+          font-weight: 600;
+          background: rgba(59, 130, 246, 0.15);
+          color: #3b82f6;
         }
         .activity-container :global(.badge-yes) {
           padding: 2px 8px;
@@ -422,7 +448,9 @@ export default function ActivityList({
           }
 
           .activity-container :global(.badge-buy),
-          .activity-container :global(.badge-sell) {
+          .activity-container :global(.badge-sell),
+          .activity-container :global(.badge-merge),
+          .activity-container :global(.badge-split) {
             font-size: 13px;
           }
 
@@ -492,7 +520,9 @@ export default function ActivityList({
           flex-wrap: wrap;
         }
         .activity-mobile :global(.badge-buy),
-        .activity-mobile :global(.badge-sell) {
+        .activity-mobile :global(.badge-sell),
+        .activity-mobile :global(.badge-merge),
+        .activity-mobile :global(.badge-split) {
           padding: 3px 8px;
           border-radius: 5px;
           font-size: 11px;
@@ -507,6 +537,16 @@ export default function ActivityList({
           background: rgba(239, 68, 68, 0.22);
           border: 1px solid rgba(239, 68, 68, 0.34);
           color: #ef4444;
+        }
+        .activity-mobile :global(.badge-merge) {
+          background: rgba(168, 85, 247, 0.22);
+          border: 1px solid rgba(168, 85, 247, 0.34);
+          color: #a855f7;
+        }
+        .activity-mobile :global(.badge-split) {
+          background: rgba(59, 130, 246, 0.22);
+          border: 1px solid rgba(59, 130, 246, 0.34);
+          color: #3b82f6;
         }
         .activity-mobile :global(.badge-yes),
         .activity-mobile :global(.badge-no) {

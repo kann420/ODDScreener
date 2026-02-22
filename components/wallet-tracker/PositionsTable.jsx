@@ -69,11 +69,11 @@ function PositionRowDesktop({ position }) {
   const pnlPercent = num(position.unrealizedPnlPercent);
   const isPositive = pnl >= 0;
   
-  const rawOutcomeSide = position.outcomeSideEnum || position.outcomeSide || position.outcome || "";
-  const outcomeSideStr = typeof rawOutcomeSide === "number" 
-    ? (rawOutcomeSide === 1 ? "Yes" : "No")
-    : String(rawOutcomeSide);
-  const isYes = outcomeSideStr.toLowerCase() === "yes" || rawOutcomeSide === 1;
+  // Use outcome for display (e.g. "SEN", "C9", "UP"), outcomeSide for badge color
+  const outcomeDisplay = position.outcome || position.outcomeSideEnum || 
+    (position.outcomeSide === 1 ? "Yes" : position.outcomeSide === 2 ? "No" : "");
+  const isYes = position.outcomeSide === 1 || 
+    (position.outcomeSideEnum || "").toLowerCase() === "yes";
   
   const marketImage = position.thumbnailUrl || position.marketIcon || position.coverUrl || null;
   const displayTitle = position.displayTitle || position.marketTitle || position.outcomeName || "Unknown";
@@ -102,7 +102,7 @@ function PositionRowDesktop({ position }) {
         <div className="position-info">
           <div className="position-title" title={displayTitle}>{displayTitle}</div>
           <div className="position-meta">
-            <span className={`badge-${isYes ? 'yes' : 'no'}`}>{outcomeSideStr}</span>
+            <span className={`badge-${isYes ? 'yes' : 'no'}`}>{outcomeDisplay}</span>
             <span className="shares-text">{formatShares(position.sharesOwned)} at {formatCents(avgPrice)}</span>
           </div>
         </div>
@@ -129,11 +129,11 @@ function PositionCardMobile({ position }) {
   const pnlPercent = num(position.unrealizedPnlPercent);
   const isPositive = pnl >= 0;
   
-  const rawOutcomeSide = position.outcomeSideEnum || position.outcomeSide || position.outcome || "";
-  const outcomeSideStr = typeof rawOutcomeSide === "number" 
-    ? (rawOutcomeSide === 1 ? "Yes" : "No")
-    : String(rawOutcomeSide);
-  const isYes = outcomeSideStr.toLowerCase() === "yes" || rawOutcomeSide === 1;
+  // Use outcome for display (e.g. "SEN", "C9", "UP"), outcomeSide for badge color
+  const outcomeDisplay = position.outcome || position.outcomeSideEnum || 
+    (position.outcomeSide === 1 ? "Yes" : position.outcomeSide === 2 ? "No" : "");
+  const isYes = position.outcomeSide === 1 || 
+    (position.outcomeSideEnum || "").toLowerCase() === "yes";
   
   const marketImage = position.thumbnailUrl || position.marketIcon || position.coverUrl || null;
   const displayTitle = position.displayTitle || position.marketTitle || position.outcomeName || "Unknown";
@@ -158,7 +158,7 @@ function PositionCardMobile({ position }) {
         <div className="position-card-info">
           <div className="position-card-title">{displayTitle}</div>
           <div className="position-card-meta">
-            <span className={`badge-${isYes ? 'yes' : 'no'}`}>{outcomeSideStr}</span>
+            <span className={`badge-${isYes ? 'yes' : 'no'}`}>{outcomeDisplay}</span>
             <span className="shares-text-mobile">{formatShares(position.sharesOwned)} at {formatCents(avgPrice)}</span>
           </div>
         </div>

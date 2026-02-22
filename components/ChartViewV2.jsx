@@ -233,7 +233,7 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
   const chartColor = outcome === "YES" ? "rgba(34,211,238,0.95)" : "rgba(168,85,247,0.95)";
 
   return (
-    <div className="panel" style={{ padding: 10 }}>
+    <div className="panel chart-panel" style={{ padding: 10, height: 530, display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div
@@ -275,6 +275,7 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
           </div>
 
           <div
+            className="chart-chance-label"
             style={{
               fontSize: 22,
               fontWeight: 900,
@@ -291,11 +292,12 @@ export default function ChartView({ tokenId, outcome = "YES", mid, selectedCents
 
       </div>
 
-      <div className="chart-area" style={{ marginTop: 8 }}>
+      <div className="chart-area" style={{ marginTop: 8, flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
         <div
           className="chart-container"
           style={{
-            height: 340,
+            flex: 1,
+            minHeight: 0,
             transformOrigin: "50% 50%",
             transform: isFlip3D ? "perspective(900px) rotateX(10deg) scale(0.995)" : "perspective(900px) rotateX(0deg) scale(1)",
             transition: "transform 220ms ease",

@@ -4,6 +4,100 @@ import { analyticsFetch } from "@/lib/opinionAnalytics";
 
 export const dynamic = "force-dynamic";
 
+// ============ CHILD → PARENT CACHE ============
+// In-memory cache that maps childMarketId → { parentId, parentTitle, parentRules }
+// Built once, refreshed every 5 minutes. Shared across all requests.
+const _parentCache = {
+  map: null,        // Map<string, { parentId, parentTitle, parentRules }>
+  builtAt: 0,
+  building: null,   // Promise while building (dedup concurrent requests)
+  TTL: 5 * 60 * 1000, // 5 minutes
+};
+
+/**
+ * Build the full child→parent mapping by fetching all categorical parents
+ * and their children in parallel batches. ~9s cold, instant on cache hit.
+ */
+async function _buildParentMap() {
+  const PAGE_SIZE = 20;
+  const MAX_PAGES = 25;
+
+  // Step 1: collect all categorical parent IDs
+  const parentIds = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    try {
+      const result = await opinionFetch("/market", {
+        params: { sortBy: 5, limit: PAGE_SIZE, page, marketType: 1 },
+      });
+      if (result?.errno !== 0) break;
+      const list = result?.result?.list || [];
+      parentIds.push(...list.map((p) => p.marketId));
+      if (list.length < PAGE_SIZE) break;
+    } catch {
+      break;
+    }
+  }
+
+  // Step 2: fetch categorical details in parallel batches
+  const map = new Map();
+  const BATCH = 50;
+  for (let i = 0; i < parentIds.length; i += BATCH) {
+    const batch = parentIds.slice(i, i + BATCH);
+    const results = await Promise.allSettled(
+      batch.map((pid) => opinionFetch(`/market/categorical/${pid}`))
+    );
+    for (let j = 0; j < results.length; j++) {
+      if (results[j].status !== "fulfilled") continue;
+      const pd = results[j].value?.result?.data;
+      if (!pd) continue;
+      const children = pd.childMarkets || [];
+      const parentTitle = pd.marketTitle || pd.tittle || pd.title || "";
+      const parentRules = pd.rules || pd.description || pd.marketRules || pd.resolutionRules || "";
+      for (const c of children) {
+        map.set(String(c.marketId), {
+          parentId: batch[j],
+          parentTitle,
+          parentRules,
+        });
+      }
+    }
+  }
+
+  console.log(`[ParentCache] Built: ${parentIds.length} parents → ${map.size} children`);
+  return map;
+}
+
+/**
+ * Get parent info for a child market from cache (builds cache on first call)
+ */
+async function getParentForChild(childMarketId) {
+  const now = Date.now();
+
+  // If cache is fresh, use it
+  if (_parentCache.map && (now - _parentCache.builtAt) < _parentCache.TTL) {
+    return _parentCache.map.get(String(childMarketId)) || null;
+  }
+
+  // Build (or await in-flight build to dedup concurrent requests)
+  if (!_parentCache.building) {
+    _parentCache.building = _buildParentMap()
+      .then((m) => {
+        _parentCache.map = m;
+        _parentCache.builtAt = Date.now();
+        _parentCache.building = null;
+        return m;
+      })
+      .catch((e) => {
+        console.error("[ParentCache] Build failed:", e.message);
+        _parentCache.building = null;
+        return _parentCache.map || new Map(); // fallback to stale cache
+      });
+  }
+
+  const map = await _parentCache.building;
+  return (map || _parentCache.map)?.get(String(childMarketId)) || null;
+}
+
 function pickMarketFromApi(payload) {
   return payload?.result?.data ?? payload?.result ?? payload?.data ?? payload ?? {};
 }
@@ -20,8 +114,7 @@ function checkHasBonus(marketData) {
 }
 
 /**
- * Fetch parent title from Opinion API for categorical/multi-outcome markets
- * This is used as fallback when Analytics API is unavailable
+ * Fetch parent detail from Opinion categorical API (single call, fast)
  */
 async function fetchParentTitleFromOpinion(parentId) {
   if (!parentId) return null;
@@ -29,57 +122,12 @@ async function fetchParentTitleFromOpinion(parentId) {
     const detail = await opinionFetch(`/market/categorical/${parentId}`);
     const fullData = detail?.result?.data;
     if (!fullData) return null;
-    return fullData.marketTitle || fullData.tittle || fullData.title || null;
+    const title = fullData.marketTitle || fullData.tittle || fullData.title || null;
+    const rules = fullData.rules || fullData.description || fullData.marketRules || fullData.resolutionRules || null;
+    return { title, rules };
   } catch {
     return null;
   }
-}
-
-/**
- * Search ALL categorical parents to find the parent of a given child market
- * This is expensive but necessary when parentEventId is not available
- */
-async function searchParentForMarket(childMarketId) {
-  const PAGE_SIZE = 20;
-  const MAX_PAGES = 10; // Limit search to avoid timeout
-  
-  for (let page = 1; page <= MAX_PAGES; page++) {
-    try {
-      // Fetch categorical parents (include ALL statuses, not just activated)
-      const result = await opinionFetch("/market", {
-        params: { sortBy: 5, limit: PAGE_SIZE, page, marketType: 1 },
-      });
-      
-      if (result?.errno !== 0) break;
-      
-      const parents = result?.result?.list || [];
-      if (parents.length === 0) break;
-      
-      // Check each parent for the child market
-      for (const parent of parents) {
-        try {
-          const catDetail = await opinionFetch(`/market/categorical/${parent.marketId}`);
-          const children = catDetail?.result?.data?.childMarkets || [];
-          const found = children.find((c) => String(c.marketId) === String(childMarketId));
-          
-          if (found) {
-            const parentTitle = catDetail?.result?.data?.marketTitle || 
-                               catDetail?.result?.data?.tittle || 
-                               catDetail?.result?.data?.title || "";
-            return { parentId: parent.marketId, parentTitle };
-          }
-        } catch {
-          // ignore individual parent fetch errors
-        }
-      }
-      
-      if (parents.length < PAGE_SIZE) break;
-    } catch {
-      break;
-    }
-  }
-  
-  return null;
 }
 
 async function fetchMarketFromAnalytics(marketId) {
@@ -186,41 +234,43 @@ export default async function MarketPage({ params, searchParams }) {
       m.isMultiOutcome = true;
     }
 
-    // ✅ FIX 2: If still no parent title, try to fetch from Opinion API using parentEventId
-    const parentId = m.parentEventId || m.rootMarketId || m.categoricalParentId;
-    if (!analyticsWorked && !parentTitleFromUrl && parentId) {
+    // ✅ FIX 2: If parentEventId is known, fetch parent details directly (fast single call)
+    const knownParentId = m.parentEventId || m.rootMarketId || m.categoricalParentId;
+    if (knownParentId && (!analyticsWorked || !m.rules || !m.parentEventTitle)) {
       try {
-        const parentTitle = await fetchParentTitleFromOpinion(parentId);
-        if (parentTitle) {
+        const parentInfo = await fetchParentTitleFromOpinion(knownParentId);
+        if (parentInfo?.title && !m.parentEventTitle) {
           const outcomeName = m.marketTitle || m.tittle || m.title || "";
-          // Build full title: "[parentTitle] - [outcomeName]"
-          const fullTitle = `${parentTitle} - ${outcomeName}`;
-          m.marketTitle = fullTitle;
-          m.title = fullTitle;
-          m.parentEventTitle = parentTitle;
+          m.marketTitle = `${parentInfo.title} - ${outcomeName}`;
+          m.title = m.marketTitle;
+          m.parentEventTitle = parentInfo.title;
           m.isMultiOutcome = true;
         }
+        if (!m.rules && parentInfo?.rules) m.rules = parentInfo.rules;
       } catch {
         // ignore
       }
     }
 
-    // ✅ FIX 3: If STILL no parent title (API doesn't expose parentEventId), 
-    // search through categorical parents to find this market's parent
-    if (!analyticsWorked && !parentTitleFromUrl && !m.parentEventTitle) {
+    // ✅ FIX 3: Use cached child→parent mapping (covers ALL categorical children)
+    // This is the main path for markets missing parentEventId in the Opinion API.
+    // The cache is built once (~9s), then instant for all subsequent requests.
+    if (!m.parentEventTitle || !m.rules) {
       try {
-        const parentInfo = await searchParentForMarket(marketId);
-        if (parentInfo?.parentTitle) {
-          const outcomeName = m.marketTitle || m.tittle || m.title || "";
-          const fullTitle = `${parentInfo.parentTitle} - ${outcomeName}`;
-          m.marketTitle = fullTitle;
-          m.title = fullTitle;
-          m.parentEventTitle = parentInfo.parentTitle;
-          m.parentEventId = parentInfo.parentId;
-          m.isMultiOutcome = true;
+        const cached = await getParentForChild(marketId);
+        if (cached) {
+          if (!m.parentEventTitle && cached.parentTitle) {
+            const outcomeName = m.marketTitle || m.tittle || m.title || "";
+            m.marketTitle = `${cached.parentTitle} - ${outcomeName}`;
+            m.title = m.marketTitle;
+            m.parentEventTitle = cached.parentTitle;
+            m.parentEventId = cached.parentId;
+            m.isMultiOutcome = true;
+          }
+          if (!m.rules && cached.parentRules) m.rules = cached.parentRules;
         }
       } catch {
-        // ignore search errors
+        // ignore cache errors
       }
     }
   } else {

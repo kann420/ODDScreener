@@ -360,6 +360,15 @@ async function fetchPolymarketTrades(wallet) {
       if (tradeActivities.length > 0) {
         console.log("[Polymarket-Activity] Found", tradeActivities.length, "trades missing from /trades endpoint");
         
+        // Sort so TRADE activities come before REDEEM.
+        // REDEEM has empty outcome and needs to look up from existing trades by conditionId.
+        // If all trades for that conditionId also come from activity, we need BUYs
+        // added to `trades` first so the lookup succeeds.
+        tradeActivities.sort((a, b) => {
+          const typeOrder = { TRADE: 0, REDEEM: 1 };
+          return (typeOrder[a.type] ?? 0) - (typeOrder[b.type] ?? 0);
+        });
+        
         // Convert activity to trade format and add to trades
         for (const activity of tradeActivities) {
           // Activity API has direct side field (BUY/SELL) - use it directly
@@ -684,6 +693,53 @@ function aggregatePolymarketTrades(trades, activeConditionIds = new Set()) {
           _debug: { netShares: roundNetShares, totalBought: round.totalBought, totalSold: round.totalSold, totalSharesSold: round.totalSharesSold },
         });
         console.log(`[Poly-Aggregate] Partial-expiry close: "${firstTrade?.title?.slice(0, 40)}" outcome=${outcomeRaw} P&L=${realizedPnl.toFixed(2)}`);
+        roundIndex += 1;
+      }
+    }
+
+    // BUY-only fully expired: user bought but never sold, market resolved and they lost everything.
+    // The losing REDEEM has size=0 so it gets filtered out, leaving only BUY trades.
+    // Detect via: has buys, zero sells, inactive conditionId.
+    if (round && round.totalBought > 0 && (round.totalSharesSold || 0) === 0) {
+      const conditionIdExp = round.firstTrade?.conditionId;
+      if (conditionIdExp && !activeConditionIds.has(conditionIdExp)) {
+        const firstTrade = round.firstTrade;
+        const lastTrade = round.lastTrade;
+        const entryPrice = round.buySharesForAvg > 0 ? (round.buyPriceWeightedSum / round.buySharesForAvg) : 0;
+        const entryPriceCents = Math.round(entryPrice * 1000) / 10;
+        const realizedPnl = -round.totalBought; // Lost everything
+        const outcomeRaw = firstTrade?.outcome || "";
+        const outcomeNorm = String(outcomeRaw).toLowerCase();
+        closedPositions.push({
+          platform: "polymarket",
+          roundKey: `${conditionIdExp}:${outcomeNorm}:r${roundIndex}`,
+          roundIndex,
+          conditionId: conditionIdExp,
+          marketTitle: firstTrade?.title || "",
+          marketSlug: firstTrade?.slug || "",
+          eventSlug: firstTrade?.eventSlug || "",
+          outcome: outcomeRaw,
+          side: outcomeRaw?.toUpperCase() === "YES" ? "YES" : outcomeRaw?.toLowerCase() === "no" ? "NO" : String(outcomeRaw || "").toUpperCase(),
+          thumbnailUrl: firstTrade?.icon || null,
+          marketUrl: firstTrade?.eventSlug
+            ? `https://polymarket.com/event/${firstTrade.eventSlug}`
+            : (firstTrade?.slug ? `https://polymarket.com/market/${firstTrade.slug}` : null),
+          shares: Math.round(round.totalSharesBought * 100) / 100,
+          entryPriceCents,
+          avgPriceCents: entryPriceCents,
+          exitPriceCents: 0, // Expired worthless
+          avgExitPriceCents: 0,
+          initialValueUsd: round.totalBought,
+          pnlUsd: realizedPnl,
+          pnlPercent: -100,
+          isClosed: true,
+          _isFullyExpired: true,
+          openedAt: firstTrade?.timestamp ? firstTrade.timestamp * 1000 : null,
+          closedAt: lastTrade?.timestamp ? lastTrade.timestamp * 1000 : Date.now(),
+          totalTrades: round.tradeCount,
+          _debug: { netShares: roundNetShares, totalBought: round.totalBought, totalSold: 0, totalSharesSold: 0 },
+        });
+        console.log(`[Poly-Aggregate] Fully-expired close: "${firstTrade?.title?.slice(0, 40)}" outcome=${outcomeRaw} lost=$${round.totalBought.toFixed(2)}`);
         roundIndex += 1;
       }
     }

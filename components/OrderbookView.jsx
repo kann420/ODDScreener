@@ -514,8 +514,6 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
     expiresAt = extractExpiresFromTitle(title);
   }
 
-  const [showRules, setShowRules] = useState(false);
-
   // ✅ FIX: categorical markets need rootMarketId for market.last.trade
   const rootMarketId =
     marketData.rootMarketId ||
@@ -704,17 +702,18 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
           onClose={() => setStreamChannel(null)}
         />
       )}
-      <div className="panel" style={{ padding: "14px 16px" }}>
-        <div className="detail-header">
+      <div className="detail-header-grid">
+          <div className="panel detail-header-panel-left" style={{ padding: "4px 12px", display: "flex", alignItems: "center" }}>
+            <div className="detail-header" style={{ width: "100%" }}>
           {/* LEFT BLOCK (unchanged content, just insert thumbnail) */}
           <div className="detail-header-left">
             {/* NEW: thumbnail at the exact left spot you marked */}
-            <MarketThumbnailDetail url={thumbnailUrl} size={100} radius={14} />
+<MarketThumbnailDetail url={thumbnailUrl} size={78} radius={8} />
 
             <div className="detail-info">
               {/* Market ID row with buttons on mobile */}
               <div className="detail-market-id-row">
-                <span className="muted" style={{ fontSize: 11 }}>Market #{marketId}</span>
+                <span className="muted detail-market-id-text" style={{ fontSize: 11 }}>Market #{marketId}</span>
                 {/* Buttons - shown inline on mobile */}
                 <div className="detail-buttons-inline">
                   <a
@@ -752,18 +751,14 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                   )}
                 </div>
               </div>
-              <div className="detail-title" style={{ fontWeight: 900, fontSize: 16 }}>
+              <div className="detail-title" style={{ fontWeight: 900, fontSize: 15, lineHeight: 1.15 }}>
                 {title || "Market"}
               </div>
               
               {/* Stats - shown here on mobile, hidden on desktop */}
               <div className="detail-stats-mobile">
                 <div>
-                  <span className="muted">Chance</span>
-                  <span style={{ fontWeight: 700, color: "#fff" }}>{mid ? (mid * 100).toFixed(1) + "%" : "-"}</span>
-                </div>
-                <div>
-                  <span className="muted">Expires</span>
+                  <span className="muted">Exp</span>
                   <span style={{ fontWeight: 700 }}>{expiresAt ? (() => {
                     const ts = Number(expiresAt);
                     const ms = ts > 1e12 ? ts : ts * 1000;
@@ -781,7 +776,7 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                   <span style={{ fontWeight: 700, color: "#fff" }}>{totalVolume ? `$${fmtQty(totalVolume)}` : "-"}</span>
                 </div>
                 <div>
-                  <span className="muted">Liquidity</span>
+                  <span className="muted">Liq</span>
                   <span style={{ fontWeight: 700, color: "#fff" }}>{totalLiquidity > 0 ? fmtUsdCompact(totalLiquidity) : "-"}</span>
                 </div>
               </div>
@@ -829,17 +824,35 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
             </div>
           </div>
 
-          {/* RIGHT BLOCK (unchanged) */}
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {/* Desktop inline stats - same row as title, pushed right */}
+          <div className="detail-stats-inline">
+            <div className="detail-stat-item">
+              <span className="detail-stat-label">Expires</span>
+              <span className="detail-stat-value">{expiresAt ? (() => {
+                const ts = Number(expiresAt);
+                const ms = ts > 1e12 ? ts : ts * 1000;
+                const d = new Date(ms);
+                if (isNaN(d.getTime())) return "-";
+                return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+              })() : "-"}</span>
+            </div>
+            <div className="detail-stat-item">
+              <span className="detail-stat-label">24h Vol</span>
+              <span className="detail-stat-value">{volume24h ? `$${fmtQty(volume24h)}` : "-"}</span>
+            </div>
+            <div className="detail-stat-item">
+              <span className="detail-stat-label">Total Vol</span>
+              <span className="detail-stat-value">{totalVolume ? `$${fmtQty(totalVolume)}` : "-"}</span>
+            </div>
+            <div className="detail-stat-item">
+              <span className="detail-stat-label">Liquidity</span>
+              <span className="detail-stat-value">{totalLiquidity > 0 ? fmtUsdCompact(totalLiquidity) : "-"}</span>
+            </div>
           </div>
         </div>
 
         {/* Stats for desktop - hidden on mobile */}
         <div className="detail-stats detail-stats-desktop">
-          <div>
-            <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Chance</div>
-            <div style={{ fontWeight: 700, color: "#fff" }}>{mid ? (mid * 100).toFixed(1) + "%" : "-"}</div>
-          </div>
           <div>
             <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>Expires</div>
             <div style={{ fontWeight: 700 }}>{expiresAt ? (() => {
@@ -864,41 +877,150 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
           </div>
         </div>
 
-        {showRules && rules && (
-          <div style={{
-            marginTop: 12,
-            padding: 12,
-            background: "rgba(255,255,255,0.03)",
-            borderRadius: 8,
-            border: "1px solid rgba(255,255,255,0.08)",
-            fontSize: 12,
-            lineHeight: 1.6,
-            color: "rgba(255,255,255,0.8)"
+        </div>
+
+        {/* Rules panel - right side of header */}
+        {rules && (
+          <div className="panel detail-rules-panel hide-scrollbar" style={{
+            padding: "8px 12px",
+            fontSize: 11,
+            lineHeight: 1.5,
+            color: "rgba(255,255,255,0.7)",
+            overflowY: "auto",
           }}>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>Market Rules</div>
+            <div style={{ fontWeight: 700, fontSize: 10, color: "rgba(148,163,184,0.85)", textTransform: "uppercase", marginBottom: 4, letterSpacing: "0.5px" }}>Rules</div>
             <div style={{ whiteSpace: "pre-wrap" }}>{rules}</div>
           </div>
         )}
+
       </div>
 
       <div className="detail-grid">
-        <div className="detail-left-col">
-          <div className="chart-wrapper">
-            <ChartViewV2
-              key={yesTokenId}
-              tokenId={yesTokenId}
-              outcome={outcome}
-              mid={mid}
-              selectedCents={selectedCents}
-              onOutcomeChange={setOutcome}
-              yesLabel={yesLabel}
-              noLabel={noLabel}
-            />
+        <div className="chart-wrapper">
+          <ChartViewV2
+            key={yesTokenId}
+            tokenId={yesTokenId}
+            outcome={outcome}
+            mid={mid}
+            selectedCents={selectedCents}
+            onOutcomeChange={setOutcome}
+            yesLabel={yesLabel}
+            noLabel={noLabel}
+          />
+        </div>
+
+        <div className="panel orderbook-panel">
+          <div className="orderbook-header">
+            <div className="orderbook-title">Order Book</div>
+            <div className="outcome-toggle">
+              <button
+                onClick={() => setOutcome("YES")}
+                className={`outcome-btn outcome-btn-yes ${outcome === "YES" ? "active" : ""}`}
+              >
+                {yesLabel}
+              </button>
+              <button
+                onClick={() => setOutcome("NO")}
+                className={`outcome-btn outcome-btn-no ${outcome === "NO" ? "active" : ""}`}
+              >
+                {noLabel}
+              </button>
+            </div>
           </div>
 
-          <div className="panel trades-panel" style={{ marginTop: 12 }}>
-            <div className="tabs">
-              <div className="tab active">Trades</div>
+          <div className="orderbook-col-header" style={{
+            display: "grid",
+            gridTemplateColumns: "74px 1fr 1fr",
+            gap: 10,
+            marginTop: 10,
+            fontSize: 11,
+            color: "rgba(148,163,184,0.95)",
+            fontWeight: 800
+          }}>
+            <div>PRICE</div>
+            <div style={{ textAlign: "center" }}>SHARES</div>
+            <div style={{ textAlign: "right" }}>TOTAL</div>
+          </div>
+
+          <div className="orderbook-side-section" style={{ marginTop: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <span className="pill" style={{ color: "#fff", background: "rgba(239,68,68,0.18)" }}>Asks ({outcomeDisplayLabel})</span>
+            </div>
+            <div ref={asksScrollRef} className="orderbook-scroll" style={{ maxHeight: 5 * 56, overflowY: "auto" }}>
+              {loading && asks.length === 0 ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} style={{ marginTop: 6 }}>
+                    <div className="skeleton" style={{ height: 44, borderRadius: 10 }} />
+                  </div>
+                ))
+              ) : asksD.length === 0 ? (
+                <div className="orderbook-empty-state">
+                  <span>No asks available</span>
+                  <span className="orderbook-empty-hint">Waiting for sell orders</span>
+                </div>
+              ) : (
+                asksD.map((r, i) => {
+                  const maxCum = Math.max(1, ...asksD.map(x => x.cumTotal));
+                  const pct = Math.max(0, Math.min(100, (r.cumTotal / maxCum) * 100));
+                  return (
+                    <div key={`ask-${i}`} className="orderbook-row orderbook-row-ask">
+                      <div className="orderbook-row-depth" style={{ width: `${pct}%` }} />
+                      <div className="orderbook-row-content">
+                        <div className="red orderbook-price">{(r.price * 100).toFixed(1)}¢</div>
+                        <div className="muted orderbook-shares" style={{ fontFamily: "inherit", fontWeight: 500 }}>{fmtQty(r.shares)}</div>
+                        <div className="orderbook-total" style={{ fontFamily: "inherit", fontWeight: 600 }}>${fmtQty(r.total)}</div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div className="orderbook-spread-row">
+            <span className="orderbook-spread-label">Spread</span>
+            <span className="orderbook-spread-value" style={{ fontFamily: "inherit" }}>{bids[0] && asks[0] ? ((asks[0].price - bids[0].price) * 100).toFixed(1).replace(/\.0$/, "") + "¢" : "-"}</span>
+          </div>
+
+          <div className="orderbook-side-section" style={{ marginTop: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <span className="pill" style={{ color: "#fff", background: "rgba(34,197,94,0.18)" }}>Bids ({outcomeDisplayLabel})</span>
+            </div>
+            <div className="orderbook-scroll" style={{ maxHeight: 5 * 56, overflowY: "auto" }}>
+              {loading && bids.length === 0 ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} style={{ marginTop: 6 }}>
+                    <div className="skeleton" style={{ height: 44, borderRadius: 10 }} />
+                  </div>
+                ))
+              ) : bidsD.length === 0 ? (
+                <div className="orderbook-empty-state">
+                  <span>No bids available</span>
+                  <span className="orderbook-empty-hint">Waiting for buy orders</span>
+                </div>
+              ) : (
+                bidsD.map((r, i) => {
+                  const maxCum = Math.max(1, ...bidsD.map(x => x.cumTotal));
+                  const pct = Math.max(0, Math.min(100, (r.cumTotal / maxCum) * 100));
+                  return (
+                    <div key={`bid-${i}`} className="orderbook-row orderbook-row-bid">
+                      <div className="orderbook-row-depth orderbook-row-depth-bid" style={{ width: `${pct}%` }} />
+                      <div className="orderbook-row-content">
+                        <div className="green orderbook-price">{(r.price * 100).toFixed(1)}¢</div>
+                        <div className="muted orderbook-shares" style={{ fontFamily: "inherit", fontWeight: 500 }}>{fmtQty(r.shares)}</div>
+                        <div className="orderbook-total" style={{ fontFamily: "inherit", fontWeight: 600 }}>${fmtQty(r.total)}</div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="panel trades-panel">
+          <div className="tabs">
+            <div className="tab active">Trades</div>
               <div className="tab">Top Traders</div>
               <div className="tab">Holders</div>
             </div>
@@ -1063,122 +1185,18 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
             </div>
           </div>
         </div>
-
-        <div className="panel orderbook-panel">
-          <div className="orderbook-header">
-            <div className="orderbook-title">Order Book</div>
-            <div className="outcome-toggle">
-              <button
-                onClick={() => setOutcome("YES")}
-                className={`outcome-btn outcome-btn-yes ${outcome === "YES" ? "active" : ""}`}
-              >
-                {yesLabel}
-              </button>
-              <button
-                onClick={() => setOutcome("NO")}
-                className={`outcome-btn outcome-btn-no ${outcome === "NO" ? "active" : ""}`}
-              >
-                {noLabel}
-              </button>
-            </div>
-          </div>
-
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "74px 1fr 1fr",
-            gap: 10,
-            marginTop: 10,
-            fontSize: 11,
-            color: "rgba(148,163,184,0.95)",
-            fontWeight: 800
-          }}>
-            <div>PRICE</div>
-            <div>SHARES</div>
-            <div style={{ textAlign: "right" }}>TOTAL</div>
-          </div>
-
-          <div style={{ marginTop: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <span className="pill" style={{ color: "#fff", background: "rgba(239,68,68,0.18)" }}>Asks ({outcomeDisplayLabel})</span>
-            </div>
-            <div ref={asksScrollRef} style={{ maxHeight: 5 * 56, overflowY: "auto", paddingRight: 6 }}>
-              {loading && asks.length === 0 ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} style={{ marginTop: 6 }}>
-                    <div className="skeleton" style={{ height: 44, borderRadius: 10 }} />
-                  </div>
-                ))
-              ) : asksD.length === 0 ? (
-                <div className="orderbook-empty-state">
-                  <span>No asks available</span>
-                  <span className="orderbook-empty-hint">Waiting for sell orders</span>
-                </div>
-              ) : (
-                asksD.map((r, i) => {
-                  const maxCum = Math.max(1, ...asksD.map(x => x.cumTotal));
-                  const pct = Math.max(0, Math.min(100, (r.cumTotal / maxCum) * 100));
-                  return (
-                    <div key={`ask-${i}`} className="orderbook-row orderbook-row-ask">
-                      <div className="orderbook-row-depth" style={{ width: `${pct}%` }} />
-                      <div className="orderbook-row-content">
-                        <div className="red orderbook-price">{(r.price * 100).toFixed(1)}¢</div>
-                        <div className="muted orderbook-shares" style={{ fontFamily: "inherit", fontWeight: 500 }}>{fmtQty(r.shares)}</div>
-                        <div className="orderbook-total" style={{ fontFamily: "inherit", fontWeight: 600 }}>${fmtQty(r.total)}</div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-
-          <div className="orderbook-spread-row">
-            <div className="orderbook-spread-item">
-              <span className="orderbook-spread-label">Last</span>
-              <span className="orderbook-spread-value" style={{ fontFamily: "inherit" }}>{bids[0] ? (bids[0].price * 100).toFixed(1).replace(/\.0$/, "") + "¢" : "-"}</span>
-            </div>
-            <div className="orderbook-spread-item">
-              <span className="orderbook-spread-label">Spread</span>
-              <span className="orderbook-spread-value" style={{ fontFamily: "inherit" }}>{bids[0] && asks[0] ? ((asks[0].price - bids[0].price) * 100).toFixed(1).replace(/\.0$/, "") + "¢" : "-"}</span>
-            </div>
-          </div>
-
-          <div style={{ marginTop: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <span className="pill" style={{ color: "#fff", background: "rgba(34,197,94,0.18)" }}>Bids ({outcomeDisplayLabel})</span>
-            </div>
-            <div style={{ maxHeight: 5 * 56, overflowY: "auto", paddingRight: 6 }}>
-              {loading && bids.length === 0 ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} style={{ marginTop: 6 }}>
-                    <div className="skeleton" style={{ height: 44, borderRadius: 10 }} />
-                  </div>
-                ))
-              ) : bidsD.length === 0 ? (
-                <div className="orderbook-empty-state">
-                  <span>No bids available</span>
-                  <span className="orderbook-empty-hint">Waiting for buy orders</span>
-                </div>
-              ) : (
-                bidsD.map((r, i) => {
-                  const maxCum = Math.max(1, ...bidsD.map(x => x.cumTotal));
-                  const pct = Math.max(0, Math.min(100, (r.cumTotal / maxCum) * 100));
-                  return (
-                    <div key={`bid-${i}`} className="orderbook-row orderbook-row-bid">
-                      <div className="orderbook-row-depth orderbook-row-depth-bid" style={{ width: `${pct}%` }} />
-                      <div className="orderbook-row-content">
-                        <div className="green orderbook-price">{(r.price * 100).toFixed(1)}¢</div>
-                        <div className="muted orderbook-shares" style={{ fontFamily: "inherit", fontWeight: 500 }}>{fmtQty(r.shares)}</div>
-                        <div className="orderbook-total" style={{ fontFamily: "inherit", fontWeight: 600 }}>${fmtQty(r.total)}</div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>
       </div>
-    </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+

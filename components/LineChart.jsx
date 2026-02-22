@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 function fmt(n) {
   if (n === null || n === undefined) return "-";
@@ -28,11 +28,10 @@ function formatTime12Hour(d) {
 
 function formatTooltipLabel(ms) {
   const d = new Date(ms);
-  const { hours, minutes, ampm } = formatTime12Hour(d);
   const month = monthNames[d.getMonth()];
   const day = d.getDate();
   const year = d.getFullYear();
-  return `${hours}:${minutes}${ampm}, ${month} ${day}, ${year}`;
+  return `${month} ${day}, ${year}`;
 }
 
 function formatXAxisLabel(ms, range) {
@@ -49,13 +48,21 @@ function formatXAxisLabel(ms, range) {
 
 export default function LineChart({ pts, color = "rgba(34,211,238,0.95)", range = "1D", selectedCents }) {
   const [hoverIdx, setHoverIdx] = useState(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 900);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   const w = 980,
     h = 320;
   const padL = 36,
-    padR = 46,
+    padR = isMobile ? 120 : 50,
     padT = 16,
-    padB = 30;
+    padB = isMobile ? 50 : 30;
 
   const N = 160;
 
@@ -100,7 +107,7 @@ export default function LineChart({ pts, color = "rgba(34,211,238,0.95)", range 
 
   const chartPts = useMemo(() => {
     return sampled.map((c, i) => ({ x: x(i), y: y(c.p), t: c.t, v: c.p }));
-  }, [sampled, min, max]);
+  }, [sampled, min, max, padL, padR, padT, padB, w, h]);
 
   const linePath = chartPts.length
     ? chartPts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" ")
@@ -110,7 +117,7 @@ export default function LineChart({ pts, color = "rgba(34,211,238,0.95)", range 
     ? linePath + ` L ${(w - padR).toFixed(2)} ${(h - padB).toFixed(2)}` + ` L ${padL.toFixed(2)} ${(h - padB).toFixed(2)} Z`
     : "";
 
-  const levels = 4;
+  const levels = isMobile ? 2 : 4;
   const grid = Array.from({ length: levels + 1 }).map((_, i) => {
     const yy = padT + (i / levels) * (h - padT - padB);
     const val = (max - (i / levels) * (max - min)) * 100;
@@ -134,15 +141,15 @@ export default function LineChart({ pts, color = "rgba(34,211,238,0.95)", range 
   const hx = hv?.x ?? x(N - 1);
   const hy = hv?.y ?? y(closes[closes.length - 1] ?? 0);
 
-  const tipW = 210;
-  const tipH = 54;
+  const tipW = 120;
+  const tipH = 42;
   const tipX = Math.min(w - padR - tipW, Math.max(padL, hx - tipW / 2));
-  const tipY = Math.max(padT, hy - tipH - 10);
+  const tipY = Math.max(padT, hy - tipH - 8);
 
   const selY = selectedCents && Number.isFinite(selectedCents) ? y(selectedCents / 100) : null;
 
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: "100%", cursor: "crosshair" }} onMouseMove={onMove} onMouseLeave={onLeave}>
+    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: "100%", cursor: "crosshair" }} preserveAspectRatio="none" onMouseMove={onMove} onMouseLeave={onLeave}>
       <defs>
         <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity="0.22" />
@@ -162,11 +169,14 @@ export default function LineChart({ pts, color = "rgba(34,211,238,0.95)", range 
         <g key={i}>
           <line x1={padL} x2={w - padR} y1={g.yy} y2={g.yy} stroke="rgba(255,255,255,0.07)" />
           <text
-            x={w - padR + 6}
-            y={g.yy + 4}
-            fill="rgba(148,163,184,0.95)"
-            fontSize="11"
-            fontFamily='"Space Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
+            className="chart-axis-label"
+            x={w - (isMobile ? 16 : 4)}
+            y={g.yy + (isMobile ? 10 : 4)}
+            fill="rgba(148,163,184,0.85)"
+            fontSize={isMobile ? "28" : "10"}
+            fontWeight="600"
+            fontFamily='"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+            textAnchor="end"
           >
             {fmtPct(g.val)}
           </text>
@@ -175,15 +185,31 @@ export default function LineChart({ pts, color = "rgba(34,211,238,0.95)", range 
 
       {getXAxisTicks.map((tick, i) => {
         const tickX = x(Math.round((tick.idx / (sampled.length - 1)) * (N - 1)));
+        const isLast = i === getXAxisTicks.length - 1;
+        const isFirst = i === 0;
+        
+        let anchor = "middle";
+        let posX = tickX;
+        
+        if (isLast) {
+          anchor = "end";
+          posX = tickX + (isMobile ? 24 : 12);
+        } else if (isFirst) {
+          anchor = "start";
+          posX = tickX - (isMobile ? 24 : 12);
+        }
+
         return (
           <text
+            className="chart-axis-label"
             key={`tick-${i}`}
-            x={tickX}
-            y={h - padB + 18}
-            fill="rgba(148,163,184,0.95)"
-            fontSize="11"
-            fontFamily='"Space Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
-            textAnchor="middle"
+            x={posX}
+            y={h - padB + (isMobile ? 36 : 16)}
+            fill="rgba(148,163,184,0.85)"
+            fontSize={isMobile ? "28" : "10"}
+            fontWeight="500"
+            fontFamily='"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+            textAnchor={anchor}
           >
             {tick.label}
           </text>
@@ -208,17 +234,19 @@ export default function LineChart({ pts, color = "rgba(34,211,238,0.95)", range 
       <circle cx={hx} cy={hy} r="4.2" fill={color} />
 
       {hoverIdx !== null && hv && (
-        <g>
-          <rect x={tipX} y={tipY} width={tipW} height={tipH} rx="10" fill="rgba(10,12,14,0.92)" stroke="rgba(255,255,255,0.10)" />
-          <text x={tipX + 10} y={tipY + 20} fill="rgba(233,238,245,0.95)" fontSize="12" fontWeight="800">
+        <g className="chart-tooltip-group">
+          <rect className="chart-tooltip-bg" x={tipX} y={tipY} width={tipW} height={tipH} rx="8" fill="rgba(10,12,16,0.95)" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+          <text className="chart-tooltip-pct" x={tipX + 10} y={tipY + 16} fill="rgba(233,238,245,1)" fontSize="12" fontWeight="800" fontFamily='"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'>
             {fmtPct(hv.v * 100)}
           </text>
           <text
+            className="chart-tooltip-date"
             x={tipX + 10}
-            y={tipY + 40}
-            fill="rgba(148,163,184,0.95)"
-            fontSize="11"
-            fontFamily='"Space Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
+            y={tipY + 31}
+            fill="rgba(148,163,184,0.90)"
+            fontSize="9"
+            fontWeight="500"
+            fontFamily='"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
           >
             {formatTooltipLabel(hv.t)}
           </text>

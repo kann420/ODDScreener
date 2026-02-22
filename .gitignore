@@ -33,6 +33,9 @@ poly_*.json
 poly_*.txt
 server.log
 
+# Generated reports - local only
+reports/
+
 # Agent skills & IDE settings (local-only, not needed on GitHub)
 .agents/
 .claude/

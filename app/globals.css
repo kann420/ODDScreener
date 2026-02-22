@@ -1142,26 +1142,59 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
   display: grid;
   grid-template-columns: 1fr 340px;
   gap: 12px;
+  align-items: start;
+}
+
+/* Trades panel spans full width below chart + orderbook row */
+.trades-panel {
+  grid-column: 1 / -1;
 }
 
 .detail-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .detail-header-left {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+/* Header grid: left info panel + right rules panel */
+.detail-header-grid {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.detail-header-grid > .detail-header-panel-left {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.detail-rules-panel {
+  width: 340px;
+  min-width: 220px;
+  flex-shrink: 0;
+  max-height: 100px;
+  overflow-y: auto;
+  border-radius: 10px;
 }
 
 .detail-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .detail-buttons {
@@ -1169,6 +1202,52 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
   align-items: center;
   gap: 12px;
   margin-top: 8px;
+}
+
+/* ===== Desktop inline stats (next to title, not pushed right) ===== */
+.detail-stats-inline {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  margin-left: 16px;
+}
+
+.detail-stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 12px;
+  border-left: 1px solid rgba(255,255,255,0.15);
+}
+
+.detail-stat-item:first-child {
+  border-left: none;
+  padding-left: 0;
+}
+
+.detail-stat-label {
+  font-size: 14px;
+  color: #8b949e;
+  font-weight: 400;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.detail-stat-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+}
+
+/* Hide old separate desktop stats row (replaced by inline) */
+.detail-stats-desktop {
+  display: none !important;
 }
 
 /* Watch Stream (Twitch) button */
@@ -1203,7 +1282,7 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
   font-size: 12px;
 }
 
-/* PC layout - detail-left-col as flex column */
+/* PC layout - detail-left-col (legacy, no longer used in grid) */
 .detail-left-col {
   display: flex;
   flex-direction: column;
@@ -1223,11 +1302,62 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
   display: none;
 }
 
+/* ===== 1080p / small desktop optimization (viewport ≤ 1400px) ===== */
+@media (max-width: 1400px) {
+  .detail-rules-panel {
+    width: 240px;
+    min-width: 180px;
+  }
+
+  .detail-stat-item {
+    padding: 0 8px;
+  }
+
+  .detail-stat-label {
+    font-size: 9px;
+  }
+
+  .detail-stat-value {
+    font-size: 12px;
+  }
+
+  .detail-stats-inline {
+    margin-left: 10px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .detail-rules-panel {
+    width: 200px;
+    min-width: 140px;
+    font-size: 10px !important;
+  }
+
+  .detail-stats-inline {
+    margin-left: 6px;
+  }
+
+  .detail-stat-item {
+    padding: 0 6px;
+  }
+}
+
 @media (max-width: 900px) {
+  .detail-market-id-text {
+    display: none !important;
+  }
+  .detail-header-grid {
+    flex-direction: column;
+  }
+  .detail-rules-panel {
+    display: none !important;
+  }
+
   .detail-grid {
     grid-template-columns: 1fr !important;
     display: flex !important;
     flex-direction: column;
+    align-items: stretch !important;
     gap: 12px;
   }
   
@@ -1239,14 +1369,71 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
   .orderbook-panel {
     order: 2;
   }
+
+  /* Reduce chart height on mobile and tune chart spacing */
+  .chart-container {
+    height: 220px !important;
+  }
+
+  .chart-panel {
+    height: auto !important;
+    padding: 16px !important;
+  }
+
+  .chart-chance-label {
+    font-size: 18px !important;
+  }
+
+  .chart-volume-info {
+    font-size: 10px !important;
+  }
+
+  /* Scale up tooltip on mobile for better readability */
+  .chart-tooltip-group {
+    transform-box: fill-box;
+    transform-origin: center;
+    transform: scale(1.4);
+  }
+
+  .chart-wrapper .panel {
+    padding: 4px 5px !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  .chart-area {
+    margin-top: 4px !important;
+  }
+
+  /* Mobile: limit orderbook to 4 rows */
+  .orderbook-scroll {
+    max-height: 140px !important;
+  }
+
+  /* Reset flex layout for orderbook side sections on mobile */
+  .orderbook-side-section {
+    flex: none;
+    min-height: auto;
+  }
   
   .trades-panel {
     order: 3;
     margin-top: 0 !important;
+    grid-column: auto;
   }
   
   .detail-left-col {
     display: contents !important;
+  }
+  
+  /* Hide desktop inline stats on tablet/mobile */
+  .detail-stats-inline {
+    display: none !important;
+  }
+  
+  /* Show old desktop stats row on tablet (601-900px) */
+  .detail-stats-desktop {
+    display: flex !important;
   }
   
   /* Show inline buttons on mobile, hide regular buttons */
@@ -1254,11 +1441,15 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-left: auto;
+    margin-left: 0;
   }
   
   .detail-buttons {
     display: none !important;
+  }
+  
+  .detail-header {
+    flex-wrap: wrap;
   }
   
   .btn-small-mobile {
@@ -1345,15 +1536,23 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
   /* Show mobile stats inline */
   .detail-stats-mobile {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 12px;
     font-size: 11px;
     margin-top: 4px;
+    overflow-x: auto;
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+  
+  .detail-stats-mobile::-webkit-scrollbar {
+    display: none; /* Chrome, Safari and Opera */
   }
   
   .detail-stats-mobile > div {
     display: flex;
     gap: 4px;
+    white-space: nowrap;
   }
   
   .detail-stats-mobile .muted {
@@ -1371,15 +1570,6 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
     display: none !important;
   }
   
-  /* Reduce chart height on mobile and tune chart spacing */
-  .chart-container {
-    height: 155px !important;
-  }
-
-  .chart-wrapper .panel {
-    padding: 4px 6px !important;
-  }
-
   .chart-area {
     margin-top: 0 !important;
   }
@@ -1390,12 +1580,97 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
     position: relative;
     z-index: 5;
   }
+
+  /* Orderbook: auto height on mobile */
+  .orderbook-panel {
+    height: auto !important;
+    min-height: 0;
+  }
 }
 
-/* Orderbook panel responsive */
+/* Orderbook panel – match chart height on desktop */
 .orderbook-panel {
   padding: 12px;
-  height: fit-content;
+  height: 530px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Asks / Bids wrapper sections flex to fill available space equally */
+.orderbook-side-section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* On desktop, override inline maxHeight so scrolls fill their flex parent */
+@media (min-width: 901px) {
+  .orderbook-side-section > .orderbook-scroll {
+    max-height: none !important;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .orderbook-side-section > .orderbook-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Compact rows to fit 5 asks + 5 bids in 530px panel */
+  .orderbook-row {
+    margin-top: 3px;
+    border-radius: 6px;
+  }
+  .orderbook-row-content {
+    padding: 7px 10px;
+    border-radius: 6px;
+    gap: 8px;
+  }
+  .orderbook-row-depth {
+    border-radius: 6px 0 0 6px;
+  }
+  .orderbook-price {
+    font-size: 12px;
+  }
+  .orderbook-shares {
+    font-size: 11px;
+  }
+  .orderbook-total {
+    font-size: 11px;
+  }
+
+  /* Compact section labels + margins */
+  .orderbook-side-section {
+    margin-top: 6px !important;
+  }
+  .orderbook-side-section .pill {
+    font-size: 10px;
+    padding: 2px 8px;
+  }
+
+  /* Compact spread row */
+  .orderbook-spread-row {
+    margin-top: 6px;
+    margin-bottom: 6px;
+    padding: 6px 12px;
+  }
+
+  /* Compact column header */
+  .orderbook-col-header {
+    margin-top: 6px !important;
+  }
+}
+
+/* Hide scrollbar utility */
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 /* ===== ORDERBOOK ROW STYLES ===== */
@@ -1431,10 +1706,14 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
   grid-template-columns: 74px 1fr 1fr;
   gap: 10px;
   align-items: center;
-  padding: 10px 12px;
+  padding: 5px 12px;
   border-radius: 8px;
   border: 1px solid rgba(255,255,255,0.06);
   background: rgba(255,255,255,0.015);
+}
+
+.orderbook-row-content .orderbook-shares {
+  text-align: center;
 }
 
 .orderbook-row:hover .orderbook-row-content {
@@ -1447,6 +1726,7 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
 }
 
 .orderbook-shares {
+  font-weight: 900;
   font-size: 12px;
 }
 
@@ -1455,12 +1735,28 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
   font-size: 12px;
 }
 
+/* Orderbook column header */
+.orderbook-col-header {
+  display: grid;
+  grid-template-columns: 74px 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: rgba(148,163,184,0.95);
+  font-weight: 800;
+}
+
 /* Orderbook header and outcome toggle */
 .orderbook-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 4px;
+  flex-shrink: 0;
+}
+
+.orderbook-col-header {
+  flex-shrink: 0;
 }
 
 .orderbook-title {
@@ -1476,7 +1772,7 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
 
 .outcome-btn {
   padding: 8px 16px;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
   border-radius: 8px;
   border: none;
@@ -1505,34 +1801,35 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
 
 /* Orderbook spread row */
 .orderbook-spread-row {
-  margin-top: 14px;
-  margin-bottom: 14px;
-  padding: 12px 14px;
-  border-radius: 10px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+  padding: 4px 14px;
+  border-radius: 8px;
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.08);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .orderbook-spread-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
 }
 
 .orderbook-spread-label {
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 10px;
+  font-weight: 600;
   color: rgba(148,163,184,0.85);
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
 
 .orderbook-spread-value {
-  font-size: 14px;
-  font-weight: 800;
+  font-size: 10px;
+  font-weight: 700;
   color: #e9eef5;
 }
 
@@ -1648,89 +1945,46 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
     font-size: 10px;
     letter-spacing: 0.02em;
   }
-  
-  /* Orderbook mobile adjustments */
-  .orderbook-row-content {
-    padding: 8px 10px;
-    grid-template-columns: 60px 1fr 1fr;
-    gap: 8px;
-  }
-  
-  .orderbook-price {
-    font-size: 12px;
-  }
-  
-  .orderbook-spread-row {
-    padding: 10px 12px;
-  }
-  
-  .orderbook-spread-value {
-    font-size: 13px;
-  }
-  
-  /* Outcome toggle mobile */
-  .outcome-toggle {
-    gap: 6px;
-  }
-  
-  .outcome-btn {
-    padding: 10px 16px !important;
-    font-size: 12px !important;
-    min-width: 52px;
-  }
 }
 
 @media (max-width: 480px) {
   .trades-table-wrap {
-    max-height: 280px;
+    max-height: 400px;
   }
   
   .trades-table {
-    font-size: 10px !important;
+    font-size: 11px !important;
   }
   
   .trades-table th,
   .trades-table td {
-    padding: 8px 6px !important;
+    padding: 10px 8px !important;
   }
   
   .trades-table-header th {
-    font-size: 9px;
-    padding: 10px 6px !important;
-  }
-  
-  /* Further mobile orderbook adjustments */
-  .orderbook-row-content {
-    padding: 8px;
-    grid-template-columns: 50px 1fr 1fr;
-    gap: 6px;
-  }
-  
-  .orderbook-price {
-    font-size: 11px;
-  }
-  
-  .orderbook-shares,
-  .orderbook-total {
     font-size: 10px;
+    padding: 10px 8px !important;
+    letter-spacing: 0.04em;
   }
-  
-  /* Outcome toggle small mobile */
-  .outcome-btn {
-    padding: 8px 14px !important;
-    min-width: 48px;
+
+  /* Trades panel mobile */
+  .trades-panel {
+    border-radius: 14px !important;
+  }
+
+  .trades-panel .tabs {
+    padding: 12px 16px !important;
+  }
+
+  .trades-panel .tab {
+    font-size: 14px !important;
+    padding: 8px 12px !important;
   }
 }
 
 /* Chart responsive */
 .chart-container {
   width: 100%;
-}
-
-@media (max-width: 600px) {
-  .chart-container {
-    height: 155px !important;
-  }
 }
 /* ===== END ORDERBOOK / DETAIL PAGE RESPONSIVE ===== */
 
@@ -3182,3 +3436,5 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
     bottom: 8px !important;
   }
 }
+
+
