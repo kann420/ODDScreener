@@ -76,12 +76,18 @@ const TOURNAMENT_CHANNEL_MAP = {
   kpl:           "kpl",
   "vct masters": "valorant",
   vct:           "valorant",
+  dreamleague:   "esl_dota2",
 };
 
 function getStreamChannel(title) {
   if (!title) return null;
+  // Multi-word tournament: "Valorant - VCT Masters: ..."
   const vct = title.match(/^Valorant\s*-\s*(VCT\s*Masters)\s*:/i);
   if (vct) return TOURNAMENT_CHANNEL_MAP[vct[1].toLowerCase()] || null;
+  // Dota2 with tournament: "Dota2 - DreamLeague: BB vs PARI ..."
+  const dota = title.match(/^Dota2?\s*-\s*(\w+)\s*:/i);
+  if (dota) return TOURNAMENT_CHANNEL_MAP[dota[1].toLowerCase()] || null;
+  // Generic: optional "CS2 - " prefix, then single-word tournament before ":"
   const m = title.match(/^(?:CS2\s*-\s*)?(\w+)\s*:/i);
   if (!m) return null;
   return TOURNAMENT_CHANNEL_MAP[m[1].toLowerCase()] || null;

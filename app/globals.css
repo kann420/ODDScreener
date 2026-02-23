@@ -3312,6 +3312,40 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
   box-shadow: 0 8px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(145,70,255,0.45);
 }
 
+/* Corner resize handles */
+.stream-resize-handle {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  z-index: 10;
+}
+.stream-resize-handle::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-color: rgba(191,148,255,0.5);
+  border-style: solid;
+  border-width: 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.stream-player-float:hover .stream-resize-handle::after {
+  opacity: 1;
+}
+.stream-resize-handle:hover::after {
+  border-color: rgba(191,148,255,0.9) !important;
+  opacity: 1 !important;
+}
+.stream-resize-nw { top: 0; left: 0; cursor: nw-resize; }
+.stream-resize-nw::after { top: 2px; left: 2px; border-top-width: 2px; border-left-width: 2px; border-top-left-radius: 4px; }
+.stream-resize-ne { top: 0; right: 0; cursor: ne-resize; }
+.stream-resize-ne::after { top: 2px; right: 2px; border-top-width: 2px; border-right-width: 2px; border-top-right-radius: 4px; }
+.stream-resize-sw { bottom: 0; left: 0; cursor: sw-resize; }
+.stream-resize-sw::after { bottom: 2px; left: 2px; border-bottom-width: 2px; border-left-width: 2px; border-bottom-left-radius: 4px; }
+.stream-resize-se { bottom: 0; right: 0; cursor: se-resize; }
+.stream-resize-se::after { bottom: 2px; right: 2px; border-bottom-width: 2px; border-right-width: 2px; border-bottom-right-radius: 4px; }
+
 /* Title bar */
 .stream-player-titlebar {
   display: flex;

@@ -1651,6 +1651,38 @@ const POLY_CATEGORICAL_TO_OPINION_BINARY = [
     teamYes: "t1",
     teamNo: "team liquid",
   },
+  // ── Honor of Kings - KPL ──
+  {
+    polyKeywords: ["kuaishow gaming", "talent gaming"],
+    opinionKeywords: ["ksg", "ttg"],
+    teamYes: "kuaishow gaming",
+    teamNo: "talent gaming",
+  },
+  // ── Dota 2 - DreamLeague ──
+  {
+    polyKeywords: ["mouz", "betboom"],
+    opinionKeywords: ["mouz", "bb"],
+    teamYes: "mouz",
+    teamNo: "betboom team",
+  },
+  {
+    polyKeywords: ["parivision", "xtreme gaming"],
+    opinionKeywords: ["pari", "xg"],
+    teamYes: "parivision",
+    teamNo: "xtreme gaming",
+  },
+  {
+    polyKeywords: ["aurora", "tundra"],
+    opinionKeywords: ["aur", "tundra"],
+    teamYes: "aurora",
+    teamNo: "tundra esports",
+  },
+  {
+    polyKeywords: ["team liquid", "team falcons"],
+    opinionKeywords: ["tl", "fal"],
+    teamYes: "team liquid",
+    teamNo: "team falcons",
+  },
 ];
 
 /**

@@ -5,15 +5,15 @@ import { useState, useRef, useCallback, useEffect } from "react";
 /* ==========================================================
    FloatingStreamPlayer
    - Twitch embed via iframe (no API key needed)
-   - Draggable, resizable (2 presets), minimizable, closeable
+   - Draggable, corner-resizable, minimizable, closeable
    - Muted by default (autoplay policy)
    - position: fixed, bottom-right corner
 ========================================================== */
 
-const SIZES = {
-  normal: { w: 480, h: 270 },
-  large:  { w: 720, h: 405 },
-};
+const SIZE_NORMAL = { w: 480, h: 270 };
+const SIZE_LARGE  = { w: 720, h: 405 };
+const MIN_W = 320, MIN_H = 180;
+const MAX_W = 1010, MAX_H = 570;
 
 // Domains allowed for Twitch embed parent param
 const PARENT_DOMAINS = ["oddscreeners.com", "www.oddscreeners.com", "localhost"];
@@ -23,35 +23,97 @@ function buildEmbedUrl(channel) {
   return `https://player.twitch.tv/?channel=${encodeURIComponent(channel)}&${parents}&muted=true&autoplay=true`;
 }
 
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
 export default function FloatingStreamPlayer({ channel, title, onClose }) {
   const [minimized, setMinimized] = useState(false);
-  const [sizeKey, setSizeKey] = useState("normal");
+  const [size, setSize] = useState({ w: SIZE_NORMAL.w, h: SIZE_NORMAL.h });
   const [pos, setPos] = useState({ x: 20, y: 20 }); // offset from bottom-right
+  const [interacting, setInteracting] = useState(false); // blocks iframe pointer events
   const dragRef = useRef(null);
   const dragging = useRef(false);
   const dragStart = useRef({ mx: 0, my: 0, px: 0, py: 0 });
 
-  const size = SIZES[sizeKey];
+  // ── Refs for resize ────────────────────────────────
+  const resizeData = useRef(null); // { corner, mx, my, w, h, px, py }
 
   // ── Drag handlers ──────────────────────────────────
   const onPointerDown = useCallback((e) => {
-    if (e.target.closest("button") || e.target.closest("iframe")) return;
+    if (e.target.closest("button") || e.target.closest("iframe") || e.target.closest(".stream-resize-handle")) return;
     dragging.current = true;
     dragStart.current = { mx: e.clientX, my: e.clientY, px: pos.x, py: pos.y };
+    setInteracting(true);
     e.preventDefault();
   }, [pos]);
 
+  // ── Resize handlers ────────────────────────────────
+  const onResizePointerDown = useCallback((corner, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizeData.current = {
+      corner,
+      mx: e.clientX,
+      my: e.clientY,
+      w: size.w,
+      h: size.h,
+      px: pos.x,
+      py: pos.y,
+    };
+    setInteracting(true);
+  }, [size, pos]);
+
   useEffect(() => {
     const onMove = (e) => {
-      if (!dragging.current) return;
-      const dx = dragStart.current.mx - e.clientX;
-      const dy = dragStart.current.my - e.clientY;
-      setPos({
-        x: Math.max(0, dragStart.current.px + dx),
-        y: Math.max(0, dragStart.current.py + dy),
-      });
+      // ── Handle drag ──
+      if (dragging.current) {
+        const dx = dragStart.current.mx - e.clientX;
+        const dy = dragStart.current.my - e.clientY;
+        setPos({
+          x: Math.max(0, dragStart.current.px + dx),
+          y: Math.max(0, dragStart.current.py + dy),
+        });
+        return;
+      }
+      // ── Handle corner resize ──
+      const r = resizeData.current;
+      if (!r) return;
+      const dx = e.clientX - r.mx;
+      const dy = e.clientY - r.my;
+
+      let newW = r.w, newH = r.h;
+
+      // Position is anchored bottom-right (CSS right/bottom).
+      // nw = top-left corner of element (opposite to anchor → no pos shift)
+      // ne = top-right corner → shifts pos.x
+      // sw = bottom-left corner → shifts pos.y
+      // se = bottom-right corner → shifts pos.x + pos.y
+      switch (r.corner) {
+        case "nw": newW = r.w - dx; newH = r.h - dy; break;
+        case "ne": newW = r.w + dx; newH = r.h - dy; break;
+        case "sw": newW = r.w - dx; newH = r.h + dy; break;
+        case "se": newW = r.w + dx; newH = r.h + dy; break;
+      }
+
+      newW = clamp(newW, MIN_W, MAX_W);
+      newH = clamp(newH, MIN_H, MAX_H);
+
+      const dw = newW - r.w; // actual delta after clamp
+      const dh = newH - r.h;
+
+      let newPx = r.px, newPy = r.py;
+      if (r.corner === "ne" || r.corner === "se") newPx = r.px - dw;
+      if (r.corner === "sw" || r.corner === "se") newPy = r.py - dh;
+
+      setSize({ w: newW, h: newH });
+      setPos({ x: Math.max(0, newPx), y: Math.max(0, newPy) });
     };
-    const onUp = () => { dragging.current = false; };
+
+    const onUp = () => {
+      dragging.current = false;
+      resizeData.current = null;
+      setInteracting(false);
+    };
+
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     return () => {
@@ -100,6 +162,8 @@ export default function FloatingStreamPlayer({ channel, title, onClose }) {
   }
 
   // ── Full player ───────────────────────────────────
+  const isLarge = size.w > 600;
+
   return (
     <div
       ref={dragRef}
@@ -107,6 +171,12 @@ export default function FloatingStreamPlayer({ channel, title, onClose }) {
       style={{ right: pos.x, bottom: pos.y, width: size.w }}
       onPointerDown={onPointerDown}
     >
+      {/* Corner resize handles */}
+      <div className="stream-resize-handle stream-resize-nw" onPointerDown={(e) => onResizePointerDown("nw", e)} />
+      <div className="stream-resize-handle stream-resize-ne" onPointerDown={(e) => onResizePointerDown("ne", e)} />
+      <div className="stream-resize-handle stream-resize-sw" onPointerDown={(e) => onResizePointerDown("sw", e)} />
+      <div className="stream-resize-handle stream-resize-se" onPointerDown={(e) => onResizePointerDown("se", e)} />
+
       {/* Title bar (drag handle) */}
       <div className="stream-player-titlebar">
         <div className="stream-player-titlebar-left">
@@ -119,11 +189,11 @@ export default function FloatingStreamPlayer({ channel, title, onClose }) {
         <div className="stream-player-titlebar-actions">
           {/* Size toggle */}
           <button
-            onClick={() => setSizeKey((k) => (k === "normal" ? "large" : "normal"))}
-            title={sizeKey === "normal" ? "Enlarge" : "Shrink"}
+            onClick={() => setSize(isLarge ? { w: SIZE_NORMAL.w, h: SIZE_NORMAL.h } : { w: SIZE_LARGE.w, h: SIZE_LARGE.h })}
+            title={isLarge ? "Shrink" : "Enlarge"}
             className="stream-ctrl-btn"
           >
-            {sizeKey === "normal" ? (
+            {!isLarge ? (
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" />
                 <line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
@@ -172,6 +242,10 @@ export default function FloatingStreamPlayer({ channel, title, onClose }) {
           allowFullScreen
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }}
         />
+        {/* Transparent overlay blocks iframe pointer events during drag/resize */}
+        {interacting && (
+          <div style={{ position: "absolute", inset: 0, zIndex: 2 }} />
+        )}
       </div>
     </div>
   );
