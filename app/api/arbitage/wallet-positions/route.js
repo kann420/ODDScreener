@@ -96,7 +96,7 @@ async function fetchPolymarketPositions(wallet) {
     url.searchParams.set("user", wallet.toLowerCase());
     url.searchParams.set("sizeThreshold", "0.1"); // Minimum 0.1 shares
     url.searchParams.set("limit", "100");
-    url.searchParams.set("sortBy", "CURRENT_VALUE");
+    url.searchParams.set("sortBy", "CURRENT"); // Valid: CURRENT INITIAL TOKENS CASHPNL PERCENTPNL TITLE RESOLVING PRICE AVGPRICE
     url.searchParams.set("sortDirection", "DESC");
     
     console.log("[Polymarket] Fetching positions:", url.toString());
@@ -1432,6 +1432,13 @@ const MARKET_TITLE_WHITELIST = [
   // ECB markets
   { poly: "ecb interest rates: march 2026", opinion: "ecb rates decision (dfr): march 2026" },
   { poly: "ecb interest rates march 2026", opinion: "ecb rates decision dfr march 2026" },
+  
+  // ZachXBT investigation - categorical ↔ categorical
+  // Poly: "Which crypto company will ZachXBT expose for insider trading?"
+  // Opinion: "What company will be the main target of ZachXBT's upcoming investigation?" (topicId 398)
+  { poly: "zachxbt expose for insider trading", opinion: "zachxbt upcoming investigation" },
+  { poly: "which crypto company will zachxbt expose for insider trading", opinion: "what company will be the main target of zachxbt" },
+  { poly: "zachxbt", opinion: "zachxbt" },
 ];
 
 /**

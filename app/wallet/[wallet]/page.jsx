@@ -447,13 +447,13 @@ export default function WalletPage() {
   
   // Wallet stats
   const walletStats = useMemo(() => {
-    return calculateWalletStats(positions, trades);
-  }, [positions, trades]);
+    return calculateWalletStats(positions, trades, marketInfoMap);
+  }, [positions, trades, marketInfoMap]);
   
   // PnL data for all periods (1D, 1W, 1M, ALL)
   const pnlByPeriod = useMemo(() => {
-    return calculatePnLByPeriod(trades);
-  }, [trades]);
+    return calculatePnLByPeriod(trades, positions, closedPositions);
+  }, [trades, positions, closedPositions]);
   
   /**
    * Fetch positions from API
@@ -469,28 +469,58 @@ export default function WalletPage() {
     setPositionsError(null);
     
     try {
-      const url = `/api/opinion/wallet/${wallet}/positions?chainId=${chainId}&page=${page}&limit=20`;
-      const res = await fetch(url);
-      const data = await res.json();
-      
-      // Opinion API uses errno instead of code
-      // Check: errno !== 0 means error, but also handle legacy code field
-      const hasError = (data.errno !== undefined && data.errno !== 0) || 
-                       (data.errno === undefined && data.code !== 0);
-      if (hasError) {
-        throw new Error(data.errmsg || data.msg || "Failed to fetch positions");
-      }
-      
-      const list = data.result?.list || [];
-      const total = data.result?.total || 0;
-      
-      if (append) {
-        setPositions(prev => [...prev, ...list]);
+      // When loading page 1 (initial load), fetch ALL pages for accurate PnL calculation
+      if (page === 1 && !append) {
+        let allPositions = [];
+        let currentPage = 1;
+        const limit = 20;
+        const maxPages = 50;
+        
+        while (currentPage <= maxPages) {
+          const url = `/api/opinion/wallet/${wallet}/positions?chainId=${chainId}&page=${currentPage}&limit=${limit}`;
+          const res = await fetch(url);
+          const data = await res.json();
+          
+          const hasError = (data.errno !== undefined && data.errno !== 0) || 
+                           (data.errno === undefined && data.code !== 0);
+          if (hasError) {
+            throw new Error(data.errmsg || data.msg || "Failed to fetch positions");
+          }
+          
+          const list = data.result?.list || [];
+          const total = data.result?.total || 0;
+          allPositions = [...allPositions, ...list];
+          
+          if (allPositions.length >= total || list.length < limit) break;
+          currentPage++;
+        }
+        
+        setPositions(allPositions);
+        setPositionsTotal(allPositions.length);
+        setPositionsPage(Math.ceil(allPositions.length / 20));
       } else {
-        setPositions(list);
+        // Manual "load more" for paginated UI display
+        const url = `/api/opinion/wallet/${wallet}/positions?chainId=${chainId}&page=${page}&limit=20`;
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        const hasError = (data.errno !== undefined && data.errno !== 0) || 
+                         (data.errno === undefined && data.code !== 0);
+        if (hasError) {
+          throw new Error(data.errmsg || data.msg || "Failed to fetch positions");
+        }
+        
+        const list = data.result?.list || [];
+        const total = data.result?.total || 0;
+        
+        if (append) {
+          setPositions(prev => [...prev, ...list]);
+        } else {
+          setPositions(list);
+        }
+        setPositionsTotal(total);
+        setPositionsPage(page);
       }
-      setPositionsTotal(total);
-      setPositionsPage(page);
       
     } catch (err) {
       console.error("[WalletPage] Error fetching positions:", err);
@@ -600,21 +630,29 @@ export default function WalletPage() {
       }
       
       // Find markets with net shares > 0 (potentially claimed)
+      // Count SPLIT as BUY and MERGE as SELL to correctly track SPLIT-funded positions
+      // SPLIT/MERGE trades have shares=0 in API — derive from usdAmount / price
       const claimedMarketIds = [];
       for (const [marketId, trades] of tradesByMarket) {
         let netShares = 0;
         for (const t of trades) {
-          const shares = Number(t.shares) || 0;
+          let shares = Number(t.shares) || 0;
           const side = (t.side || '').toUpperCase();
-          if (side === 'BUY') netShares += shares;
-          else if (side === 'SELL') netShares -= shares;
+          if (shares === 0 && (side === 'SPLIT' || side === 'MERGE')) {
+            const price = Number(t.price) || 0;
+            if (price > 0) {
+              let amt = Number(t.usdAmount) || Number(t.amount) || 0;
+              if (Math.abs(amt) > 1e10) amt = amt / 1e18;
+              shares = amt / price;
+            }
+          }
+          if (side === 'BUY' || side === 'SPLIT') netShares += shares;
+          else if (side === 'SELL' || side === 'MERGE') netShares -= shares;
         }
         if (Math.abs(netShares) > 0.001) {
           claimedMarketIds.push(marketId);
         }
       }
-      
-      console.log(`[WalletPage] Found ${claimedMarketIds.length} potential claimed markets`);
       
       // Fetch market info for claimed positions
       if (claimedMarketIds.length > 0) {
@@ -658,14 +696,6 @@ export default function WalletPage() {
               newMarketInfoMap.set(info.marketId, info);
             }
           }
-        }
-        
-        console.log(`[WalletPage] Fetched market info for ${newMarketInfoMap.size} resolved markets`);
-        console.log('[WalletPage] marketInfoMap keys:', [...newMarketInfoMap.keys()]);
-        
-        // Check if Syria (3355) is in the map
-        if (newMarketInfoMap.has('3355')) {
-          console.log('[WalletPage] Syria 3355 info:', newMarketInfoMap.get('3355'));
         }
         
         setMarketInfoMap(newMarketInfoMap);

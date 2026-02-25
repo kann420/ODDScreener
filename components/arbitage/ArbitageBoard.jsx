@@ -129,6 +129,8 @@ export default function ArbitageBoard() {
   // Filter settings
   const [minArbPct, setMinArbPct] = useState(0.1); // Min arb percentage
   const [minShares, setMinShares] = useState(0); // Min shares on orderbook
+  const [minPolyVol, setMinPolyVol] = useState(0); // Min Poly 24h volume
+  const [minOpnVol, setMinOpnVol] = useState(0); // Min OPN 24h volume
   const [showFilters, setShowFilters] = useState(true); // Toggle filter panel - default open
   const [scanMode, setScanMode] = useState("quick"); // "quick" (100 markets) or "full" (all markets)
   const [isMobileView, setIsMobileView] = useState(false);
@@ -487,6 +489,14 @@ export default function ArbitageBoard() {
         const dateA = a.endDate ? new Date(a.endDate).getTime() : Infinity;
         const dateB = b.endDate ? new Date(b.endDate).getTime() : Infinity;
         return sortAsc ? dateA - dateB : dateB - dateA;
+      } else if (sortField === "polyVolume") {
+        const volA = a.polyStats?.volume ?? 0;
+        const volB = b.polyStats?.volume ?? 0;
+        return sortAsc ? volA - volB : volB - volA;
+      } else if (sortField === "opinionVolume") {
+        const volA = a.opinionStats?.volume ?? 0;
+        const volB = b.opinionStats?.volume ?? 0;
+        return sortAsc ? volA - volB : volB - volA;
       } else {
         return sortAsc 
           ? (a.arbPct ?? 0) - (b.arbPct ?? 0) 
@@ -496,6 +506,12 @@ export default function ArbitageBoard() {
     return arr.filter((r) => {
       // Filter by min arb %
       if ((r.arbPct ?? 0) < minArbPct) return false;
+      
+      // Filter by min Poly volume
+      if (minPolyVol > 0 && (r.polyStats?.volume ?? 0) < minPolyVol) return false;
+      
+      // Filter by min OPN volume
+      if (minOpnVol > 0 && (r.opinionStats?.volume ?? 0) < minOpnVol) return false;
       
       // Filter by min shares at best bid/ask level
       // Both sides of the arbitrage trade must have at least minShares
@@ -508,11 +524,11 @@ export default function ArbitageBoard() {
         const polyYesLabel = r.prices?.polyYesLabel || "YES";
         const opYesLabel = r.prices?.opYesLabel || "YES";
         
-        // Poly side: if strategy line contains the "yes" label → polyYes size, else polyNo size
+        // Poly side: if strategy line contains the "yes" label â†’ polyYes size, else polyNo size
         if (polyLine.includes(polyYesLabel)) relevantSizes.push(r.sizes.polyYes);
         else relevantSizes.push(r.sizes.polyNo);
         
-        // Opinion side: if strategy line contains the "yes" label → opYes size, else opNo size
+        // Opinion side: if strategy line contains the "yes" label â†’ opYes size, else opNo size
         if (opLine.includes(opYesLabel)) relevantSizes.push(r.sizes.opYes);
         else relevantSizes.push(r.sizes.opNo);
         
@@ -525,7 +541,7 @@ export default function ArbitageBoard() {
       }
       return true;
     });
-  }, [displayRows, sortAsc, sortField, minArbPct, minShares]);
+  }, [displayRows, sortAsc, sortField, minArbPct, minShares, minPolyVol, minOpnVol]);
 
   // Apply bonus filter
   const filteredSorted = useMemo(() => {
@@ -576,7 +592,7 @@ export default function ArbitageBoard() {
   // Reset to first page whenever filtering/sorting mode changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [priceMode, scanMode, searchQuery, minArbPct, minShares, bonusOnly, sortField, sortAsc]);
+  }, [priceMode, scanMode, searchQuery, minArbPct, minShares, minPolyVol, minOpnVol, bonusOnly, sortField, sortAsc]);
 
   const paginatedRows = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -605,6 +621,14 @@ export default function ArbitageBoard() {
   const progressPct = progress?.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
   const showFullScanMatchedInTitle = scanMode === "full" && matchedMarketCount !== null && !loading;
 
+  // Count to display in TITLE badge: filtered count when searching, total when not
+  const titleBadgeCount = searchQuery.trim()
+    ? searchFilteredRows.length
+    : (matchedMarketCount ?? rows.length);
+  // Show badge when searching (always), or when we have loaded rows (any scan mode)
+  const hasData = !loading && (rows.length > 0 || matchedMarketCount !== null);
+  const showTitleBadge = (searchQuery.trim() && !loading) || hasData;
+
   return (
     <div className="arb-board" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {/* Header */}
@@ -629,7 +653,7 @@ export default function ArbitageBoard() {
               )}
             </div>
             {err ? (
-              <div style={{ marginTop: 8, fontSize: 12, fontWeight: 800, color: "rgba(255,120,120,0.95)" }}>⚠️ {err}</div>
+              <div style={{ marginTop: 8, fontSize: 12, fontWeight: 800, color: "rgba(255,120,120,0.95)" }}>âš ï¸ {err}</div>
             ) : null}
           </div>
 
@@ -767,6 +791,8 @@ export default function ArbitageBoard() {
             <div className="pill arb-min-arb-pill">
               Min Arb: <b>{minArbPct.toFixed(2)}%</b>
               {minShares > 0 && <> • Min: <b>{minShares}</b> shares</>}
+              {minPolyVol > 0 && <> • Poly Vol: <b>${minPolyVol.toLocaleString("en-US")}</b></>}
+              {minOpnVol > 0 && <> • OPN Vol: <b>${minOpnVol.toLocaleString("en-US")}</b></>}
             </div>
           </div>
         </div>
@@ -948,6 +974,66 @@ export default function ArbitageBoard() {
                   )}
                 </button>
               </div>
+
+              {/* Min Poly Volume */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label style={{ fontSize: 11, fontWeight: 800, color: "rgba(233,238,245,0.6)", height: 13 }}>
+                  MIN POLY VOLUME
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={minPolyVol > 0 ? minPolyVol.toLocaleString("en-US") : ""}
+                  placeholder="0"
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/[^0-9]/g, "");
+                    setMinPolyVol(raw ? Number(raw) : 0);
+                  }}
+                  style={{
+                    height: 38,
+                    width: 120,
+                    padding: "0 10px",
+                    borderRadius: 6,
+                    border: minPolyVol > 0 ? "1px solid rgba(96,165,250,0.5)" : "1px solid rgba(255,255,255,0.1)",
+                    background: minPolyVol > 0 ? "rgba(96,165,250,0.1)" : "rgba(0,0,0,0.2)",
+                    color: "rgba(233,238,245,0.9)",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    fontFamily: "inherit",
+                    outline: "none",
+                  }}
+                />
+              </div>
+
+              {/* Min OPN Volume */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label style={{ fontSize: 11, fontWeight: 800, color: "rgba(233,238,245,0.6)", height: 13 }}>
+                  MIN OPN VOLUME
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={minOpnVol > 0 ? minOpnVol.toLocaleString("en-US") : ""}
+                  placeholder="0"
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/[^0-9]/g, "");
+                    setMinOpnVol(raw ? Number(raw) : 0);
+                  }}
+                  style={{
+                    height: 38,
+                    width: 120,
+                    padding: "0 10px",
+                    borderRadius: 6,
+                    border: minOpnVol > 0 ? "1px solid rgba(249,115,22,0.5)" : "1px solid rgba(255,255,255,0.1)",
+                    background: minOpnVol > 0 ? "rgba(249,115,22,0.1)" : "rgba(0,0,0,0.2)",
+                    color: "rgba(233,238,245,0.9)",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    fontFamily: "inherit",
+                    outline: "none",
+                  }}
+                />
+              </div>
             </div>
             {/* Scan mode description - moved outside to avoid height mismatch */}
             <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(233,238,245,0.6)", marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
@@ -1038,58 +1124,138 @@ export default function ArbitageBoard() {
         </div>
       </div>
 
+      {/* Single panel wrapper for header + rows — guarantees separator alignment */}
+      <div className="panel" style={{ borderRadius: 14, overflow: "hidden" }}>
       {/* Table Header */}
       <div
-        className="panel arb-table-header"
+        className="arb-table-header"
         style={{
-          padding: "12px 14px",
+          padding: "10px 14px",
           display: "grid",
           gridTemplateColumns:
-            "var(--arbitrage-desktop-grid-columns, 1.25fr 0.65fr 0.42fr 0.28fr)",
-          gap: 14,
+            "var(--arbitrage-desktop-grid-columns, 1.1fr 0.45fr 0.42fr 0.42fr 0.55fr 0.32fr 0.24fr)",
+          gap: 10,
           alignItems: "center",
-          borderBottom: "2px solid rgba(255,255,255,0.06)",
+          borderBottom: "1px solid rgba(255,255,255,0.08)",
+          background: "rgba(255,255,255,0.02)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 900, color: "rgba(233,238,245,0.9)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 900, fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5, color: "rgba(233,238,245,0.9)" }}>
           <span>Title</span>
-          {showFullScanMatchedInTitle && (
+          {showTitleBadge && (
             <span
               style={{
                 padding: "2px 6px",
                 borderRadius: 4,
                 background: "rgba(255,255,255,0.1)",
-                fontSize: 14,
+                fontSize: 12,
                 fontWeight: 800,
                 lineHeight: 1.2,
+                textTransform: "none",
               }}
             >
-              {matchedMarketCount}
+              {titleBadgeCount}
             </span>
           )}
         </div>
-        <div style={{ fontWeight: 900, color: "rgba(233,238,245,0.9)" }}>Strategy</div>
+        <div style={{ fontWeight: 900, fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5, color: "rgba(233,238,245,0.9)", borderLeft: "1px solid rgba(255,255,255,0.10)", paddingLeft: 10 }}>Strategy</div>
         <div 
           style={{ 
             fontWeight: 900, 
-            color: sortField === "endDate" ? "rgba(255,180,50,1)" : "rgba(233,238,245,0.9)", 
-            textAlign: "left",
+            color: sortField === "polyVolume" ? "rgba(255,180,50,1)" : "rgba(96,165,250,0.95)", 
+            textAlign: "left", 
+            textTransform: "uppercase", 
+            fontSize: 13, 
+            letterSpacing: 0.5,
+            borderLeft: "1px solid rgba(255,255,255,0.10)",
+            paddingLeft: 10,
             cursor: "pointer",
             userSelect: "none",
+          }}
+          onClick={() => {
+            if (sortField === "polyVolume") {
+              setSortAsc((v) => !v);
+            } else {
+              setSortField("polyVolume");
+              setSortAsc(false); // Start with highest first
+            }
+          }}
+          title="Click to sort by Polymarket 24h volume"
+        >
+          <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start" }}>
+            Polymarket Stats
+            <ArbSortIcon active={sortField === "polyVolume"} direction={sortAsc} />
+          </span>
+        </div>
+        <div 
+          style={{ 
+            fontWeight: 900, 
+            color: sortField === "opinionVolume" ? "rgba(255,180,50,1)" : "rgba(249,115,22,1)", 
+            textAlign: "left", 
+            textTransform: "uppercase", 
+            fontSize: 13, 
+            letterSpacing: 0.5, 
+            borderLeft: "1px solid rgba(255,255,255,0.10)", 
+            paddingLeft: 10,
+            cursor: "pointer",
+            userSelect: "none",
+          }}
+          onClick={() => {
+            if (sortField === "opinionVolume") {
+              setSortAsc((v) => !v);
+            } else {
+              setSortField("opinionVolume");
+              setSortAsc(false); // Start with highest first
+            }
+          }}
+          title="Click to sort by Opinion 24h volume"
+        >
+          <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start" }}>
+            Opinion Stats
+            <ArbSortIcon active={sortField === "opinionVolume"} direction={sortAsc} />
+          </span>
+        </div>
+        <div 
+          style={{ 
+            fontWeight: 900, 
+            fontSize: 13,
+            textTransform: "uppercase",
+            letterSpacing: 0.5,
+            color: "rgba(233,238,245,0.9)", 
+            textAlign: "left",
             justifySelf: "start",
-            paddingLeft: 6,
+            borderLeft: "1px solid rgba(255,255,255,0.10)",
+            paddingLeft: 10,
+          }}
+        >
+          <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start" }}>
+            Order Book
+          </span>
+        </div>
+        <div 
+          style={{ 
+            fontWeight: 900, 
+            fontSize: 13,
+            textTransform: "uppercase",
+            letterSpacing: 0.5,
+            color: sortField === "endDate" ? "rgba(255,180,50,1)" : "rgba(233,238,245,0.9)", 
+            textAlign: "left",
+            borderLeft: "1px solid rgba(255,255,255,0.10)",
+            paddingLeft: 10,
+            cursor: "pointer",
+            userSelect: "none",
           }}
           onClick={() => {
             if (sortField === "endDate") {
               setSortAsc((v) => !v);
             } else {
               setSortField("endDate");
-              setSortAsc(true); // Start with soonest first
+              setSortAsc(true); // Soonest first
             }
           }}
           title="Click to sort by expiration date"
         >
-          <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start" }}>
+          <span style={{ display: "flex", alignItems: "center" }}>
             Expires
             <ArbSortIcon active={sortField === "endDate"} direction={sortAsc} />
           </span>
@@ -1097,6 +1263,9 @@ export default function ArbitageBoard() {
         <div 
           style={{ 
             fontWeight: 900, 
+            fontSize: 13,
+            textTransform: "uppercase",
+            letterSpacing: 0.5,
             color: sortField === "arbPct" ? "rgba(255,180,50,1)" : "rgba(233,238,245,0.9)", 
             textAlign: "right",
             cursor: "pointer",
@@ -1105,6 +1274,8 @@ export default function ArbitageBoard() {
             alignItems: "center",
             justifyContent: "flex-end",
             gap: 4,
+            borderLeft: "1px solid rgba(255,255,255,0.10)",
+            paddingLeft: 10,
           }}
           onClick={() => {
             if (sortField === "arbPct") {
@@ -1124,11 +1295,11 @@ export default function ArbitageBoard() {
       </div>
 
       {loading && sorted.length === 0 ? (
-        <SkeletonRows />
+        <SkeletonRows inPanel />
       ) : !hasScanned && sorted.length === 0 ? (
         /* User hasn't scanned yet - show prompt */
-        <div className="panel" style={{ padding: "60px 20px", textAlign: "center" }}>
-          <div style={{ fontSize: 42, marginBottom: 16, opacity: 0.4 }}>🔍</div>
+        <div style={{ padding: "60px 20px", textAlign: "center" }}>
+          <div style={{ fontSize: 42, marginBottom: 16, opacity: 0.4 }}>ðŸ”</div>
           <div style={{ fontSize: 15, fontWeight: 700, color: "rgba(233,238,245,0.85)", marginBottom: 8 }}>
             Press "<span style={{ color: "rgba(255,180,50,1)" }}>Scan Now</span>" to find Arbitrage Opportunities
           </div>
@@ -1137,13 +1308,13 @@ export default function ArbitageBoard() {
           </div>
         </div>
       ) : searchFilteredRows.length === 0 && !loading ? (
-        <div className="panel" style={{ padding: 14 }}>
+        <div style={{ padding: 14 }}>
           <div className="muted" style={{ fontSize: 13, fontWeight: 800 }}>
             {searchQuery.trim() 
               ? `No results found for "${searchQuery.trim()}"`
               : bonusOnly 
-                ? `No bonus markets with arbitrage ≥ ${minArbPct.toFixed(2)}% found.`
-                : `No arbitrage opportunities ≥ ${minArbPct.toFixed(2)}% found.`}
+                ? `No bonus markets with arbitrage â‰¥ ${minArbPct.toFixed(2)}% found.`
+                : `No arbitrage opportunities â‰¥ ${minArbPct.toFixed(2)}% found.`}
           </div>
           <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
             {searchQuery.trim()
@@ -1165,13 +1336,17 @@ export default function ArbitageBoard() {
             />
           ))}
           {loading && (
-            <div className="panel" style={{ padding: 14, textAlign: "center" }}>
+            <div style={{ padding: 14, textAlign: "center" }}>
               <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
                 Loading more opportunities...
               </div>
             </div>
           )}
-          {searchFilteredRows.length > itemsPerPage && (
+        </>
+      )}
+      </div>{/* end single panel wrapper */}
+
+      {searchFilteredRows.length > itemsPerPage && (
             <div style={{ display: "flex", justifyContent: "center", marginTop: 8, paddingBottom: 16 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
                 <PagerButton
@@ -1242,8 +1417,6 @@ export default function ArbitageBoard() {
               </div>
             </div>
           )}
-        </>
-      )}
       
       {/* Calculator Modal */}
       {calculatorRow && (
@@ -1283,17 +1456,326 @@ function PagerButton({ children, onClick, disabled, active }) {
   );
 }
 
+/* ========================================
+   MiniOrderbook — compact 3-ask + 3-bid view
+   Shown inline in each arbitrage row.
+   User can toggle between Poly and Opinion side.
+   Only shows the BUY side relevant to the strategy:
+     e.g. strategy = "Buy YES (Poly), Buy NO (Opinion)"
+     â†’ Poly shows YES orderbook, Opinion shows NO orderbook
+======================================== */
+function MiniOrderbook({ row, priceMode }) {
+  const [platform, setPlatform] = useState("opinion"); // "poly" or "opinion"
+  const [ob, setOb] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Determine which token to show based on strategy
+  // Strategy lines: ["Buy YES (Poly)", "Buy NO (Opinion)"] or similar
+  const strategyLines = row.strategy ?? [];
+  const polyLine = strategyLines[0] || "";
+  const opLine = strategyLines[1] || "";
+
+  // Determine which side is bought on each platform
+  // e.g. "Buy NO (Poly)" â†’ poly buys NO â†’ show poly NO orderbook
+  const polyBuysYes = /buy\s+yes/i.test(polyLine) || (/buy/i.test(polyLine) && !/no/i.test(polyLine));
+  const opBuysYes = /buy\s+yes/i.test(opLine) || (/buy/i.test(opLine) && !/no/i.test(opLine));
+
+  // Memoize token IDs to prevent infinite re-render loop
+  const rawIds = row.tokenIds || null;
+  const debugPoly = row.debug?.polyTokens || null;
+  const debugOp = row.debug?.opTokens || null;
+
+  const polyYesTid = rawIds?.polyYes || debugPoly?.yesTokenId || null;
+  const polyNoTid = rawIds?.polyNo || debugPoly?.noTokenId || null;
+  const opYesTid = rawIds?.opYes || debugOp?.yes || null;
+  const opNoTid = rawIds?.opNo || debugOp?.no || null;
+
+  const hasTokenIds = Boolean(polyYesTid && polyNoTid && opYesTid && opNoTid);
+
+  // Derive the specific token ID to fetch based on platform + strategy side
+  const activeTokenId = useMemo(() => {
+    if (!hasTokenIds) return null;
+    if (platform === "poly") {
+      return polyBuysYes ? polyYesTid : polyNoTid;
+    } else {
+      return opBuysYes ? opYesTid : opNoTid;
+    }
+  }, [platform, polyBuysYes, opBuysYes, polyYesTid, polyNoTid, opYesTid, opNoTid, hasTokenIds]);
+
+  const sideLabel = platform === "poly"
+    ? (polyBuysYes ? (row.prices?.polyYesLabel || "YES") : (row.prices?.polyNoLabel || "NO"))
+    : (opBuysYes ? (row.prices?.opYesLabel || "YES") : (row.prices?.opNoLabel || "NO"));
+
+  // Fetch orderbook when expanded, platform changes, or refresh triggered
+  useEffect(() => {
+    if (!expanded || !activeTokenId) return;
+
+    let cancelled = false;
+    setLoading(true);
+
+    fetch(`/api/arbitage/orderbook?platform=${platform}&token_id=${encodeURIComponent(activeTokenId)}&t=${refreshKey}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.ok) {
+          setOb(data);
+        } else {
+          setOb(null);
+        }
+      })
+      .catch(() => { if (!cancelled) setOb(null); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+
+    return () => { cancelled = true; };
+  }, [expanded, platform, activeTokenId, refreshKey]);
+
+  if (!hasTokenIds) {
+    return <div className="muted" style={{ fontSize: 11 }}>No data</div>;
+  }
+
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        style={{
+          padding: "6px 10px",
+          fontSize: 11,
+          fontWeight: 700,
+          background: "rgba(255,255,255,0.06)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 6,
+          color: "rgba(233,238,245,0.8)",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          gap: 5,
+        }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <line x1="3" y1="9" x2="21" y2="9" />
+          <line x1="3" y1="15" x2="21" y2="15" />
+          <line x1="9" y1="3" x2="9" y2="21" />
+        </svg>
+        View Order Book
+      </button>
+    );
+  }
+
+  const asks = (ob?.asks || []).slice(0, 3);
+  const bids = (ob?.bids || []).slice(0, 3);
+
+  // For depth bars: find max shares for normalization
+  const allEntries = [...asks, ...bids];
+  const maxShares = Math.max(...allEntries.map((e) => e.shares || 0), 1);
+
+  const fmtCentsOb = (price) => {
+    const cents = price * 100;
+    const s = cents.toFixed(1).replace(/\.0$/, "");
+    return `${s}¢`;
+  };
+  const fmtSharesOb = (n) => {
+    if (!n || n === 0) return "0";
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+    return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  };
+  const fmtTotal = (t) => {
+    if (!t || t === 0) return "$0";
+    return `$${t.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+      {/* Platform toggle */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 2 }}>
+        <button
+          type="button"
+          onClick={() => setPlatform("poly")}
+          style={{
+            padding: "3px 8px",
+            fontSize: 10,
+            fontWeight: 800,
+            borderRadius: 4,
+            border: "none",
+            cursor: "pointer",
+            background: platform === "poly" ? "rgba(96,165,250,0.25)" : "rgba(255,255,255,0.06)",
+            color: platform === "poly" ? "rgba(96,165,250,1)" : "rgba(233,238,245,0.6)",
+          }}
+        >
+          Poly
+        </button>
+        <button
+          type="button"
+          onClick={() => setPlatform("opinion")}
+          style={{
+            padding: "3px 8px",
+            fontSize: 10,
+            fontWeight: 800,
+            borderRadius: 4,
+            border: "none",
+            cursor: "pointer",
+            background: platform === "opinion" ? "rgba(249,115,22,0.25)" : "rgba(255,255,255,0.06)",
+            color: platform === "opinion" ? "rgba(249,115,22,1)" : "rgba(233,238,245,0.6)",
+          }}
+        >
+          Opinion
+        </button>
+        <button
+          type="button"
+          onClick={() => setRefreshKey((k) => k + 1)}
+          disabled={loading}
+          aria-label="Refresh orderbook"
+          title="Refresh orderbook"
+          style={{
+            width: 22,
+            height: 22,
+            padding: 0,
+            borderRadius: 4,
+            border: "none",
+            cursor: loading ? "not-allowed" : "pointer",
+            background: "rgba(255,255,255,0.06)",
+            color: "rgba(233,238,245,0.6)",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            opacity: loading ? 0.5 : 0.8,
+            transition: "opacity 0.15s",
+            flexShrink: 0,
+          }}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ animation: loading ? "spin 1s linear infinite" : "none" }}
+          >
+            <path d="M23 4v6h-6" />
+            <path d="M1 20v-6h6" />
+            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+          </svg>
+        </button>
+        <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(233,238,245,0.5)", marginLeft: "auto", alignSelf: "center" }}>
+          {sideLabel}
+        </span>
+      </div>
+
+      {loading && !ob ? (
+        <div style={{ padding: "8px 0" }}>
+          <div className="skeleton skeleton-text" style={{ width: "90%", height: 10, marginBottom: 4 }} />
+          <div className="skeleton skeleton-text" style={{ width: "80%", height: 10, marginBottom: 4 }} />
+          <div className="skeleton skeleton-text" style={{ width: "85%", height: 10 }} />
+        </div>
+      ) : !ob ? (
+        <div className="muted" style={{ fontSize: 10 }}>Failed to load</div>
+      ) : (
+        <div style={{ fontSize: 11, lineHeight: 1.1, opacity: loading ? 0.45 : 1, transition: "opacity 0.15s ease", pointerEvents: loading ? "none" : "auto" }}>
+          {/* Asks (reversed so lowest ask at bottom, closest to spread) */}
+          {asks.length > 0 && (
+            <div style={{ marginBottom: 3 }}>
+              {[...asks].reverse().map((ask, i) => (
+                <div
+                  key={`ask-${i}`}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr 1fr",
+                    gap: 4,
+                    padding: "3px 4px",
+                    borderRadius: 3,
+                    position: "relative",
+                    marginBottom: 1,
+                  }}
+                >
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      bottom: 0,
+                      width: `${Math.min(100, (ask.shares / maxShares) * 100)}%`,
+                      background: "rgba(239,68,68,0.2)",
+                      borderRadius: 3,
+                      transition: "width 0.2s ease",
+                    }}
+                  />
+                  <span style={{ fontWeight: 800, color: "rgba(239,68,68,0.9)", position: "relative", zIndex: 1 }}>{fmtCentsOb(ask.price)}</span>
+                  <span style={{ color: "rgba(233,238,245,0.7)", position: "relative", zIndex: 1, textAlign: "center" }}>{fmtSharesOb(ask.shares)}</span>
+                  <span style={{ color: "rgba(233,238,245,0.5)", position: "relative", zIndex: 1, textAlign: "right" }}>{fmtTotal(ask.total)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Thin separator between asks and bids */}
+          {asks.length > 0 && bids.length > 0 && (
+            <div style={{ height: 1, background: "rgba(255,255,255,0.08)", marginBottom: 3 }} />
+          )}
+
+          {/* Bids */}
+          {bids.length > 0 && (
+            <div>
+              {bids.map((bid, i) => (
+                <div
+                  key={`bid-${i}`}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr 1fr",
+                    gap: 4,
+                    padding: "3px 4px",
+                    borderRadius: 3,
+                    position: "relative",
+                    marginBottom: 1,
+                  }}
+                >
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      bottom: 0,
+                      width: `${Math.min(100, (bid.shares / maxShares) * 100)}%`,
+                      background: "rgba(34,197,94,0.18)",
+                      borderRadius: 3,
+                      transition: "width 0.2s ease",
+                    }}
+                  />
+                  <span style={{ fontWeight: 800, color: "rgba(34,197,94,0.9)", position: "relative", zIndex: 1 }}>{fmtCentsOb(bid.price)}</span>
+                  <span style={{ color: "rgba(233,238,245,0.7)", position: "relative", zIndex: 1, textAlign: "center" }}>{fmtSharesOb(bid.shares)}</span>
+                  <span style={{ color: "rgba(233,238,245,0.5)", position: "relative", zIndex: 1, textAlign: "right" }}>{fmtTotal(bid.total)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {asks.length === 0 && bids.length === 0 && (
+            <div className="muted" style={{ fontSize: 10 }}>Please try again later</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Row({ r, priceMode, isBonus, onCalculatorClick }) {
   return (
     <div
-      className="panel arb-row"
+      className="arb-row"
       style={{
-        padding: 12,
+        padding: "10px 14px",
         display: "grid",
         gridTemplateColumns:
-          "var(--arbitrage-desktop-grid-columns, 1.25fr 0.65fr 0.42fr 0.28fr)",
-        gap: 14,
+          "var(--arbitrage-desktop-grid-columns, 1.1fr 0.45fr 0.42fr 0.42fr 0.55fr 0.32fr 0.24fr)",
+        gap: 10,
         alignItems: "stretch",
+        borderTop: "1px solid rgba(255,255,255,0.06)",
       }}
     >
       {/* Title col */}
@@ -1354,7 +1836,7 @@ function Row({ r, priceMode, isBonus, onCalculatorClick }) {
           <div className="arb-row-strategy-mobile" style={{ display: "none", flexDirection: "row", gap: 12, marginTop: 8 }}>
             {(r.strategy ?? []).slice(0, 2).map((line, idx) => (
               <div key={idx} style={{ fontSize: 12, fontWeight: 700, color: "rgb(255, 255, 255)", whiteSpace: "nowrap" }}>
-                {line}
+                {line.replace(/\(Opinion\)/gi, "(OPN)")}
               </div>
             ))}
           </div>
@@ -1362,39 +1844,105 @@ function Row({ r, priceMode, isBonus, onCalculatorClick }) {
       </div>
 
       {/* Strat col */}
-      <div className="arb-row-strategy" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {(r.strategy ?? []).slice(0, 6).map((line, idx) => (
-          <div key={idx} style={{ fontSize: 14, fontWeight: 900 }}>
-            {line}
-          </div>
-        ))}
-        {/* Price details */}
-        {r.prices && (
-          <div className="arb-row-prices" style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
-            <div className="muted" style={{ fontSize: 11, fontWeight: 700 }}>
-              {r.prices.polyTag || "Poly"}: {r.prices.polyYesLabel || "YES"} {formatCents(r.prices.polyYes)} · {r.prices.polyNoLabel || "NO"} {formatCents(r.prices.polyNo)}
-            </div>
-            <div className="muted" style={{ fontSize: 11, fontWeight: 700 }}>
-              {r.prices.opTag || "Opinion"}: {r.prices.opYesLabel || "YES"} {formatCents(r.prices.opYes)} · {r.prices.opNoLabel || "NO"} {formatCents(r.prices.opNo)}
-            </div>
-          </div>
-        )}
-        {(r.strategy ?? []).length > 6 ? (
-          <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
-            +{(r.strategy ?? []).length - 6} more…
-          </div>
-        ) : null}
+      <div className="arb-row-strategy" style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 4, borderLeft: "1px solid rgba(255,255,255,0.10)", paddingLeft: 10 }}>
+        {(() => {
+          const lines = (r.strategy ?? []).slice(0, 2);
+          // Parse which price applies to each strategy line
+          const getPriceForLine = (line) => {
+            if (!r.prices) return null;
+            const isPolyLine = /\(Poly\)/i.test(line);
+            const polyYL = r.prices.polyYesLabel || "YES";
+            const polyNL = r.prices.polyNoLabel || "NO";
+            const opYL = r.prices.opYesLabel || "YES";
+            const opNL = r.prices.opNoLabel || "NO";
+            if (isPolyLine) {
+              if (line.includes(polyYL) && !line.includes(polyNL)) return r.prices.polyYes;
+              if (line.includes(polyNL)) return r.prices.polyNo;
+              return /buy\s+yes/i.test(line) ? r.prices.polyYes : r.prices.polyNo;
+            } else {
+              if (line.includes(opYL) && !line.includes(opNL)) return r.prices.opYes;
+              if (line.includes(opNL)) return r.prices.opNo;
+              return /buy\s+yes/i.test(line) ? r.prices.opYes : r.prices.opNo;
+            }
+          };
+          const price1 = getPriceForLine(lines[0] || "");
+          const price2 = getPriceForLine(lines[1] || "");
+          const cost = (price1 != null && price2 != null) ? price1 + price2 : null;
+          const profit = cost != null ? 100 - cost : null;
+          const fmtC = (v) => v != null ? `${Number(v).toFixed(1).replace(/\.0$/, '')}\u00a2` : '';
+          return (
+            <>
+              {lines.map((line, idx) => {
+                const p = idx === 0 ? price1 : price2;
+                return (
+                  <div key={idx} style={{ fontSize: 13, fontWeight: 900 }}>
+                    {line.replace(/\(Opinion\)/gi, "(OPN)")}
+                    {p != null && <span className="muted" style={{ fontWeight: 700 }}> - {fmtC(p)}</span>}
+                  </div>
+                );
+              })}
+              {cost != null && (
+                <div style={{ marginTop: 2 }}>
+                  <div className="muted" style={{ fontSize: 12, fontWeight: 700 }}>
+                    {fmtC(price1)} + {fmtC(price2)} = {fmtC(cost)} ({cost < 100 ? '<' : '\u2265'}{"100\u00a2"})
+                  </div>
+                  {profit != null && profit > 0 && (
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "rgba(80,200,120,0.95)" }}>
+                      {"100\u00a2"} - {fmtC(cost)} = {fmtC(profit)} (${(profit / 100).toFixed(3)}) per share ({profit.toFixed(1).replace(/\.0$/, '')}%)
+                    </div>
+                  )}
+                </div>
+              )}
+              {(r.strategy ?? []).length > 2 && (
+                <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
+                  +{(r.strategy ?? []).length - 2} more...
+                </div>
+              )}
+            </>
+          );
+        })()}
       </div>
 
-      {/* Expires col */}
-      <div className="arb-row-expires" style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", justifyContent: "center", justifySelf: "start", width: "100%", paddingLeft: 6 }}>
-        <div style={{ fontSize: 16, fontWeight: 900, color: "rgba(233,238,245,0.85)" }}>
-          {formatExpires(r.endDate)}
+      {/* Polymarket Stats col */}
+      <div className="arb-row-poly-stats" style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, padding: "2px 0", borderLeft: "1px solid rgba(255,255,255,0.10)", paddingLeft: 10 }}>
+        <div style={{ display: "flex", gap: 32 }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "rgba(148,163,184,0.7)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>24H Volume</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(96,165,250,0.95)" }}>{formatDollarFull(r.polyStats?.volume)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "rgba(148,163,184,0.7)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>Liquidity</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(96,165,250,0.95)" }}>{formatDollarFull(r.polyStats?.liquidity)}</div>
+          </div>
         </div>
       </div>
 
+      {/* Opinion Stats col */}
+      <div className="arb-row-opinion-stats" style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, padding: "2px 0", borderLeft: "1px solid rgba(255,255,255,0.10)", paddingLeft: 10 }}>
+        <div style={{ display: "flex", gap: 35 }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "rgba(148,163,184,0.7)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>24H Volume</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(249,115,22,1)" }}>{formatDollarFull(r.opinionStats?.volume)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "rgba(148,163,184,0.7)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>Liquidity</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(249,115,22,1)" }}>{formatDollarFull(r.opinionStats?.liquidity)}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Order Book col */}
+      <div className="arb-row-orderbook" style={{ display: "flex", flexDirection: "column", justifyContent: "center", borderLeft: "1px solid rgba(255,255,255,0.10)", paddingLeft: 10, minWidth: 0 }}>
+        <MiniOrderbook row={r} priceMode={priceMode} />
+      </div>
+
+      {/* Expires col */}
+      <div className="arb-row-expires" style={{ display: "flex", flexDirection: "column", justifyContent: "center", borderLeft: "1px solid rgba(255,255,255,0.10)", paddingLeft: 10 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: "rgba(233,238,245,0.75)" }}>{formatExpires(r.endDate)}</div>
+      </div>
+
       {/* Arb col */}
-      <div className="arb-row-arb" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "center", margin: 0 }}>
+      <div className="arb-row-arb" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "center", margin: 0, borderLeft: "1px solid rgba(255,255,255,0.10)", paddingLeft: 10 }}>
         <div className="arb-row-pct-wrapper" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
           <div className="arb-row-pct" style={{ fontSize: 24, fontWeight: 1000, color: (r.arbPct ?? 0) > 0 ? "rgba(80,200,120,1)" : "rgba(233,238,245,0.85)" }}>{formatPct(r.arbPct)}</div>
           <div className="muted" style={{ fontSize: 12, fontWeight: 700, marginTop: 4 }}>
@@ -1531,13 +2079,13 @@ function SkeletonRows() {
       {Array.from({ length: 3 }).map((_, i) => (
         <div
           key={i}
-          className="panel"
           style={{
-            padding: 12,
+            padding: "10px 14px",
             display: "grid",
-            gridTemplateColumns: "1.25fr 0.75fr 0.35fr",
-            gap: 14,
+            gridTemplateColumns: "var(--arbitrage-desktop-grid-columns, 1.1fr 0.45fr 0.42fr 0.42fr 0.55fr 0.32fr 0.24fr)",
+            gap: 10,
             alignItems: "stretch",
+            borderTop: "1px solid rgba(255,255,255,0.06)",
           }}
         >
           <div style={{ display: "flex", gap: 12 }}>
@@ -1551,6 +2099,23 @@ function SkeletonRows() {
           <div>
             <div className="skeleton skeleton-text" style={{ width: "55%", height: 12, marginTop: 6 }} />
             <div className="skeleton skeleton-text" style={{ width: "45%", height: 12, marginTop: 10 }} />
+          </div>
+          <div style={{ display: "flex", gap: 16 }}>
+            <div className="skeleton skeleton-text" style={{ width: 50, height: 12, marginTop: 6 }} />
+            <div className="skeleton skeleton-text" style={{ width: 50, height: 12, marginTop: 6 }} />
+          </div>
+          <div style={{ display: "flex", gap: 16 }}>
+            <div className="skeleton skeleton-text" style={{ width: 50, height: 12, marginTop: 6 }} />
+            <div className="skeleton skeleton-text" style={{ width: 50, height: 12, marginTop: 6 }} />
+          </div>
+          <div>
+            <div className="skeleton skeleton-text" style={{ width: "60%", height: 10, marginTop: 6 }} />
+            <div className="skeleton skeleton-text" style={{ width: "80%", height: 10, marginTop: 4 }} />
+            <div className="skeleton skeleton-text" style={{ width: "70%", height: 10, marginTop: 4 }} />
+            <div className="skeleton skeleton-text" style={{ width: "50%", height: 10, marginTop: 4 }} />
+          </div>
+          <div>
+            <div className="skeleton skeleton-text" style={{ width: "70%", height: 12, marginTop: 6 }} />
           </div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "center" }}>
             <div className="skeleton skeleton-text" style={{ width: 70, height: 20 }} />
@@ -1594,4 +2159,11 @@ function formatShares(x) {
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
   if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
   return num.toFixed(0);
+}
+
+function formatDollarFull(x) {
+  if (x === null || x === undefined || Number.isNaN(x) || !Number.isFinite(Number(x))) return "--";
+  const num = Number(x);
+  if (num === 0) return "--";
+  return `$${num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }

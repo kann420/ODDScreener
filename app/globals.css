@@ -37,7 +37,7 @@
   --market-desktop-grid-columns: minmax(280px, 1.8fr) 140px 100px 120px 100px 120px;
   --market-desktop-grid-gap: 12px;
   --smart-money-desktop-grid-columns: 120px 140px minmax(0, 1fr) 140px 90px;
-  --arbitrage-desktop-grid-columns: 1.25fr 0.65fr 0.42fr 0.28fr;
+  --arbitrage-desktop-grid-columns: 1.1fr 0.45fr 0.42fr 0.42fr 0.55fr 0.26fr 0.22fr;
 }
 
 /* ===== LIGHT MODE ===== */
@@ -584,7 +584,63 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
     --market-desktop-grid-columns: minmax(480px, 2.2fr) 160px 130px 170px 140px 150px;
     --market-desktop-grid-gap: 14px;
     --smart-money-desktop-grid-columns: 150px 190px minmax(0, 1fr) 190px 122px;
-    --arbitrage-desktop-grid-columns: 1.44fr 0.75fr 0.49fr 0.33fr;
+    --arbitrage-desktop-grid-columns: 1.2fr 0.52fr 0.48fr 0.48fr 0.65fr 0.28fr 0.24fr;
+  }
+}
+
+/* 1080p–1799px: tighter stats fonts to reduce clutter */
+@media (min-width: 1280px) and (max-width: 1799px) {
+  .arb-row-poly-stats div > div > div:first-child,
+  .arb-row-opinion-stats div > div > div:first-child {
+    font-size: 10px !important;
+  }
+  .arb-row-poly-stats div > div > div:last-child,
+  .arb-row-opinion-stats div > div > div:last-child {
+    font-size: 14px !important;
+  }
+}
+
+/* ── Arbitrage thumbnail hover animation (triggers on full row hover) ── */
+.arb-row-img-inner {
+  will-change: transform;
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
+}
+.arb-row:hover .arb-row-img-inner {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+.arb-row-img-inner img {
+  transition: transform 0.22s ease, opacity 0.22s ease;
+}
+.arb-row:hover .arb-row-img-inner img {
+  transform: scale(1.07);
+  opacity: 0.9;
+}
+
+/* 2K+ monitors (27" 2560px): larger fonts for arbitrage columns */
+@media (min-width: 2400px) {
+  :root {
+    --arbitrage-desktop-grid-columns: 1.2fr 0.52fr 0.5fr 0.5fr 0.7fr 0.38fr 0.3fr;
+  }
+  .arb-row-strategy > div {
+    font-size: 15px !important;
+  }
+  .arb-row-poly-stats div > div > div:first-child,
+  .arb-row-opinion-stats div > div > div:first-child {
+    font-size: 11px !important;
+  }
+  .arb-row-poly-stats div > div > div:last-child,
+  .arb-row-opinion-stats div > div > div:last-child {
+    font-size: 15px !important;
+  }
+  .arb-row-expires div {
+    font-size: 14px !important;
+  }
+  .arb-row-pct {
+    font-size: 28px !important;
+  }
+  .arb-table-header > div {
+    font-size: 14px !important;
   }
 }
 
@@ -1090,19 +1146,85 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
 .market-pagination {
   display: flex;
   justify-content: center;
-  gap: 12px;
+  align-items: center;
+  gap: 8px;
   margin-top: 16px;
+  flex-wrap: wrap;
 }
 
-@media (max-width: 480px) {
-  .market-pagination {
-    gap: 8px;
+/* Pager button (shared style matching Smart Money) */
+.market-pager-btn {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.18);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 800;
+  opacity: 0.95;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 13px;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+.market-pager-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,.10);
+}
+.market-pager-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.market-pager-btn.active {
+  background: rgba(255,255,255,.14);
+  font-weight: 900;
+}
+
+/* Numbered pages container */
+.market-pager-numbers {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.market-pager-ellipsis {
+  opacity: 0.6;
+  font-size: 12px;
+  user-select: none;
+}
+
+/* Mobile: hide numbered pages, show simple label */
+.market-pager-mobile-label {
+  display: none;
+  font-size: 13px;
+  padding-top: 0;
+}
+
+/* Desktop: show Prev/Next text labels */
+.market-pager-label {
+  display: inline;
+}
+
+@media (max-width: 768px) {
+  /* Hide numbered page buttons on mobile */
+  .market-pager-numbers {
+    display: none;
   }
-  .market-pagination .btn {
-    padding: 12px 18px;
+  /* Show simple Page X / Y on mobile */
+  .market-pager-mobile-label {
+    display: block;
+  }
+  /* Hide Prev/Next text on mobile, keep arrows only */
+  .market-pager-label {
+    display: none;
+  }
+  .market-pager-btn {
     min-height: 44px;
     min-width: 44px;
-    font-size: 14px;
+    padding: 8px 12px;
   }
 }
 
@@ -2432,6 +2554,7 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
     padding: 14px !important;
     gap: 12px !important;
     background: rgba(0,0,0,0.25);
+    border: 1px solid var(--border);
     border-radius: 12px !important;
     margin-bottom: 8px;
   }
@@ -2505,9 +2628,19 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
     margin-top: 0.1px !important;
   }
   
-  /* Expires - inline with arb */
+  /* Hide stats columns on mobile */
+  .arb-row-poly-stats,
+  .arb-row-opinion-stats {
+    display: none !important;
+  }
+  
+  /* Orderbook - hide on mobile */
+  .arb-row-orderbook {
+    display: none !important;
+  }
+
+  /* Expires - hide on mobile */
   .arb-row-expires {
-    order: 2;
     display: none !important;
   }
   

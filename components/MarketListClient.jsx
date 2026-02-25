@@ -908,6 +908,19 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
   // ===== pagination =====
   const totalPages = Math.ceil((sortedMarkets.length || 0) / ITEMS_PER_PAGE);
 
+  // Page number window (compact around current) - for desktop pager
+  const pageNums = useMemo(() => {
+    const max = totalPages;
+    const cur = currentPage;
+    const windowSize = 7;
+    let start = Math.max(1, cur - Math.floor(windowSize / 2));
+    let end = Math.min(max, start + windowSize - 1);
+    start = Math.max(1, end - windowSize + 1);
+    const arr = [];
+    for (let i = start; i <= end; i++) arr.push(i);
+    return arr;
+  }, [currentPage, totalPages]);
+
   const pageList = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
     return sortedMarkets.slice(start, start + ITEMS_PER_PAGE);
@@ -1323,61 +1336,53 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="market-pagination">
+          {/* Prev button */}
           <button
-            className="btn ghost"
+            className="market-pager-btn"
             onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={currentPage === 1}
-            style={{ 
-              opacity: currentPage === 1 ? 0.4 : 1,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "8px 12px",
-            }}
             aria-label="Previous page"
           >
-            <svg 
-              width="16" 
-              height="16" 
-              viewBox="0 0 24 24" 
-              fill="none" 
-              stroke="currentColor" 
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polyline points="15,18 9,12 15,6" />
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M15 18l-6-6 6-6" />
             </svg>
+            <span className="market-pager-label">Prev</span>
           </button>
 
-          <div className="muted" style={{ paddingTop: 8, fontSize: 13 }}>
+          {/* Numbered page buttons (desktop only) */}
+          <div className="market-pager-numbers">
+            {pageNums[0] > 1 && (
+              <>
+                <button className={`market-pager-btn${currentPage === 1 ? " active" : ""}`} onClick={() => setCurrentPage(1)}>1</button>
+                {pageNums[0] > 2 && <span className="market-pager-ellipsis">…</span>}
+              </>
+            )}
+            {pageNums.map((p) => (
+              <button key={p} className={`market-pager-btn${p === currentPage ? " active" : ""}`} onClick={() => setCurrentPage(p)}>{p}</button>
+            ))}
+            {pageNums[pageNums.length - 1] < totalPages && (
+              <>
+                {pageNums[pageNums.length - 1] < totalPages - 1 && <span className="market-pager-ellipsis">…</span>}
+                <button className={`market-pager-btn${currentPage === totalPages ? " active" : ""}`} onClick={() => setCurrentPage(totalPages)}>{totalPages}</button>
+              </>
+            )}
+          </div>
+
+          {/* Simple "Page X / Y" for mobile only */}
+          <div className="market-pager-mobile-label muted">
             Page {currentPage} / {totalPages}
           </div>
 
+          {/* Next button */}
           <button
-            className="btn ghost"
+            className="market-pager-btn"
             onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
             disabled={currentPage === totalPages}
-            style={{ 
-              opacity: currentPage === totalPages ? 0.4 : 1,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "8px 12px",
-            }}
             aria-label="Next page"
           >
-            <svg 
-              width="16" 
-              height="16" 
-              viewBox="0 0 24 24" 
-              fill="none" 
-              stroke="currentColor" 
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polyline points="9,18 15,12 9,6" />
+            <span className="market-pager-label">Next</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 18l6-6-6-6" />
             </svg>
           </button>
         </div>
