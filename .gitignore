@@ -25,13 +25,14 @@ data/
 *.sqlite-wal
 *.sqlite-shm
 
-# Debug and test files - don't commit
+# Debug, test, and data dump files - NEVER commit
 debug_*.json
 debug-*.js
+debug*.json
 test-*.js
 poly_*.json
 poly_*.txt
-server.log
+*.log
 
 # Generated reports - local only
 reports/
