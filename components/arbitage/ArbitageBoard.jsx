@@ -1299,7 +1299,7 @@ export default function ArbitageBoard() {
       ) : !hasScanned && sorted.length === 0 ? (
         /* User hasn't scanned yet - show prompt */
         <div style={{ padding: "60px 20px", textAlign: "center" }}>
-          <div style={{ fontSize: 42, marginBottom: 16, opacity: 0.4 }}>ðŸ”</div>
+          <div style={{ marginBottom: 16, opacity: 0.4 }}><svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg></div>
           <div style={{ fontSize: 15, fontWeight: 700, color: "rgba(233,238,245,0.85)", marginBottom: 8 }}>
             Press "<span style={{ color: "rgba(255,180,50,1)" }}>Scan Now</span>" to find Arbitrage Opportunities
           </div>
@@ -1313,15 +1313,15 @@ export default function ArbitageBoard() {
             {searchQuery.trim() 
               ? `No results found for "${searchQuery.trim()}"`
               : bonusOnly 
-                ? `No bonus markets with arbitrage â‰¥ ${minArbPct.toFixed(2)}% found.`
-                : `No arbitrage opportunities â‰¥ ${minArbPct.toFixed(2)}% found.`}
+                ? `No bonus markets with arbitrage ≥ ${minArbPct.toFixed(2)}% found.`
+                : `No arbitrage opportunities ≥ ${minArbPct.toFixed(2)}% found.`}
           </div>
           <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
             {searchQuery.trim()
               ? "Try a different search term or clear the search."
               : bonusOnly 
                 ? "Try disabling the bonus filter or adjusting other filters."
-                : "Try checking back later, adjust filters, or switch between Bids/Asks mode."}
+                : "Try scanning again, or adjust your filters."}
           </div>
         </div>
       ) : (

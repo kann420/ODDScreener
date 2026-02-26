@@ -1,22 +1,23 @@
 import OrderbookView from "@/components/OrderbookView";
 import { opinionFetch } from "@/lib/opinion";
 import { analyticsFetch } from "@/lib/opinionAnalytics";
+import { mapWithConcurrency, opinionRateLimiter } from "@/lib/concurrency";
 
 export const dynamic = "force-dynamic";
 
 // ============ CHILD → PARENT CACHE ============
 // In-memory cache that maps childMarketId → { parentId, parentTitle, parentRules }
-// Built once, refreshed every 5 minutes. Shared across all requests.
-const _parentCache = {
+// Built once, refreshed every 10 minutes. Shared across all requests.
+const _parentCache = globalThis.__PARENT_CHILD_CACHE__ ?? (globalThis.__PARENT_CHILD_CACHE__ = {
   map: null,        // Map<string, { parentId, parentTitle, parentRules }>
   builtAt: 0,
   building: null,   // Promise while building (dedup concurrent requests)
-  TTL: 5 * 60 * 1000, // 5 minutes
-};
+  TTL: 10 * 60 * 1000, // 10 minutes (increased from 5 – parent/child mapping rarely changes)
+});
+if (!globalThis.__PARENT_CHILD_CACHE__) globalThis.__PARENT_CHILD_CACHE__ = _parentCache;
 
 /**
- * Build the full child→parent mapping by fetching all categorical parents
- * and their children in parallel batches. ~9s cold, instant on cache hit.
+ * Build the full child→parent mapping using rate-limited concurrency.
  */
 async function _buildParentMap() {
   const PAGE_SIZE = 20;
@@ -38,30 +39,30 @@ async function _buildParentMap() {
     }
   }
 
-  // Step 2: fetch categorical details in parallel batches
+  // Step 2: fetch categorical details with rate-limited concurrency
   const map = new Map();
-  const BATCH = 50;
-  for (let i = 0; i < parentIds.length; i += BATCH) {
-    const batch = parentIds.slice(i, i + BATCH);
-    const results = await Promise.allSettled(
-      batch.map((pid) => opinionFetch(`/market/categorical/${pid}`))
-    );
-    for (let j = 0; j < results.length; j++) {
-      if (results[j].status !== "fulfilled") continue;
-      const pd = results[j].value?.result?.data;
-      if (!pd) continue;
+  
+  await mapWithConcurrency(parentIds, async (pid) => {
+    try {
+      const detail = await opinionRateLimiter.run(() =>
+        opinionFetch(`/market/categorical/${pid}`)
+      );
+      const pd = detail?.result?.data;
+      if (!pd) return;
       const children = pd.childMarkets || [];
       const parentTitle = pd.marketTitle || pd.tittle || pd.title || "";
       const parentRules = pd.rules || pd.description || pd.marketRules || pd.resolutionRules || "";
       for (const c of children) {
         map.set(String(c.marketId), {
-          parentId: batch[j],
+          parentId: pid,
           parentTitle,
           parentRules,
         });
       }
+    } catch {
+      // ignore individual failures
     }
-  }
+  }, { concurrency: 10 });
 
   console.log(`[ParentCache] Built: ${parentIds.length} parents → ${map.size} children`);
   return map;

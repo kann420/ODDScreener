@@ -620,7 +620,7 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
     };
 
     load();
-    t = setInterval(tick, 5000);
+    t = setInterval(tick, 15000);
 
     const onVis = () => {
       if (document.visibilityState === "visible") load({ silent: true });
