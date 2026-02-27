@@ -24,7 +24,8 @@ import { polyFetch } from "@/lib/polyFetch";
 // ============================================================================
 
 const POLYMARKET_DATA_API = "https://data-api.polymarket.com";
-const OPINION_OPENAPI_BASE = process.env.OPINION_OPENAPI_BASE || "https://openapi.opinion.trade/openapi";
+// Use proxy base URL to bypass geo-restrictions on datacenter IPs (e.g. Render)
+const OPINION_OPENAPI_BASE = (process.env.OPINION_OPENAPI_BASE || process.env.OPINION_BASE_URL || "https://proxy.opinion.trade:8443/openapi").replace(/\/+$/, "");
 const OPINION_API_KEY = process.env.OPINION_API_KEY || "";
 const CLOSED_NET_SHARES_EPSILON = 0.01;
 const OPINION_PRACTICAL_CLOSE_SHARES = 3;

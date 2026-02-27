@@ -13,9 +13,9 @@
 
 import { NextResponse } from "next/server";
 
-// Get base URL from env or use default
+// Get base URL from env or use default (proxy bypasses geo-restrictions on datacenter IPs)
 function getOpenApiBase() {
-  return (process.env.OPINION_OPENAPI_BASE || "https://openapi.opinion.trade/openapi").replace(/\/+$/, "");
+  return (process.env.OPINION_OPENAPI_BASE || process.env.OPINION_BASE_URL || "https://proxy.opinion.trade:8443/openapi").replace(/\/+$/, "");
 }
 
 // Get API key from env
