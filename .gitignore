@@ -34,6 +34,13 @@ poly_*.json
 poly_*.txt
 *.log
 
+# Temp test/debug output files
+check*.txt
+nff_check.txt
+*_result.txt
+trending_test.json
+warm_test.txt
+
 # Generated reports - local only
 reports/
 

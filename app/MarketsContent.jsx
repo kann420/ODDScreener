@@ -262,8 +262,8 @@ function isExpiredFast(market) {
 export async function fetchMarkets() {
   const now = Date.now();
 
-  // --- Return cached data if still fresh ---
-  if (_marketsCache.data && (now - _marketsCache.fetchedAt) < _marketsCache.TTL) {
+  // --- Return cached data if still fresh (skip cached errors) ---
+  if (_marketsCache.data && !_marketsCache.data.error && (now - _marketsCache.fetchedAt) < _marketsCache.TTL) {
     console.log(`[Discover] Cache HIT (age ${Math.round((now - _marketsCache.fetchedAt) / 1000)}s)`);
     return _marketsCache.data;
   }
@@ -276,16 +276,22 @@ export async function fetchMarkets() {
 
   _marketsCache.building = _fetchMarketsInternal()
     .then((result) => {
-      _marketsCache.data = result;
-      _marketsCache.fetchedAt = Date.now();
       _marketsCache.building = null;
+      // Only cache successful results — never cache errors to avoid
+      // serving stale errors for 90s when the API has transient failures.
+      if (!result.error) {
+        _marketsCache.data = result;
+        _marketsCache.fetchedAt = Date.now();
+      } else {
+        console.warn(`[Discover] Fetch returned error — NOT caching (stale data preserved if any)`);
+      }
       return result;
     })
     .catch((err) => {
       _marketsCache.building = null;
       console.error(`[Discover] Fetch failed:`, err.message);
       // Return stale data if available
-      if (_marketsCache.data) {
+      if (_marketsCache.data && !_marketsCache.data.error) {
         console.log(`[Discover] Returning stale cache`);
         return _marketsCache.data;
       }
@@ -293,6 +299,57 @@ export async function fetchMarkets() {
     });
 
   return _marketsCache.building;
+}
+
+/* ============ BACKGROUND CACHE WARMING ============
+ * Keeps the Discover cache perpetually warm so users never hit cold path.
+ * Runs a setInterval that refreshes the cache before TTL expires.
+ * Only effective on persistent servers (Render, self-hosted Node).
+ * On serverless (Vercel), the interval dies with the function – harmless but useless.
+ */
+const _warmerState = globalThis.__DISCOVER_WARMER__ ?? (globalThis.__DISCOVER_WARMER__ = {
+  started: false,
+  intervalId: null,
+});
+if (!globalThis.__DISCOVER_WARMER__) globalThis.__DISCOVER_WARMER__ = _warmerState;
+
+/**
+ * Start background cache warming.
+ * Safe to call multiple times – only starts once.
+ * @param {number} intervalMs – refresh interval (default: 75s, should be < TTL of 90s)
+ */
+export function startDiscoverCacheWarmer(intervalMs = 75_000) {
+  if (_warmerState.started) return;
+  _warmerState.started = true;
+
+  console.log(`[Discover] Cache warmer starting (interval ${intervalMs / 1000}s, TTL ${_marketsCache.TTL / 1000}s)`);
+
+  // Initial warm-up after a short delay (let the server finish booting)
+  const BOOT_DELAY = 5_000;
+  setTimeout(() => {
+    console.log(`[Discover] Cache warmer: initial warm-up...`);
+    fetchMarkets().catch((err) =>
+      console.error(`[Discover] Cache warmer initial failed:`, err.message)
+    );
+  }, BOOT_DELAY);
+
+  // Periodic refresh
+  _warmerState.intervalId = setInterval(async () => {
+    try {
+      // Force refresh by clearing fetchedAt so fetchMarkets re-fetches
+      const age = Date.now() - _marketsCache.fetchedAt;
+      if (age < _marketsCache.TTL * 0.5) {
+        // Cache is still fresh (< 50% of TTL), skip this cycle
+        return;
+      }
+      console.log(`[Discover] Cache warmer: refreshing (age ${Math.round(age / 1000)}s)...`);
+      _marketsCache.fetchedAt = 0; // Invalidate to force re-fetch
+      await fetchMarkets();
+      console.log(`[Discover] Cache warmer: refreshed (${_marketsCache.data?.filtered?.length || 0} markets)`);
+    } catch (err) {
+      console.error(`[Discover] Cache warmer refresh failed:`, err.message);
+    }
+  }, intervalMs);
 }
 
 /**
@@ -427,24 +484,98 @@ async function _fetchMarketsInternal() {
 }
 
 /**
+ * Quick initial fetch: just page 1 of volume-sorted markets (1 API call, ~200ms)
+ * Used for progressive loading when the full cache is cold.
+ */
+async function _fetchQuickInitial() {
+  const startTime = Date.now();
+  try {
+    const result = await opinionFetch("/market", {
+      params: { status: "activated", sortBy: 5, limit: 20, page: 1, marketType: 0 },
+    });
+
+    if (result?.errno !== 0) {
+      return { error: true, filtered: [], bonusIdsFromList: [] };
+    }
+
+    const { list } = normalizeMarketList(result);
+    const filtered = list.filter((m) => !isExpiredFast(m));
+    const bonusIdsFromList = list.filter((m) => m.hasBonus).map((m) => m.marketId);
+
+    console.log(`[Discover] Quick initial: ${filtered.length} markets in ${Date.now() - startTime}ms`);
+    return { error: false, filtered, bonusIdsFromList };
+  } catch (err) {
+    console.error(`[Discover] Quick initial failed:`, err.message);
+    return { error: true, filtered: [], bonusIdsFromList: [] };
+  }
+}
+
+/**
  * Server Component that fetches data
  * Used inside Suspense boundary
+ *
+ * Progressive loading strategy:
+ * - Cache warm  → return full dataset immediately (fast path)
+ * - Cache cold  → return quick initial (page 1, ~200ms), tell client to fetch full
+ *                  Also kick off the full fetch to warm the cache for subsequent requests
  */
 async function MarketsContent() {
-  const { error, filtered, bonusIdsFromList } = await fetchMarkets();
+  const now = Date.now();
+  const cacheIsWarm =
+    _marketsCache.data && !_marketsCache.data.error && (now - _marketsCache.fetchedAt) < _marketsCache.TTL;
+
+  if (cacheIsWarm) {
+    // Fast path: full data available
+    const { error, filtered, bonusIdsFromList } = _marketsCache.data;
+    console.log(`[Discover] SSR fast path – cache warm (${filtered?.length} markets)`);
+
+    if (error) {
+      return (
+        <div className="panel" style={{ padding: 14 }}>
+          <p className="muted" style={{ marginTop: 8 }}>
+            Failed to load markets. Please try again later.
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <MarketListClient
+        markets={filtered}
+        initialBonusIds={bonusIdsFromList}
+        needsFullFetch={false}
+      />
+    );
+  }
+
+  // Cold path: quick initial + background full fetch
+  console.log(`[Discover] SSR cold path – sending quick initial, full fetch in background`);
+
+  // Kick off full fetch in background (warms cache for next request + API route)
+  // Don't await – we want SSR to return quickly
+  fetchMarkets().catch(() => {});
+
+  const { error, filtered, bonusIdsFromList } = await _fetchQuickInitial();
 
   if (error) {
+    // Quick fetch failed too – fall back to waiting for full fetch
+    console.warn(`[Discover] Quick initial failed, falling back to full fetch`);
+    const full = await fetchMarkets();
     return (
-      <div className="panel" style={{ padding: 14 }}>
-        <p className="muted" style={{ marginTop: 8 }}>
-          Failed to load markets. Please try again later.
-        </p>
-      </div>
+      <MarketListClient
+        markets={full.filtered || []}
+        initialBonusIds={full.bonusIdsFromList || []}
+        needsFullFetch={false}
+      />
     );
   }
 
   return (
-    <MarketListClient markets={filtered} initialBonusIds={bonusIdsFromList} />
+    <MarketListClient
+      markets={filtered}
+      initialBonusIds={bonusIdsFromList}
+      needsFullFetch={true}
+    />
   );
 }
 

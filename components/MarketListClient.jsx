@@ -375,8 +375,13 @@ async function runWithConcurrency(items, worker, concurrency = 2) {
   await Promise.all(runners);
 }
 
-export default function MarketListClient({ initialMarkets, markets: marketsProp, initialBonusIds }) {
-  const markets = (initialMarkets && Array.isArray(initialMarkets) ? initialMarkets : marketsProp) || [];
+export default function MarketListClient({ initialMarkets, markets: marketsProp, initialBonusIds, needsFullFetch = false }) {
+  const ssrMarkets = (initialMarkets && Array.isArray(initialMarkets) ? initialMarkets : marketsProp) || [];
+
+  // Progressive loading: start with SSR data, upgrade to full data when available
+  const [fullMarkets, setFullMarkets] = useState(null);
+  const [isLoadingFull, setIsLoadingFull] = useState(needsFullFetch);
+  const markets = fullMarkets ?? ssrMarkets;
 
   const [activeTab, setActiveTab] = useState("bonus"); // "new" | "trending" | "bonus" | "all"
   const [volMode, setVolMode] = useState("24h"); // "24h" | "all"
@@ -399,10 +404,12 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
   const bonusSet = useMemo(() => new Set((bonusIds || []).map((x) => String(x))), [bonusIds]);
 
   const [allTabLoaded, setAllTabLoaded] = useState(false);
-  const initTrendingDoneRef = useRef(false);
 
   // ✅ NEW: State to hold freshly fetched new markets (merged with initial)
   const [freshNewMarkets, setFreshNewMarkets] = useState([]);
+
+  // ✅ State for API-fetched top 10 trending markets (real volume24h from server)
+  const [trendingApiMarkets, setTrendingApiMarkets] = useState([]);
   const newMarketsPollRef = useRef(false);
 
   const bonusCacheAppliedRef = useRef(false);
@@ -442,6 +449,59 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
       setBonusLoading(false);
     }
   }, [initialBonusIds]);
+
+  // ===== PROGRESSIVE LOADING: fetch full dataset when SSR sent quick initial =====
+  // NOTE: No ref guard here — the `cancelled` flag in cleanup handles StrictMode
+  // double-mount correctly (first fetch gets cancelled, second one completes).
+  // Includes retry logic in case /api/opinion/discover has transient upstream errors.
+  useEffect(() => {
+    if (!needsFullFetch) return;
+
+    let cancelled = false;
+    let retryTimeout = null;
+
+    const doFetch = async (attempt = 0) => {
+      try {
+        console.log(`[MarketListClient] Fetching full dataset (progressive${attempt > 0 ? `, retry ${attempt}` : ""})...`);
+        const res = await fetch("/api/opinion/discover", { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+
+        if (cancelled) return;
+        if (json.error) {
+          throw new Error("Server returned error");
+        }
+
+        const fullList = Array.isArray(json.filtered) ? json.filtered : [];
+        const fullBonus = Array.isArray(json.bonusIdsFromList) ? json.bonusIdsFromList : [];
+
+        setFullMarkets(fullList);
+        if (fullBonus.length > 0) {
+          setBonusIds(fullBonus);
+          setBonusLoading(false);
+        }
+        setIsLoadingFull(false);
+        console.log(`[MarketListClient] Progressive upgrade: ${ssrMarkets.length} → ${fullList.length} markets`);
+      } catch (err) {
+        console.error("[MarketListClient] Full fetch failed:", err.message);
+        // Retry up to 3 times with increasing delay (5s, 10s, 15s)
+        if (!cancelled && attempt < 3) {
+          const delay = (attempt + 1) * 5000;
+          console.log(`[MarketListClient] Retrying in ${delay / 1000}s...`);
+          retryTimeout = setTimeout(() => doFetch(attempt + 1), delay);
+        } else if (!cancelled) {
+          setIsLoadingFull(false);
+        }
+      }
+    };
+
+    doFetch();
+
+    return () => {
+      cancelled = true;
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
+  }, [needsFullFetch]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ===== SAVE STATE TO CACHE ON CHANGE =====
   const saveTimeoutRef = useRef(null);
@@ -518,6 +578,43 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     };
   }, [activeTab]);
 
+  // ✅ Fetch top 10 markets by volume24h from API when trending/all tab is activated
+  // Uses /api/opinion/trending-markets (sortBy=5 = volume24h desc, 1 API call)
+  // Includes retry — falls back to client-side sort if API is down.
+  useEffect(() => {
+    if (activeTab !== "trending" && activeTab !== "all") return;
+
+    let cancelled = false;
+    let retryTimeout = null;
+
+    const doFetch = async (attempt = 0) => {
+      try {
+        const res = await fetch("/api/opinion/trending-markets?limit=10", { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.errno === 0 && Array.isArray(json.markets) && json.markets.length > 0) {
+          setTrendingApiMarkets(json.markets);
+          console.log(`[Trending] Fetched ${json.markets.length} top volume markets from API`);
+        } else if (attempt < 2) {
+          // API returned empty or error — retry once after 3s
+          retryTimeout = setTimeout(() => doFetch(attempt + 1), 3000);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error("[Trending] API fetch failed:", err.message);
+          if (attempt < 2) {
+            retryTimeout = setTimeout(() => doFetch(attempt + 1), 3000);
+          }
+        }
+      }
+    };
+
+    doFetch();
+
+    return () => { cancelled = true; if (retryTimeout) clearTimeout(retryTimeout); };
+  }, [activeTab]);
+
     // ✅ Auto refresh by tab (NO refetch). Visibility-guarded to save TPS/CPU.
   // NEW: 6h/lần | TRENDING: 1h/lần
   useEffect(() => {
@@ -543,17 +640,29 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
   const bonusScanDoneRef = useRef(false);
 
   // ✅ Central active list to avoid showing/processing expired/resolved markets in Discover
-  // Also merge freshNewMarkets for "new" tab
+  // Also merge freshNewMarkets for "new" tab AND trendingApiMarkets for trending/all
   // NOTE: marketType=0 (Binary), marketType=1 (Categorical)
   // For categorical: only show CHILD markets (has rootMarketId different from marketId)
   // Parent categorical markets are not tradable directly
   const activeMarkets = useMemo(() => {
     try {
       const nowMs = Date.now();
-      // Merge initial markets with freshly polled new markets
+      // Merge initial markets with freshly polled new markets + API trending markets
       const combined = [...(markets || [])];
+      const existingIds = new Set(combined.map((m) => String(m?.marketId)));
+
+      // Merge API trending markets (ensures top volume markets are available even before full load)
+      if (trendingApiMarkets && trendingApiMarkets.length > 0) {
+        for (const m of trendingApiMarkets) {
+          const id = String(m?.marketId);
+          if (id && !existingIds.has(id)) {
+            combined.push({ ...m, title: m.title || m.marketTitle || "" });
+            existingIds.add(id);
+          }
+        }
+      }
+
       if (freshNewMarkets && freshNewMarkets.length > 0) {
-        const existingIds = new Set(combined.map((m) => String(m?.marketId)));
         for (const m of freshNewMarkets) {
           if (!existingIds.has(String(m?.marketId))) {
             combined.push(m);
@@ -577,7 +686,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
       console.error("[activeMarkets] Error:", err);
       return [];
     }
-  }, [markets, freshNewMarkets, refreshTick]);
+  }, [markets, freshNewMarkets, trendingApiMarkets, refreshTick]);
 
   // Detect bonus markets from list data first (if incentiveFactor exists in list)
   // Fallback to API if list doesn't have incentiveFactor info
@@ -739,38 +848,38 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     return newestPool.slice(0, NEW_LIMIT);
   }, [newestPool]);
 
-  // ✅ TRENDING: Sort activeMarkets by volume24h (with fallback logic)
-  // activeMarkets already includes both binary AND categorical children (from MarketsContent)
-  // NOTE: Categorical children don't have volume24h from API, only total volume
-  // Strategy: 
-  // 1. Markets with volume24h > 0 get sorted by volume24h
-  // 2. Markets without volume24h (categorical children) use total volume / 30 as estimate
-  //    (assuming ~30 day average activity as proxy for daily volume)
+  // ✅ TRENDING: Prefer API-fetched top 10 (sortBy=5 = volume24h desc from server).
+  // Fallback: client-side sort of activeMarkets when API hasn't responded yet.
   const trendingMarkets = useMemo(() => {
+    // Prefer API-fetched trending markets (accurate server-side volume24h sort)
+    if (trendingApiMarkets.length > 0) {
+      const nowMs = Date.now();
+      const apiActive = trendingApiMarkets
+        .map(m => ({ ...m, title: m.title || m.marketTitle || "" }))
+        .filter(m => isActiveNotExpired(m, nowMs));
+      if (apiActive.length > 0) return apiActive.slice(0, TRENDING_COUNT);
+    }
+
+    // Fallback: client-side sort
     if (!activeMarkets || activeMarkets.length === 0) return [];
     const arr = [...activeMarkets];
     arr.sort((a, b) => {
       const aOv = volumeMap[String(a.marketId)];
       const bOv = volumeMap[String(b.marketId)];
       
-      // Get volume24h (preferred)
       const aVol24h = (aOv?.volume24h ?? 0) || getVolumeValue(a, "24h");
       const bVol24h = (bOv?.volume24h ?? 0) || getVolumeValue(b, "24h");
       
-      // Get total volume
       const aVolTotal = (aOv?.volume ?? 0) || getVolumeValue(a, "total");
       const bVolTotal = (bOv?.volume ?? 0) || getVolumeValue(b, "total");
       
-      // Calculate effective value for sorting
-      // If volume24h exists, use it directly
-      // Otherwise, estimate daily volume as totalVolume / 30
       const aVal = aVol24h > 0 ? aVol24h : (aVolTotal / 30);
       const bVal = bVol24h > 0 ? bVol24h : (bVolTotal / 30);
       
       return bVal - aVal;
     });
     return arr.slice(0, TRENDING_COUNT);
-  }, [activeMarkets, volumeMap]);
+  }, [activeMarkets, volumeMap, trendingApiMarkets]);
 
   // ✅ BONUS: only ACTIVE bonus markets
   const bonusMarkets = useMemo(() => {
@@ -1390,6 +1499,11 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
 
       {/* Tab info */}
       <div className="muted" style={{ textAlign: "center", marginTop: 12, fontSize: 11 }} suppressHydrationWarning>
+        {isLoadingFull && (
+          <span style={{ color: "var(--accent, #4dabf7)", marginRight: 6 }}>
+            Loading more markets…
+          </span>
+        )}
         {activeTab === "new"
           ? `Top ${Math.min(NEW_LIMIT, sortedMarkets.length)} newest active markets`
           : activeTab === "trending"

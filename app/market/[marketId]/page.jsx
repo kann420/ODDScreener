@@ -1,7 +1,7 @@
 import OrderbookView from "@/components/OrderbookView";
 import { opinionFetch } from "@/lib/opinion";
 import { analyticsFetch } from "@/lib/opinionAnalytics";
-import { mapWithConcurrency, opinionRateLimiter } from "@/lib/concurrency";
+import { mapWithConcurrency } from "@/lib/concurrency";
 
 export const dynamic = "force-dynamic";
 
@@ -44,9 +44,7 @@ async function _buildParentMap() {
   
   await mapWithConcurrency(parentIds, async (pid) => {
     try {
-      const detail = await opinionRateLimiter.run(() =>
-        opinionFetch(`/market/categorical/${pid}`)
-      );
+      const detail = await opinionFetch(`/market/categorical/${pid}`);
       const pd = detail?.result?.data;
       if (!pd) return;
       const children = pd.childMarkets || [];
@@ -62,7 +60,7 @@ async function _buildParentMap() {
     } catch {
       // ignore individual failures
     }
-  }, { concurrency: 10 });
+  }, { concurrency: 6 });
 
   console.log(`[ParentCache] Built: ${parentIds.length} parents → ${map.size} children`);
   return map;

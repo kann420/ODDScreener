@@ -33,22 +33,36 @@ export async function GET(req) {
         return true;
       });
     };
+
+    // Fetch with retry (single retry after 2s on transient upstream errors)
+    const fetchTrending = async (attempt = 0) => {
+      const data = await opinionFetch("/market", {
+        params: { 
+          status: "activated", 
+          sortBy: 5, // volume24h desc
+          limit, 
+          page: 1, 
+          marketType: 0, // Binary only
+        },
+      });
+      
+      if (data?.errno !== 0) {
+        if (attempt < 1) {
+          await new Promise(r => setTimeout(r, 2000));
+          return fetchTrending(attempt + 1);
+        }
+        return null;
+      }
+      
+      return data;
+    };
+
+    const data = await fetchTrending();
     
-    // Fetch only binary markets - they have real tradable volume24h
-    const data = await opinionFetch("/market", {
-      params: { 
-        status: "activated", 
-        sortBy: 5, // volume24h desc
-        limit, 
-        page: 1, 
-        marketType: 0, // Binary only
-      },
-    });
-    
-    if (data?.errno !== 0) {
+    if (!data) {
       return NextResponse.json({
-        errno: data?.errno || -1,
-        errormsg: data?.errormsg || "Failed to fetch trending markets",
+        errno: -1,
+        errormsg: "upstream_unavailable",
         markets: [],
       });
     }
