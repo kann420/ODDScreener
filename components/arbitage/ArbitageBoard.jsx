@@ -177,6 +177,7 @@ export default function ArbitageBoard() {
   }, []);
 
   // Scan bonus markets for given market IDs by fetching market detail and checking incentiveFactor
+  // OPTIMIZED: Higher concurrency (10 parallel), progressive UI updates per batch, minimal delay
   const scanBonusForMarkets = useCallback(async (marketIds) => {
     if (!marketIds || marketIds.length === 0) return;
     
@@ -191,8 +192,7 @@ export default function ArbitageBoard() {
     setBonusScanStatus("scanning");
     console.log(`[Arb-Bonus] Scanning ${toScan.length} markets for bonus...`);
     
-    const foundBonus = [];
-    const batchSize = 5;
+    const batchSize = 10; // Up from 5 for faster scanning
     
     for (let i = 0; i < toScan.length; i += batchSize) {
       const batch = toScan.slice(i, i + batchSize);
@@ -215,31 +215,28 @@ export default function ArbitageBoard() {
         })
       );
       
-      for (const r of results) {
-        if (r.status === "fulfilled" && r.value) {
-          foundBonus.push(r.value);
-        }
+      // Progressive update: add bonus markets AS THEY ARE FOUND (stream to UI per batch)
+      const batchBonus = results
+        .filter((r) => r.status === "fulfilled" && r.value)
+        .map((r) => r.value);
+      
+      if (batchBonus.length > 0) {
+        setBonusIds((prev) => {
+          const newIds = batchBonus.filter((id) => !prev.includes(id) && !prev.includes(String(id)));
+          if (newIds.length === 0) return prev;
+          const updated = [...prev, ...newIds];
+          setBonusCache(updated); // Save to cache progressively
+          return updated;
+        });
       }
       
-      // Small delay between batches
+      // Minimal delay between batches
       if (i + batchSize < toScan.length) {
-        await new Promise((r) => setTimeout(r, 50));
+        await new Promise((r) => setTimeout(r, 15));
       }
     }
     
-    if (foundBonus.length > 0) {
-      console.log(`[Arb-Bonus] Found ${foundBonus.length} bonus markets:`, foundBonus);
-      setBonusIds((prev) => {
-        const newIds = foundBonus.filter((id) => !prev.includes(id) && !prev.includes(String(id)));
-        if (newIds.length === 0) return prev;
-        const updated = [...prev, ...newIds];
-        setBonusCache(updated); // Save to cache
-        return updated;
-      });
-    } else {
-      console.log(`[Arb-Bonus] No bonus markets found in scanned set`);
-    }
-    
+    console.log(`[Arb-Bonus] Scan complete`);
     setBonusScanStatus("done");
   }, []); // No deps - uses refs for latest state
 

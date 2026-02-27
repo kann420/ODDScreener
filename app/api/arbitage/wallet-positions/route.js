@@ -1057,24 +1057,12 @@ function matchClosedArbPositions(polyClosedPositions, opinionClosedPositions) {
   const sortedPoly = [...polyClosedPositions].sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0));
   const sortedOpinion = [...opinionClosedPositions].sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0));
 
-  // Detect Opinion markets with positions on BOTH sides (e.g. VIT+MKOI).
-  // These are too complex for clean arb display, so skip them.
-  const opinionBothSidesMarkets = new Set();
-  {
-    const marketSides = new Map(); // marketId -> Set<side>
-    for (const op of sortedOpinion) {
-      const mid = op.marketId;
-      if (!mid) continue;
-      if (!marketSides.has(mid)) marketSides.set(mid, new Set());
-      marketSides.get(mid).add(op.side);
-    }
-    for (const [mid, sides] of marketSides) {
-      if (sides.size > 1) {
-        opinionBothSidesMarkets.add(mid);
-        console.log(`[Matching-Closed] Skipping Opinion market ${mid} — has positions on both sides (too complex)`);
-      }
-    }
-  }
+  // NOTE: Previously we skipped Opinion markets with positions on BOTH sides
+  // (opinionBothSidesMarkets). This was too aggressive — each closed round is
+  // already independent with its own roundKey, and the matching uses opposite
+  // sides + time proximity + usedOpinionRoundKeys to prevent double-matching.
+  // Removing the blanket skip fixes missing arb pairs like edgeX $5B and $1B
+  // where the user had separate YES and NO rounds at different times.
 
   // Match each Poly closed round with best Opinion closed round
   for (const polyPos of sortedPoly) {
@@ -1087,9 +1075,6 @@ function matchClosedArbPositions(polyClosedPositions, opinionClosedPositions) {
     for (const opinionPos of sortedOpinion) {
       const opinionRoundKey = opinionPos.roundKey || `${opinionPos.marketId}:${opinionPos.side}:${opinionPos.closedAt || 0}`;
       if (usedOpinionRoundKeys.has(opinionRoundKey)) continue;
-
-      // Skip Opinion markets with positions on both sides (too complex for clean arb)
-      if (opinionPos.marketId && opinionBothSidesMarkets.has(opinionPos.marketId)) continue;
 
       if (hasFdvSeriesMismatch(polyPos.marketTitle, opinionPos.marketTitle, opinionPos.outcomeName)) {
         continue;
