@@ -11,7 +11,7 @@ const _marketsCache = globalThis.__MARKETS_SSR_CACHE__ ?? (globalThis.__MARKETS_
   data: null,     // { filtered, bonusIdsFromList }
   fetchedAt: 0,
   building: null, // dedup concurrent requests
-  TTL: 90_000,    // 90 seconds – fresh enough for Discover page
+  TTL: 300_000,   // 5 minutes – no cache warmer, so keep data longer
 });
 if (!globalThis.__MARKETS_SSR_CACHE__) globalThis.__MARKETS_SSR_CACHE__ = _marketsCache;
 
@@ -256,6 +256,14 @@ function isExpiredFast(market) {
 }
 
 /**
+ * Expose the raw cache object so the discover API route can check
+ * the cache state without awaiting any in-flight builds.
+ */
+export function getMarketsCache() {
+  return _marketsCache;
+}
+
+/**
  * Async function to fetch and process markets (with server-side caching)
  * Separated for use with Suspense
  */
@@ -307,50 +315,11 @@ export async function fetchMarkets() {
  * Only effective on persistent servers (Render, self-hosted Node).
  * On serverless (Vercel), the interval dies with the function – harmless but useless.
  */
-const _warmerState = globalThis.__DISCOVER_WARMER__ ?? (globalThis.__DISCOVER_WARMER__ = {
-  started: false,
-  intervalId: null,
-});
-if (!globalThis.__DISCOVER_WARMER__) globalThis.__DISCOVER_WARMER__ = _warmerState;
-
-/**
- * Start background cache warming.
- * Safe to call multiple times – only starts once.
- * @param {number} intervalMs – refresh interval (default: 75s, should be < TTL of 90s)
- */
-export function startDiscoverCacheWarmer(intervalMs = 75_000) {
-  if (_warmerState.started) return;
-  _warmerState.started = true;
-
-  console.log(`[Discover] Cache warmer starting (interval ${intervalMs / 1000}s, TTL ${_marketsCache.TTL / 1000}s)`);
-
-  // Initial warm-up after a short delay (let the server finish booting)
-  const BOOT_DELAY = 5_000;
-  setTimeout(() => {
-    console.log(`[Discover] Cache warmer: initial warm-up...`);
-    fetchMarkets().catch((err) =>
-      console.error(`[Discover] Cache warmer initial failed:`, err.message)
-    );
-  }, BOOT_DELAY);
-
-  // Periodic refresh
-  _warmerState.intervalId = setInterval(async () => {
-    try {
-      // Force refresh by clearing fetchedAt so fetchMarkets re-fetches
-      const age = Date.now() - _marketsCache.fetchedAt;
-      if (age < _marketsCache.TTL * 0.5) {
-        // Cache is still fresh (< 50% of TTL), skip this cycle
-        return;
-      }
-      console.log(`[Discover] Cache warmer: refreshing (age ${Math.round(age / 1000)}s)...`);
-      _marketsCache.fetchedAt = 0; // Invalidate to force re-fetch
-      await fetchMarkets();
-      console.log(`[Discover] Cache warmer: refreshed (${_marketsCache.data?.filtered?.length || 0} markets)`);
-    } catch (err) {
-      console.error(`[Discover] Cache warmer refresh failed:`, err.message);
-    }
-  }, intervalMs);
-}
+// NOTE: Background cache warmer removed — it was racing with progressive
+// loading polls (invalidating fetchedAt while the client polls, causing
+// the client to see "building" indefinitely). The cache now warms
+// naturally via SSR cold path + fetchMarkets() triggered by the
+// /api/opinion/discover route on first poll.
 
 /**
  * Internal: actual API fetch logic (called by fetchMarkets when cache misses)

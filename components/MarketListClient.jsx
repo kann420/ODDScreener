@@ -450,56 +450,65 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     }
   }, [initialBonusIds]);
 
-  // ===== PROGRESSIVE LOADING: fetch full dataset when SSR sent quick initial =====
-  // NOTE: No ref guard here — the `cancelled` flag in cleanup handles StrictMode
-  // double-mount correctly (first fetch gets cancelled, second one completes).
-  // Includes retry logic in case /api/opinion/discover has transient upstream errors.
+  // ===== PROGRESSIVE LOADING: poll for full dataset when SSR sent quick initial =====
+  // Uses polling instead of one long-hanging request, because the background
+  // fetch can take 30-70s. The /api/opinion/discover endpoint returns instantly
+  // with status="building" if the cache isn't ready yet.
   useEffect(() => {
     if (!needsFullFetch) return;
 
     let cancelled = false;
-    let retryTimeout = null;
+    let pollTimer = null;
+    let attempt = 0;
+    const MAX_POLLS = 30; // 30 * 3s = 90s max wait
+    const POLL_INTERVAL = 3000;
 
-    const doFetch = async (attempt = 0) => {
+    const poll = async () => {
+      if (cancelled) return;
+      attempt++;
       try {
-        console.log(`[MarketListClient] Fetching full dataset (progressive${attempt > 0 ? `, retry ${attempt}` : ""})...`);
         const res = await fetch("/api/opinion/discover", { cache: "no-store" });
+        if (cancelled) return;
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
-
         if (cancelled) return;
-        if (json.error) {
-          throw new Error("Server returned error");
+
+        if (json.status === "ready" && Array.isArray(json.filtered) && json.filtered.length > 0) {
+          // Full data is ready!
+          setFullMarkets(json.filtered);
+          if (json.bonusIdsFromList?.length > 0) {
+            setBonusIds(json.bonusIdsFromList);
+            setBonusLoading(false);
+          }
+          setIsLoadingFull(false);
+          console.log(`[Progressive] Loaded ${json.filtered.length} markets (poll #${attempt})`);
+          return; // Done — no more polling
         }
 
-        const fullList = Array.isArray(json.filtered) ? json.filtered : [];
-        const fullBonus = Array.isArray(json.bonusIdsFromList) ? json.bonusIdsFromList : [];
-
-        setFullMarkets(fullList);
-        if (fullBonus.length > 0) {
-          setBonusIds(fullBonus);
-          setBonusLoading(false);
+        // Still building — poll again
+        if (attempt < MAX_POLLS) {
+          console.log(`[Progressive] Cache building... poll #${attempt}`);
+          pollTimer = setTimeout(poll, POLL_INTERVAL);
+        } else {
+          console.warn("[Progressive] Max polls reached, giving up");
+          setIsLoadingFull(false);
         }
-        setIsLoadingFull(false);
-        console.log(`[MarketListClient] Progressive upgrade: ${ssrMarkets.length} → ${fullList.length} markets`);
       } catch (err) {
-        console.error("[MarketListClient] Full fetch failed:", err.message);
-        // Retry up to 3 times with increasing delay (5s, 10s, 15s)
-        if (!cancelled && attempt < 3) {
-          const delay = (attempt + 1) * 5000;
-          console.log(`[MarketListClient] Retrying in ${delay / 1000}s...`);
-          retryTimeout = setTimeout(() => doFetch(attempt + 1), delay);
+        console.error("[Progressive] Poll error:", err.message);
+        if (!cancelled && attempt < MAX_POLLS) {
+          pollTimer = setTimeout(poll, POLL_INTERVAL * 2); // slower retry on error
         } else if (!cancelled) {
           setIsLoadingFull(false);
         }
       }
     };
 
-    doFetch();
+    // Start first poll after a short delay (give background fetch a head start)
+    pollTimer = setTimeout(poll, 2000);
 
     return () => {
       cancelled = true;
-      if (retryTimeout) clearTimeout(retryTimeout);
+      if (pollTimer) clearTimeout(pollTimer);
     };
   }, [needsFullFetch]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -849,18 +858,25 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
   }, [newestPool]);
 
   // ✅ TRENDING: Prefer API-fetched top 10 (sortBy=5 = volume24h desc from server).
+  // The API already returns status=activated markets in volume24h order.
   // Fallback: client-side sort of activeMarkets when API hasn't responded yet.
   const trendingMarkets = useMemo(() => {
-    // Prefer API-fetched trending markets (accurate server-side volume24h sort)
+    // Prefer API-fetched trending markets (authoritative volume24h order from server)
     if (trendingApiMarkets.length > 0) {
-      const nowMs = Date.now();
-      const apiActive = trendingApiMarkets
-        .map(m => ({ ...m, title: m.title || m.marketTitle || "" }))
-        .filter(m => isActiveNotExpired(m, nowMs));
-      if (apiActive.length > 0) return apiActive.slice(0, TRENDING_COUNT);
+      // API already filtered by status=activated, so trust this directly.
+      // Just normalize the title field for rendering.
+      const apiNormalized = trendingApiMarkets
+        .map(m => ({
+          ...m,
+          title: m.title || m.marketTitle || m.tittle || "",
+          volume24h: Number(m.volume24h || m.vol24h || 0),
+          volume: Number(m.volume || m.volTotal || 0),
+        }))
+        .slice(0, TRENDING_COUNT);
+      if (apiNormalized.length > 0) return apiNormalized;
     }
 
-    // Fallback: client-side sort
+    // Fallback: client-side sort (when API hasn't responded yet)
     if (!activeMarkets || activeMarkets.length === 0) return [];
     const arr = [...activeMarkets];
     arr.sort((a, b) => {
@@ -887,10 +903,28 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     return activeMarkets.filter((m) => bonusSet.has(String(m?.marketId)));
   }, [activeMarkets, bonusSet]);
 
-  // ✅ ALL: only ACTIVE markets (this is what drops 922 -> smaller)
+  // ✅ ALL: all ACTIVE markets, with API trending top 10 pinned to the front
+  // so clicking "All" tab immediately shows the top volume markets first.
   const allMarkets = useMemo(() => {
-    return activeMarkets || [];
-  }, [activeMarkets]);
+    if (!activeMarkets || activeMarkets.length === 0) return [];
+
+    // If we have API trending data, pin those to the top in volume24h order
+    if (trendingApiMarkets.length > 0) {
+      const trendingIds = new Set(trendingApiMarkets.map(m => String(m.marketId)));
+      const trendingNorm = trendingApiMarkets.map(m => ({
+        ...m,
+        title: m.title || m.marketTitle || m.tittle || "",
+        volume24h: Number(m.volume24h || m.vol24h || 0),
+        volume: Number(m.volume || m.volTotal || 0),
+        _trendingPin: true, // marker for sort stability
+      }));
+      // Rest of markets (excluding duplicates already in trending)
+      const rest = activeMarkets.filter(m => !trendingIds.has(String(m.marketId)));
+      return [...trendingNorm, ...rest];
+    }
+
+    return activeMarkets;
+  }, [activeMarkets, trendingApiMarkets]);
 
   const currentTabMarkets = useMemo(() => {
     if (activeTab === "new") return newMarkets;
