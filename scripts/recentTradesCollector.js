@@ -13,6 +13,7 @@ const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
 // top markets settings
 const TOP_LIMIT = Number(process.env.RECENT_TRADES_TOP_LIMIT || "40");
 const REFRESH_MS = Number(process.env.RECENT_TRADES_REFRESH_MS || String(60 * 60 * 1000)); // 1h
+const MAX_TARGETS = Number(process.env.RECENT_TRADES_MAX_TARGETS || "80"); // cap individual market subs
 
 if (!WS_KEY) {
   console.error("Missing OPINION_WS_KEY (do NOT use NEXT_PUBLIC_ keys here)");
@@ -140,7 +141,8 @@ function buildTargetsFromMarkets(markets) {
     unique.push(t);
   }
 
-  return unique;
+  // Cap total subscriptions
+  return unique.slice(0, MAX_TARGETS);
 }
 
 async function refreshSubscriptions() {

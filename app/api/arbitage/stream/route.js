@@ -23,15 +23,46 @@ export async function GET(req) {
   const limit = Math.max(1, Math.min(500, Math.floor(toNum(searchParams.get("limit"), 100))));
   const scanMode = searchParams.get("scanMode") || "quick"; // "quick" = 100 markets, "full" = unlimited
 
+  // AbortController to propagate client disconnect into the scan engine
+  const scanAbort = new AbortController();
+
+  // If Next.js provides req.signal (client disconnect), forward it
+  if (req.signal) {
+    req.signal.addEventListener("abort", () => scanAbort.abort(), { once: true });
+  }
+
   // Create a ReadableStream for SSE
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();
-      
+      let closed = false;
+
+      // Safely enqueue data — guard against writing to a closed controller
       const send = (eventType, data) => {
-        const message = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
-        controller.enqueue(encoder.encode(message));
+        if (closed) return false;
+        try {
+          const message = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
+          controller.enqueue(encoder.encode(message));
+          return true;
+        } catch {
+          // Controller already closed (client disconnected)
+          closed = true;
+          scanAbort.abort(); // stop the engine too
+          return false;
+        }
       };
+
+      // Heartbeat: send SSE comment every 15s to keep Render/Nginx proxy alive
+      const heartbeat = setInterval(() => {
+        if (closed) { clearInterval(heartbeat); return; }
+        try {
+          controller.enqueue(encoder.encode(":keepalive\n\n"));
+        } catch {
+          closed = true;
+          clearInterval(heartbeat);
+          scanAbort.abort();
+        }
+      }, 15_000);
 
       try {
         // Stream results as they come
@@ -41,6 +72,7 @@ export async function GET(req) {
           priceMode,
           limit,
           scanMode, // Pass scan mode to control market limit
+          signal: scanAbort.signal, // Allow engine to abort early on disconnect
           onProgress: (progress) => {
             // Progress update: { phase, current, total, message }
             send("progress", progress);
@@ -58,11 +90,21 @@ export async function GET(req) {
         // Done
         send("done", { ok: true });
       } catch (err) {
-        console.error("[SSE scan] Error:", err);
-        send("error", { message: err.message || "Scan failed" });
+        if (!closed && err?.name !== "AbortError") {
+          console.error("[SSE scan] Error:", err);
+          send("error", { message: err.message || "Scan failed" });
+        }
       } finally {
-        controller.close();
+        clearInterval(heartbeat);
+        if (!closed) {
+          closed = true;
+          try { controller.close(); } catch { /* already closed */ }
+        }
       }
+    },
+    cancel() {
+      // Called when client disconnects / stream is cancelled
+      scanAbort.abort();
     }
   });
 
