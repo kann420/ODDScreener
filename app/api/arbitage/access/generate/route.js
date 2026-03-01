@@ -1,6 +1,6 @@
 // API: Generate access codes (Admin only)
-// POST /api/arbitage/access/generate
-// Requires admin secret in header
+// GET  /api/arbitage/access/generate?secret=...&action=generate&hours=24&count=1
+// POST /api/arbitage/access/generate  (x-admin-secret header + JSON body)
 
 import { NextResponse } from "next/server";
 import { generateAccessCode, generateMultipleCodes, listAllCodes, getCodeStats, revokeCode } from "@/lib/accessCodeDb";
@@ -18,23 +18,85 @@ function safeCompare(a, b) {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
-function checkAdminAuth(request) {
+function checkAdminSecret(secret) {
   if (!ADMIN_SECRET) {
     console.error("[Admin] ADMIN_SECRET env var not set - admin API disabled");
     return false;
   }
-  const authHeader = request.headers.get("x-admin-secret");
-  return safeCompare(authHeader, ADMIN_SECRET);
+  return safeCompare(secret, ADMIN_SECRET);
 }
 
+function checkAdminAuth(request) {
+  const authHeader = request.headers.get("x-admin-secret");
+  return checkAdminSecret(authHeader);
+}
+
+// ─── GET handler (browser-friendly, uses ?secret= query param) ───
+export async function GET(request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const secret = searchParams.get("secret") || "";
+    const action = searchParams.get("action") || "generate";
+
+    if (!checkAdminSecret(secret)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    switch (action) {
+      case "generate": {
+        const durationHours = Math.max(1, Number(searchParams.get("hours")) || 24);
+        const count = Math.max(1, Math.min(50, Number(searchParams.get("count")) || 1));
+        const note = searchParams.get("note") || "";
+
+        if (count === 1) {
+          const newCode = await generateAccessCode(durationHours, note);
+          return NextResponse.json({ success: true, code: newCode, durationHours });
+        } else {
+          const codes = await generateMultipleCodes(count, durationHours, note);
+          return NextResponse.json({ success: true, codes, count: codes.length, durationHours });
+        }
+      }
+
+      case "revoke": {
+        const code = searchParams.get("code");
+        if (!code) {
+          return NextResponse.json({ error: "code param required" }, { status: 400 });
+        }
+        const success = await revokeCode(code);
+        return NextResponse.json({ success, code });
+      }
+
+      case "list": {
+        const limit = Math.max(1, Number(searchParams.get("limit")) || 100);
+        const offset = Math.max(0, Number(searchParams.get("offset")) || 0);
+        const includeExpired = searchParams.get("includeExpired") !== "false";
+        const codes = await listAllCodes({ limit, offset, includeExpired });
+        const stats = await getCodeStats();
+        return NextResponse.json({ codes, stats });
+      }
+
+      case "stats": {
+        const stats = await getCodeStats();
+        return NextResponse.json(stats);
+      }
+
+      default:
+        return NextResponse.json(
+          { error: "Invalid action. Use: generate, revoke, list, stats" },
+          { status: 400 }
+        );
+    }
+  } catch (error) {
+    console.error("[Access Generate GET] Error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+// ─── POST handler (programmatic, uses x-admin-secret header) ───
 export async function POST(request) {
   try {
-    // Check admin auth
     if (!checkAdminAuth(request)) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
     const body = await request.json();
@@ -91,11 +153,8 @@ export async function POST(request) {
     }
     
   } catch (error) {
-    console.error("[Access Generate] Error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    console.error("[Access Generate POST] Error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
