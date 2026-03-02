@@ -34,7 +34,11 @@ export async function GET(req) {
       const client = {
         minAmount,
         push: (obj) => {
-          controller.enqueue(encoder.encode(`event: trade\ndata: ${JSON.stringify(obj)}\n\n`));
+          try {
+            controller.enqueue(encoder.encode(`event: trade\ndata: ${JSON.stringify(obj)}\n\n`));
+          } catch {
+            // Client disconnected, controller already closed
+          }
         },
       };
 

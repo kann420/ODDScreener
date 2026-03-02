@@ -12,12 +12,12 @@ import { useState, useMemo } from "react";
  *   - D = (1 - user_discount) × (1 - transaction_discount) × (1 - user_referral_discount)
  *   - Effective fee rate_i = topic_rate × pi × (1 - pi) × D
  *   - Raw fee_i = Notional_i × Effective fee rate_i
- *   - Fee charged per fill_i = max(Raw fee_i, $0.5)   // $0.5 minimum PER FILL
+ *   - Fee charged per fill_i = max(Raw fee_i, $0.25)  // $0.25 minimum PER FILL (promo: 50% off Mar 1-15)
  * - Total Opinion fee = sum(Fee charged per fill_i)
  * 
- * Default topic_rate = 2% (0.02)
- * Min fee = $0.5 per fill
- * Max fee = 2% of notional
+ * Default topic_rate = 1% (0.01) — 50% promo Mar 1-15 (normally 2%)
+ * Min fee = $0.25 per fill (normally $0.50)
+ * Max fee = 1% of notional (normally 2%)
  * 
  * Fill estimation based on orderbook depth:
  * - Notional < $90 → 1 fill
@@ -48,15 +48,15 @@ function estimateNumFills(notional) {
 function calculateOpinionFee({
   price,           // Price in decimal (0-1), e.g., 0.85 = 85¢
   quantity,        // Number of shares
-  topicRate = 0.02,       // Default 2%
+  topicRate = 0.01,       // 50% promo Mar 1-15: 1% (normally 2%)
   userDiscount = 0,       // 0-1
   transactionDiscount = 0, // 0-1
   referralDiscount = 0,   // 0-1 (default 0, pass 0.1 for 10% referral discount)
 }) {
   const totalNotional = price * quantity;
   
-  // Max fee is 2% of notional
-  const maxFee = totalNotional * 0.02;
+  // Max fee is 1% of notional (50% promo Mar 1-15; normally 2%)
+  const maxFee = totalNotional * 0.01;
   
   // Estimate number of fills based on notional
   const numFills = estimateNumFills(totalNotional);
@@ -70,7 +70,7 @@ function calculateOpinionFee({
   let isCapped = false;
   
   if (numFills === -1) {
-    // For notional > $500, use max fee 2%
+    // For notional > $400, use max fee (1% during promo; normally 2%)
     baseTotalFee = maxFee;
     isCapped = true;
   } else {
@@ -83,8 +83,8 @@ function calculateOpinionFee({
     // Calculate raw fee per fill (before minimum, without discounts)
     rawFeePerFill = notionalPerFill * baseEffectiveRate;
     
-    // Apply $0.5 minimum per fill
-    feePerFill = Math.max(rawFeePerFill, 0.5);
+    // Apply $0.25 minimum per fill (50% promo Mar 1-15; normally $0.50)
+    feePerFill = Math.max(rawFeePerFill, 0.25);
     
     // Total fee before discount = sum of all fills
     baseTotalFee = feePerFill * numFills;
@@ -99,10 +99,10 @@ function calculateOpinionFee({
   // Apply discounts to total fee
   let totalFee = baseTotalFee * D;
   
-  // Ensure minimum $0.50 total fee (absolute floor)
-  totalFee = Math.max(totalFee, 0.5);
+  // Ensure minimum $0.25 total fee (absolute floor; 50% promo Mar 1-15; normally $0.50)
+  totalFee = Math.max(totalFee, 0.25);
   
-  const isMinimumApplied = totalFee <= 0.5;
+  const isMinimumApplied = totalFee <= 0.25;
   
   // Calculate effective fee percentage for display
   const feePercentage = totalNotional > 0 ? (totalFee / totalNotional) * 100 : 0;
@@ -752,7 +752,10 @@ export default function ArbCalculatorModal({ row, onClose }) {
           * Opinion Fee applies to Market Order only; Limit Order are not charged.
           <br />
           <br />
-          * Minimum Opinion fee is $0.50 if Market Price matched. Fees range from 0% to 2%.
+          * Minimum Opinion fee is $0.25 if Market Price matched. Fees range from 0% to 1%.
+          <br />
+          <br />
+          <span style={{ color: "#FFD700", fontWeight: 600 }}>🎉 Opinion 50% Fee Discount Event: Mar 1 – Mar 15, 2026</span>
         </div>
       </div>
     </div>

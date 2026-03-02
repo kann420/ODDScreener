@@ -273,7 +273,7 @@ export default function RootLayout({ children }) {
         <div className="container">{children}</div>
 
         {/* New Premium Footer Bar (replaces old bottom-left & bottom-right footers) */}
-        <FooterBar version="1.3.5" live />
+        <FooterBar version="1.4.0" live />
       </body>
     </html>
   );

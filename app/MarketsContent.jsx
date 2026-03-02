@@ -155,8 +155,8 @@ function extractDateFromTitle(title) {
     }
   }
 
-  // Pattern 5: Just year at end like "...2025?" or "...2025"
-  const pattern5 = /\b(202[0-5])\s*\??$/;
+  // Pattern 5: Just year at end like "...2026?" or "...2026"
+  const pattern5 = /\b(20[2-3]\d)\s*\??$/;
   const match5 = str.match(pattern5);
   if (match5) {
     const year = parseInt(match5[1], 10);
@@ -342,7 +342,7 @@ async function _fetchMarketsInternal() {
       maxPages: 5,
     }),
     opinionFetchCategoricalChildren({
-      maxParents: 200,
+      maxParents: 1000,
       maxChildrenPerParent: 50,
     }),
     getMultiOutcomeMarkets(),

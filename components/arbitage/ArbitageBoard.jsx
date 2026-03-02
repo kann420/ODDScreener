@@ -132,7 +132,7 @@ export default function ArbitageBoard() {
   const [minPolyVol, setMinPolyVol] = useState(0); // Min Poly 24h volume
   const [minOpnVol, setMinOpnVol] = useState(0); // Min OPN 24h volume
   const [showFilters, setShowFilters] = useState(true); // Toggle filter panel - default open
-  const [scanMode, setScanMode] = useState("quick"); // "quick" (100 markets) or "full" (all markets)
+  const [scanMode, setScanMode] = useState("quick"); // "quick" (80 markets), "med" (200 markets), or "full" (all markets)
   const [isMobileView, setIsMobileView] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   
@@ -317,7 +317,7 @@ export default function ArbitageBoard() {
     setStreamingRows([]);
     let latestMatchedPairs = 0;
 
-    const url = `/api/arbitage/stream?priceMode=${encodeURIComponent(priceMode)}&minArbPct=${encodeURIComponent(minArbPct)}&limit=100&scanMode=${encodeURIComponent(scanMode)}`;
+    const url = `/api/arbitage/stream?priceMode=${encodeURIComponent(priceMode)}&minArbPct=${encodeURIComponent(minArbPct)}&limit=${scanMode === "med" ? 140 : 80}&scanMode=${encodeURIComponent(scanMode)}`;
     const es = new EventSource(url);
     eventSourceRef.current = es;
 
@@ -954,6 +954,30 @@ export default function ArbitageBoard() {
                       cursor: "pointer",
                       padding: "0 12px",
                       borderRadius: 6,
+                      background: scanMode === "med" ? "rgba(100,160,255,0.15)" : "rgba(0,0,0,0.2)",
+                      border: scanMode === "med" ? "1px solid rgba(100,160,255,0.4)" : "1px solid rgba(255,255,255,0.1)",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="scanMode"
+                      value="med"
+                      checked={scanMode === "med"}
+                      onChange={() => setScanMode("med")}
+                      style={{ accentColor: "rgb(100,160,255)" }}
+                    />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: scanMode === "med" ? "rgba(100,160,255,0.95)" : "rgba(233,238,245,0.7)" }}>
+                      Med Scan
+                    </span>
+                  </label>
+                  <label 
+                    style={{ 
+                      display: "flex", 
+                      alignItems: "center", 
+                      gap: 6, 
+                      cursor: "pointer",
+                      padding: "0 12px",
+                      borderRadius: 6,
                       background: scanMode === "full" ? "rgba(255,180,50,0.15)" : "rgba(0,0,0,0.2)",
                       border: scanMode === "full" ? "1px solid rgba(255,180,50,0.4)" : "1px solid rgba(255,255,255,0.1)",
                     }}
@@ -1094,7 +1118,9 @@ export default function ArbitageBoard() {
             {/* Scan mode description - moved outside to avoid height mismatch */}
             <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(233,238,245,0.6)", marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
               {scanMode === "quick" 
-                ? "Quick scan: Top 100 markets. Results available almost instantly."
+                ? "Quick scan: Top 90 markets. Results available almost instantly."
+                : scanMode === "med"
+                ? "Med scan: Top 300 markets. May take up to 30 seconds."
                 : "Full scan: All markets. May take up to 1 minute."
               }
             </div>

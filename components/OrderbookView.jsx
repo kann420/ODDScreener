@@ -484,7 +484,7 @@ function extractExpiresFromTitle(title) {
   return 0;
 }
 
-export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, marketData = {}, hasBonus = false, yesLabel = "YES", noLabel = "NO" }) {
+export default function OrderbookView({ marketId, title: initialTitle, yesTokenId, noTokenId, marketData = {}, hasBonus = false, yesLabel = "YES", noLabel = "NO" }) {
   const [outcome, setOutcome] = useState(yesTokenId ? "YES" : "NO");
   const tokenId = outcome === "YES" ? yesTokenId : noTokenId;
 
@@ -501,24 +501,16 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
   const [selectedPrice, setSelectedPrice] = useState(null);
   const [selectedSide, setSelectedSide] = useState(null);
 
-  const volume24h = marketData.volume24h || marketData.volume_24h || marketData.dayVolume || null;
-  const totalVolume = marketData.totalVolume || marketData.total_volume || marketData.volume || null;
-  const openInterest = marketData.openInterest || marketData.open_interest || null;
-  const rules = marketData.rules || marketData.description || marketData.marketRules || null;
-
-  // NEW: image url for thumbnail (prefers thumbnailUrl, fallback coverUrl)
-  const thumbnailUrl =
-    marketData.thumbnailUrl ||
-    marketData.thumbnail_url ||
-    marketData.coverUrl ||
-    marketData.cover_url ||
-    null;
-
-  // Get expiresAt - try cutoffAt first, then fallback to extracting from title
-  let expiresAt = marketData.cutoffAt || marketData.resolvedAt || marketData.expiresAt || marketData.expires_at || marketData.endDate || marketData.end_date || null;
-  if (!expiresAt || expiresAt === 0) {
-    expiresAt = extractExpiresFromTitle(title);
-  }
+  // ── GP3: Client-side enrichment state ──
+  // Initial values from server (basic Opinion API data), enriched lazily
+  const [enrichData, setEnrichData] = useState({
+    title: initialTitle,
+    rules: marketData.rules || marketData.description || marketData.marketRules || null,
+    volume24h: marketData.volume24h || marketData.volume_24h || marketData.dayVolume || null,
+    totalVolume: marketData.totalVolume || marketData.total_volume || marketData.volume || null,
+    cutoffAt: marketData.cutoffAt || marketData.resolvedAt || marketData.expiresAt || marketData.expires_at || marketData.endDate || marketData.end_date || null,
+    thumbnailUrl: marketData.thumbnailUrl || marketData.thumbnail_url || marketData.coverUrl || marketData.cover_url || null,
+  });
 
   // ✅ FIX: categorical markets need rootMarketId for market.last.trade
   const rootMarketId =
@@ -530,9 +522,96 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
 
   const tradeSubId = rootMarketId ? `root:${rootMarketId}` : marketId;
 
-  // Recent trades via WebSocket
+  // Recent trades via WebSocket — declared early so enrichment effects can read rootMarketId from trades
   const { trades: recentTrades, connected: wsConnected, error: wsError } = useMarketTrades(tradeSubId);
 
+  // Build enrich URL — pass rootMarketId hint if already known from marketData
+  // so the server can call GET /market/categorical/{rootMarketId} directly
+  function buildEnrichUrl(extraRootId) {
+    const knownRootId = extraRootId ||
+      marketData.rootMarketId || marketData.root_market_id ||
+      marketData.rootId || marketData.root_id ||
+      marketData.parentEventId || marketData.parent_event_id ||
+      marketData.categoricalParentId || null;
+    const base = `/api/opinion/market/${encodeURIComponent(marketId)}/enrich`;
+    return knownRootId ? `${base}?rootMarketId=${encodeURIComponent(knownRootId)}` : base;
+  }
+
+  function applyEnrichResult(data, prev) {
+    const next = { ...prev };
+    // Enrich title with parent title (only if not already a full "Parent - Child" title)
+    if (data.parentTitle && !prev.title.includes(" - ")) {
+      const childTitle = marketData.marketTitle || marketData.title || marketData.tittle || "";
+      if (childTitle && data.parentTitle) {
+        next.title = `${data.parentTitle} - ${childTitle}`;
+      }
+    }
+    if (!prev.rules && data.rules) next.rules = data.rules;
+    if (!prev.volume24h && data.volume24h) next.volume24h = data.volume24h;
+    if (!prev.totalVolume && data.volume) next.totalVolume = data.volume;
+    if (!prev.cutoffAt && data.cutoffAt) next.cutoffAt = data.cutoffAt;
+    if (!prev.thumbnailUrl && data.thumbnailUrl) next.thumbnailUrl = data.thumbnailUrl;
+    return next;
+  }
+
+  // Fetch enrichment data from server (parent title, rules, volume, etc.)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(buildEnrichUrl(null), { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (cancelled || data.error) return;
+        setEnrichData((prev) => applyEnrichResult(data, prev));
+      } catch {
+        // enrichment is best-effort, ignore errors
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [marketId]);
+
+  // ── Re-enrich when WS trade arrives with rootMarketId and rules still missing ──
+  // This covers categorical child markets where rootMarketId is absent from REST
+  // but present in live trade messages.
+  const enrichedRootRef = useRef(null);
+  useEffect(() => {
+    if (enrichData.rules) return; // already have rules, skip
+    const trade = recentTrades.find((t) => t.rootMarketId);
+    if (!trade?.rootMarketId) return;
+    const rid = String(trade.rootMarketId);
+    if (enrichedRootRef.current === rid) return; // already tried this rootMarketId
+    enrichedRootRef.current = rid;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(buildEnrichUrl(rid), { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (cancelled || data.error) return;
+        setEnrichData((prev) => applyEnrichResult(data, prev));
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [recentTrades, enrichData.rules, marketId]);
+
+  // Use enriched values
+  const title = enrichData.title;
+  const volume24h = enrichData.volume24h;
+  const totalVolume = enrichData.totalVolume;
+  const rules = enrichData.rules;
+  const thumbnailUrl = enrichData.thumbnailUrl;
+
+  const openInterest = marketData.openInterest || marketData.open_interest || null;
+
+  // Get expiresAt - try enriched cutoffAt first, then fallback to extracting from title
+  let expiresAt = enrichData.cutoffAt || marketData.resolvedAt || marketData.expiresAt || marketData.expires_at || marketData.endDate || marketData.end_date || null;
+  if (!expiresAt || expiresAt === 0) {
+    expiresAt = extractExpiresFromTitle(title);
+  }
+
+  // ✅ FIX: categorical markets need rootMarketId for market.last.trade
   const abortRef = useRef(null);
   const asksScrollRef = useRef(null);
   const appliedCacheAtRef = useRef(0);
@@ -693,6 +772,9 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
   };
 
   const selectedCents = Number.isFinite(selectedPrice) ? selectedPrice * 100 : null;
+
+  // ── Bottom panel tab state ── (Rules shown first)
+  const [activeBottomTab, setActiveBottomTab] = useState("rules");
 
   // ── Floating stream player state ──
   const [streamChannel, setStreamChannel] = useState(null);
@@ -885,19 +967,7 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
 
         </div>
 
-        {/* Rules panel - right side of header */}
-        {rules && (
-          <div className="panel detail-rules-panel hide-scrollbar" style={{
-            padding: "8px 12px",
-            fontSize: 11,
-            lineHeight: 1.5,
-            color: "rgba(255,255,255,0.7)",
-            overflowY: "auto",
-          }}>
-            <div style={{ fontWeight: 700, fontSize: 10, color: "rgba(148,163,184,0.85)", textTransform: "uppercase", marginBottom: 4, letterSpacing: "0.5px" }}>Rules</div>
-            <div style={{ whiteSpace: "pre-wrap" }}>{rules}</div>
-          </div>
-        )}
+
 
       </div>
 
@@ -1026,11 +1096,37 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
 
         <div className="panel trades-panel">
           <div className="tabs">
-            <div className="tab active">Trades</div>
-              <div className="tab">Top Traders</div>
-              <div className="tab">Holders</div>
-            </div>
+            <div className={`tab${activeBottomTab === "rules" ? " active" : ""}`} onClick={() => setActiveBottomTab("rules")}>Rules</div>
+            <div className={`tab${activeBottomTab === "trades" ? " active" : ""}`} onClick={() => setActiveBottomTab("trades")}>Trades</div>
+            <div className={`tab${activeBottomTab === "toptraders" ? " active" : ""}`} onClick={() => setActiveBottomTab("toptraders")}>Top Traders</div>
+            <div className={`tab${activeBottomTab === "holders" ? " active" : ""}`} onClick={() => setActiveBottomTab("holders")}>Holders</div>
+          </div>
 
+          {/* Rules tab content */}
+          {activeBottomTab === "rules" && (
+            <div style={{ padding: "12px 16px" }}>
+              {rules ? (
+                <div style={{
+                  fontSize: 13,
+                  lineHeight: 1.7,
+                  color: "rgba(255,255,255,0.75)",
+                  whiteSpace: "pre-wrap",
+                  maxHeight: 400,
+                  overflowY: "auto",
+                }}>
+                  {rules}
+                </div>
+              ) : (
+                <div className="trades-empty-content" style={{ padding: "32px 0" }}>
+                  <span className="trades-empty-title">No rules available</span>
+                  <span className="trades-empty-hint">This market has no resolution rules</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Trades tab content */}
+          {activeBottomTab === "trades" && (
             <div style={{ padding: "12px 16px" }}>
               <div className="trades-table-wrap">
                 <table className="trades-table">
@@ -1189,9 +1285,30 @@ export default function OrderbookView({ marketId, title, yesTokenId, noTokenId, 
                 </table>
               </div>
             </div>
-          </div>
+          )}
+
+          {/* Top Traders tab content */}
+          {activeBottomTab === "toptraders" && (
+            <div style={{ padding: "12px 16px" }}>
+              <div className="trades-empty-content" style={{ padding: "32px 0" }}>
+                <span className="trades-empty-title">Coming soon</span>
+                <span className="trades-empty-hint">Top traders data will be available here</span>
+              </div>
+            </div>
+          )}
+
+          {/* Holders tab content */}
+          {activeBottomTab === "holders" && (
+            <div style={{ padding: "12px 16px" }}>
+              <div className="trades-empty-content" style={{ padding: "32px 0" }}>
+                <span className="trades-empty-title">Coming soon</span>
+                <span className="trades-empty-hint">Holders data will be available here</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+    </div>
   );
 }
 
