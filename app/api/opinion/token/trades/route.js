@@ -7,7 +7,7 @@ export async function GET(req) {
   const limit = Number(searchParams.get("limit") || "200");
 
   if (!token_id) {
-    return NextResponse.json({ errno: -1, errormsg: "missing_token_id", result: null }, { status: 200 });
+    return NextResponse.json({ errno: -1, errormsg: "missing_token_id", result: null }, { status: 400 });
   }
 
   let r = await opinionFetch("/token/trades", { params: { token_id, limit } });
@@ -25,7 +25,7 @@ export async function GET(req) {
     if (!ok2) {
       return NextResponse.json(
         { errno: -1, errormsg: "trades_failed", result: null },
-        { status: 200 }
+        { status: 502 }
       );
     }
 

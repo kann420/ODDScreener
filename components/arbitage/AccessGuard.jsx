@@ -79,9 +79,12 @@ export default function AccessGuard({ children }) {
         }
       } catch (err) {
         console.error("Access check error:", err);
-        // On error, use local cache as fallback
+        // On error, use local cache as fallback but cap trust window to 1 hour from now.
+        // This prevents permanent bypass via manipulated localStorage.
         const storedExpiry = getStoredExpiry();
-        if (storedExpiry && Date.now() < storedExpiry) {
+        const OFFLINE_GRACE_MS = 3_600_000; // 1 hour
+        const now = Date.now();
+        if (storedExpiry && now < storedExpiry && storedExpiry <= now + OFFLINE_GRACE_MS) {
           setHasAccess(true);
         }
       }

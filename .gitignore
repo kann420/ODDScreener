@@ -28,7 +28,9 @@ data/
 # Debug, test, and data dump files - NEVER commit
 debug_*.json
 debug-*.js
+debug-*.cjs
 debug*.json
+debug-*.txt
 test-*.js
 poly_*.json
 poly_*.txt

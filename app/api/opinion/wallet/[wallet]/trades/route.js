@@ -36,22 +36,22 @@ function isValidWallet(address) {
 // Simple in-memory cache for market thumbnails
 const thumbnailCache = new Map();
 const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
-let cacheRefreshing = false;
+let cacheRefreshPromise = null;
 let lastRefreshStart = 0;
 
 /**
  * Build market thumbnail cache by fetching markets (non-blocking)
+ * Uses Promise-based deduplication to prevent concurrent refresh race conditions.
  * @param {string} apiKey - API key
  * @param {string} baseUrl - Base URL
  */
 function startThumbnailCacheRefresh(apiKey, baseUrl) {
   const now = Date.now();
   // Don't start if already refreshing or refreshed recently
-  if (cacheRefreshing || (now - lastRefreshStart < 60000 && thumbnailCache.size > 0)) {
+  if (cacheRefreshPromise || (now - lastRefreshStart < 60000 && thumbnailCache.size > 0)) {
     return;
   }
-  
-  cacheRefreshing = true;
+
   lastRefreshStart = now;
 
   // Run in background - don't await
@@ -134,7 +134,7 @@ function startThumbnailCacheRefresh(apiKey, baseUrl) {
     } catch (error) {
       console.error("[tradesThumbnailCache] Error:", error);
     } finally {
-      cacheRefreshing = false;
+      cacheRefreshPromise = null;
     }
   })();
 }

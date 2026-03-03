@@ -17,7 +17,13 @@ function cacheGet(key) {
   return hit.v;
 }
 
+const MAX_CACHE_SIZE = 2000;
+
 function cacheSet(key, value) {
+  if (CACHE.size >= MAX_CACHE_SIZE) {
+    const oldest = CACHE.keys().next().value;
+    CACHE.delete(oldest);
+  }
   CACHE.set(key, { t: Date.now(), v: value });
 }
 
