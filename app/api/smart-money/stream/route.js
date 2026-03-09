@@ -1,30 +1,54 @@
 import { addClient, getLatest, startSmartMoneyHub } from "@/lib/smartMoneyHub";
+import { acquireIpSseLimit, enforceIpRateLimit } from "@/lib/apiRouteProtection";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const WARM_RATE_LIMIT_OPTS = { windowMs: 60_000, maxRequests: 20 };
+const STREAM_START_RATE_LIMIT_OPTS = { windowMs: 60_000, maxRequests: 12 };
+const STREAM_CONCURRENCY_OPTS = { maxConcurrent: 3, staleMs: 10 * 60_000 };
 
 export async function GET(req) {
-  // Always make sure the hub is running
-  startSmartMoneyHub();
-
   const { searchParams } = new URL(req.url);
-
-  // ✅ Warm-up mode: start hub but do NOT open SSE stream
-  // Call: /api/smart-money/stream?warm=1
   const warm = searchParams.get("warm");
+
   if (warm === "1" || warm === "true") {
+    const limited = enforceIpRateLimit(
+      req,
+      "smart-money-stream-warm",
+      WARM_RATE_LIMIT_OPTS,
+      "Too many smart money warm-up requests. Please slow down."
+    );
+    if (limited) return limited;
+
+    startSmartMoneyHub();
     return new Response("ok", {
       status: 200,
       headers: { "Cache-Control": "no-store" },
     });
   }
 
-  const minAmount = Number(searchParams.get("minAmount") || 200);
+  const streamGuard = acquireIpSseLimit(
+    req,
+    "smart-money-stream",
+    STREAM_START_RATE_LIMIT_OPTS,
+    STREAM_CONCURRENCY_OPTS,
+    {
+      rateLimitMessage: "Too many smart money stream requests. Please wait and try again.",
+      busyMessage: "Too many active smart money streams from this IP. Please close another tab and try again.",
+    }
+  );
+  if (streamGuard.response) {
+    return streamGuard.response;
+  }
 
+  startSmartMoneyHub();
+
+  const minAmount = Number(searchParams.get("minAmount") || 200);
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
     start(controller) {
-      // Send a snapshot first (already newest-first, already pruned to last 24h)
       const snapshot = getLatest()
         .filter((x) => Number(x.amount) >= minAmount)
         .slice(0, 100);
@@ -46,8 +70,12 @@ export async function GET(req) {
 
       req.signal.addEventListener("abort", () => {
         remove();
-        controller.close();
+        streamGuard.release();
+        try { controller.close(); } catch {}
       });
+    },
+    cancel() {
+      streamGuard.release();
     },
   });
 

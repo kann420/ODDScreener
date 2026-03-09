@@ -18,6 +18,13 @@
 
 import { NextResponse } from "next/server";
 import { polyFetch } from "@/lib/polyFetch";
+import { enforceIpRateLimit } from "@/lib/apiRouteProtection";
+import { clearArbitrageSessionCookie, requireArbitrageAccess } from "@/lib/arbitrageAccessSession";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+const RATE_LIMIT_OPTS = { windowMs: 5 * 60_000, maxRequests: 12 };
 
 // ============================================================================
 // Configuration
@@ -2229,6 +2236,24 @@ function createArbPair(polyPos, opinionPos, matchScore, matchType = "standard") 
 
 export async function GET(request) {
   try {
+    const auth = await requireArbitrageAccess(request);
+    if (!auth.ok) {
+      const response = NextResponse.json(
+        { success: false, error: auth.error, reason: auth.reason },
+        { status: auth.status }
+      );
+      clearArbitrageSessionCookie(response);
+      return response;
+    }
+
+    const limited = enforceIpRateLimit(
+      request,
+      "arbitrage-wallet-positions",
+      RATE_LIMIT_OPTS,
+      "Too many wallet position requests. Please wait before refreshing again."
+    );
+    if (limited) return limited;
+
     const { searchParams } = new URL(request.url);
     
     // Get wallet addresses

@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 import { opinionFetch } from "@/lib/opinion";
+import { enforceIpRateLimit } from "@/lib/apiRouteProtection";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+const RATE_LIMIT_OPTS = { windowMs: 60_000, maxRequests: 45 };
 
 /**
  * GET /api/opinion/trending-markets
@@ -14,6 +20,14 @@ import { opinionFetch } from "@/lib/opinion";
  * - limit: number of markets to return (default: 10, max: 50)
  */
 export async function GET(req) {
+  const limited = enforceIpRateLimit(
+    req,
+    "opinion-trending-markets",
+    RATE_LIMIT_OPTS,
+    "Too many trending market requests. Please slow down."
+  );
+  if (limited) return limited;
+
   const { searchParams } = new URL(req.url);
   const limit = Math.min(Number(searchParams.get("limit") || "10"), 50);
 

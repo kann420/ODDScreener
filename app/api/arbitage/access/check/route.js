@@ -4,9 +4,12 @@
 import { NextResponse } from "next/server";
 import { checkDeviceAccess } from "@/lib/accessCodeDb";
 import { checkRateLimit } from "@/lib/apiRateLimit";
+import { clearArbitrageSessionCookie, setArbitrageSessionCookie } from "@/lib/arbitrageAccessSession";
 
 // Max 20 checks per minute per IP
 const RATE_LIMIT_OPTS = { windowMs: 60_000, maxRequests: 20 };
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET(request) {
   try {
@@ -30,14 +33,23 @@ export async function GET(request) {
     }
     
     const result = await checkDeviceAccess(deviceId);
-    
-    return NextResponse.json(result);
+    const response = NextResponse.json(result);
+
+    if (result?.hasAccess) {
+      setArbitrageSessionCookie(response, deviceId);
+    } else {
+      clearArbitrageSessionCookie(response);
+    }
+
+    return response;
     
   } catch (error) {
     console.error("[Access Check] Error:", error);
-    return NextResponse.json(
+    const response = NextResponse.json(
       { hasAccess: false, error: "Internal server error" },
       { status: 500 }
     );
+    clearArbitrageSessionCookie(response);
+    return response;
   }
 }

@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 import { opinionFetch, normalizeMarketList } from "@/lib/opinion";
+import { enforceIpRateLimit } from "@/lib/apiRouteProtection";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+const RATE_LIMIT_OPTS = { windowMs: 60_000, maxRequests: 60 };
 
 /**
  * ✅ API endpoint to fetch NEWEST markets (sortBy=1)
@@ -11,6 +17,14 @@ import { opinionFetch, normalizeMarketList } from "@/lib/opinion";
  * - marketType: 0=binary, 1=categorical, 2=all (default: 2)
  */
 export async function GET(req) {
+  const limited = enforceIpRateLimit(
+    req,
+    "opinion-new-markets",
+    RATE_LIMIT_OPTS,
+    "Too many new market requests. Please slow down."
+  );
+  if (limited) return limited;
+
   const { searchParams } = new URL(req.url);
 
   const status = searchParams.get("status") || "activated";

@@ -4,9 +4,12 @@
 import { NextResponse } from "next/server";
 import { validateAndActivateCode } from "@/lib/accessCodeDb";
 import { checkRateLimit } from "@/lib/apiRateLimit";
+import { clearArbitrageSessionCookie, setArbitrageSessionCookie } from "@/lib/arbitrageAccessSession";
 
 // Max 10 attempts per minute per IP
 const RATE_LIMIT_OPTS = { windowMs: 60_000, maxRequests: 10 };
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function POST(request) {
   try {
@@ -39,25 +42,31 @@ export async function POST(request) {
     const result = await validateAndActivateCode(code, deviceId);
     
     if (!result.valid) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         { error: result.error, valid: false },
         { status: 403 }
       );
+      clearArbitrageSessionCookie(response);
+      return response;
     }
     
-    return NextResponse.json({
+    const response = NextResponse.json({
       valid: true,
       expiresAt: result.expiresAt,
       message: result.newlyActivated 
         ? "Access granted! Code activated successfully." 
         : "Access verified.",
     });
+    setArbitrageSessionCookie(response, deviceId);
+    return response;
     
   } catch (error) {
     console.error("[Access Validate] Error:", error);
-    return NextResponse.json(
+    const response = NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
     );
+    clearArbitrageSessionCookie(response);
+    return response;
   }
 }

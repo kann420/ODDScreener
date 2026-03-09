@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { opinionFetch, opinionFetchAllMarkets } from "@/lib/opinion";
+import { enforceIpRateLimit } from "@/lib/apiRouteProtection";
 import fs from "fs/promises";
 import path from "path";
 
@@ -12,6 +13,9 @@ import path from "path";
  */
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const RATE_LIMIT_OPTS = { windowMs: 60_000, maxRequests: 12 };
 
 // ===== CACHE CONFIG =====
 const CACHE_MS = 12 * 60 * 60 * 1000; // 12 hours cache (bonus markets don't change often)
@@ -176,12 +180,27 @@ async function scanBonusMarkets(limit) {
 
 export async function GET(req) {
   try {
+    const limited = enforceIpRateLimit(
+      req,
+      "opinion-bonus-markets",
+      RATE_LIMIT_OPTS,
+      "Too many bonus market scans. Please wait and try again."
+    );
+    if (limited) return limited;
+
     // Ensure file cache is loaded on first request
     await ensureCacheLoaded();
     
     const { searchParams } = new URL(req.url);
     const limit = Math.max(1, Math.min(1000, Number(searchParams.get("limit") || "500")));
     const force = searchParams.get("force") === "1";
+
+    if (force && process.env.NODE_ENV === "production") {
+      return NextResponse.json(
+        { ids: cache.ids, error: "force_refresh_disabled" },
+        { status: 403 }
+      );
+    }
 
     const now = Date.now();
     
@@ -241,4 +260,3 @@ export async function GET(req) {
     return NextResponse.json({ ids: [], error: String(e?.message || e) }, { status: 500 });
   }
 }
-

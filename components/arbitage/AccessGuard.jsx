@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
 
 // Get device ID from localStorage
@@ -33,7 +32,6 @@ function saveAccessInfo(expiresAt) {
  * Shows modal overlay on top of content if no valid access
  */
 export default function AccessGuard({ children }) {
-  const router = useRouter();
   const [hasAccess, setHasAccess] = useState(false);
   const [checking, setChecking] = useState(true);
   
@@ -45,18 +43,8 @@ export default function AccessGuard({ children }) {
   useEffect(() => {
     async function verifyAccess() {
       const deviceId = getDeviceId();
-      
-      // Quick check: if stored expiry is valid, show content immediately
-      const storedExpiry = getStoredExpiry();
-      if (storedExpiry && Date.now() < storedExpiry) {
-        setHasAccess(true);
-        setChecking(false);
-        // Verify in background
-        verifyWithServer(deviceId);
-        return;
-      }
-      
-      // No valid local cache, check server
+
+      // Always verify with server so protected API routes receive a fresh session cookie.
       if (!deviceId) {
         setChecking(false);
         return;
@@ -67,7 +55,10 @@ export default function AccessGuard({ children }) {
     
     async function verifyWithServer(deviceId) {
       try {
-        const res = await fetch(`/api/arbitage/access/check?deviceId=${encodeURIComponent(deviceId)}`);
+        const res = await fetch(`/api/arbitage/access/check?deviceId=${encodeURIComponent(deviceId)}`, {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
         const data = await res.json();
         
         if (data.hasAccess) {
@@ -110,6 +101,7 @@ export default function AccessGuard({ children }) {
       
       const res = await fetch("/api/arbitage/access/validate", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           code: code.trim().toUpperCase(), 

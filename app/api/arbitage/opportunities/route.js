@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { computeArbitageOpportunities, scanArbitageOpportunities } from "@/lib/arbitageEngine";
+import { clearArbitrageSessionCookie, requireArbitrageAccess } from "@/lib/arbitrageAccessSession";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 function toNum(v, fallback) {
   const n = Number(v);
@@ -21,6 +23,16 @@ function toNum(v, fallback) {
  */
 export async function GET(req) {
   try {
+    const auth = await requireArbitrageAccess(req);
+    if (!auth.ok) {
+      const response = NextResponse.json(
+        { ok: false, rows: [], error: auth.error, reason: auth.reason },
+        { status: auth.status }
+      );
+      clearArbitrageSessionCookie(response);
+      return response;
+    }
+
     const { searchParams } = new URL(req.url);
 
     // Query params

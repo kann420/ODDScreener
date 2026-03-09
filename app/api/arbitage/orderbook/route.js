@@ -3,8 +3,10 @@ import { getPolyOrderbook } from "@/lib/polymarket";
 import { opinionFetch } from "@/lib/opinion";
 import { fetchProbableOrderbook } from "@/lib/probable";
 import { getPredictFunDisplayOrderbook } from "@/lib/predictfun";
+import { clearArbitrageSessionCookie, requireArbitrageAccess } from "@/lib/arbitrageAccessSession";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const TTL_MS = 15_000;
 const CACHE = globalThis.__ARB_OB_CACHE__ ?? (globalThis.__ARB_OB_CACHE__ = new Map());
@@ -58,6 +60,16 @@ function mapOpinionSide(levels) {
  */
 export async function GET(req) {
   try {
+    const auth = await requireArbitrageAccess(req);
+    if (!auth.ok) {
+      const response = NextResponse.json(
+        { ok: false, error: auth.error, reason: auth.reason },
+        { status: auth.status }
+      );
+      clearArbitrageSessionCookie(response);
+      return response;
+    }
+
     const { searchParams } = new URL(req.url);
     const platform = searchParams.get("platform");
     const tokenId = searchParams.get("token_id");

@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { opinionFetch } from "@/lib/opinion";
 import { mapWithConcurrency } from "@/lib/concurrency";
+import { enforceIpRateLimit } from "@/lib/apiRouteProtection";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const RATE_LIMIT_OPTS = { windowMs: 60_000, maxRequests: 120 };
 
 /*
  * GP3+GP4: Client-side enrichment endpoint
@@ -127,6 +131,14 @@ async function fetchCategoricalParent(parentId) {
 }
 
 export async function GET(req, { params }) {
+  const limited = enforceIpRateLimit(
+    req,
+    "opinion-market-enrich",
+    RATE_LIMIT_OPTS,
+    "Too many market metadata requests. Please slow down."
+  );
+  if (limited) return limited;
+
   const marketId = params?.marketId;
   if (!marketId) {
     return NextResponse.json({ error: "missing_marketId" }, { status: 400 });

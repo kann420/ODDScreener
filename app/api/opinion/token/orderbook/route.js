@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { opinionFetch } from "@/lib/opinion";
+import { enforceIpRateLimit } from "@/lib/apiRouteProtection";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const RATE_LIMIT_OPTS = { windowMs: 60_000, maxRequests: 120 };
 
 const TTL_MS = 20_000;
 
@@ -39,6 +43,14 @@ function json(resObj, cacheStatus) {
 
 export async function GET(req) {
   try {
+    const limited = enforceIpRateLimit(
+      req,
+      "opinion-token-orderbook",
+      RATE_LIMIT_OPTS,
+      "Too many orderbook requests. Please slow down."
+    );
+    if (limited) return limited;
+
     const { searchParams } = new URL(req.url);
     const token_id = searchParams.get("token_id");
 
