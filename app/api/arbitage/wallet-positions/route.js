@@ -2305,13 +2305,16 @@ export async function GET(request) {
       console.log("[wallet-positions] Found", closedArbPositions.length, "closed arb pairs");
     }
     
+    // Strip internal debug fields before sending to client
+    const stripInternal = (arr) => arr.map(({ _raw, _debug, _cashFlow, ...rest }) => rest);
+
     return NextResponse.json({
       success: true,
-      matched: arbPositions, // For frontend compatibility
-      arbPositions,          // Also keep original name
-      closedArb: closedArbPositions, // Closed arb pairs
-      polyPositions,
-      opinionPositions,
+      matched: stripInternal(arbPositions),
+      arbPositions: stripInternal(arbPositions),
+      closedArb: stripInternal(closedArbPositions),
+      polyPositions: stripInternal(polyPositions),
+      opinionPositions: stripInternal(opinionPositions),
       summary: {
         polyCount: polyPositions.length,
         opinionCount: opinionPositions.length,
@@ -2323,7 +2326,7 @@ export async function GET(request) {
   } catch (error) {
     console.error("[wallet-positions] Error:", error);
     return NextResponse.json(
-      { error: "Internal server error", details: error.message },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }

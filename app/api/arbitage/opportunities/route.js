@@ -29,7 +29,7 @@ export async function GET(req) {
     const minArbPct = toNum(searchParams.get("minArbPct"), 0.1);
     const minSimilarity = Math.max(0.1, Math.min(1, toNum(searchParams.get("minSimilarity"), 0.35)));
     const limit = Math.max(1, Math.min(200, Math.floor(toNum(searchParams.get("limit"), 50))));
-    const wantDebug = searchParams.get("debug") === "1" || searchParams.get("debug") === "true";
+    const wantDebug = process.env.NODE_ENV === "development" && (searchParams.get("debug") === "1" || searchParams.get("debug") === "true");
 
     let result;
     if (mode === "auto") {

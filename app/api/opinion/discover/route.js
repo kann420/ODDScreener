@@ -44,9 +44,9 @@ export async function GET() {
       ts: 0,
     });
   } catch (err) {
-    console.error("[API /discover] Failed:", err.message);
+    console.error("[API /discover] Failed:", err);
     return NextResponse.json(
-      { status: "error", error: true, message: err.message },
+      { status: "error", error: true, message: "Internal server error" },
       { status: 500 }
     );
   }

@@ -1,15 +1,163 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import ArbCalculatorModal from "./ArbCalculatorModal";
 import { getOptimizedImageUrl } from "@/components/OptimizedImage";
-import { getBonusCache, setBonusCache } from "@/lib/clientCache";
+import { getBonusCache, setBonusCache, getProbableBoostedCache, setProbableBoostedCache } from "@/lib/clientCache";
 
-// Cache key for sessionStorage
-const CACHE_KEY = "arbitrage_cache";
+// ── Platform definitions (logos + labels) ──────────────────────────────────
+const PLATFORMS = [
+  { value: "polymarket", label: "Polymarket", logo: "/polymarket_600.svg" },
+  { value: "opinion",    label: "Opinion",    logo: "/logo-opinion.svg" },
+  { value: "probable",   label: "Probable",   logo: "/proable.svg" },
+  { value: "predictfun", label: "Predict.fun", logo: "/predictfun_logo.svg" },
+];
+
+/** Custom exchange dropdown with logo — shared by desktop and mobile header */
+function PlatformSelect({ value, onChange, disabled, excludeValue, width = 130 }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const current = PLATFORMS.find((p) => p.value === value) || PLATFORMS[0];
+  const options = PLATFORMS.filter((p) => p.value !== excludeValue);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position: "relative", width }}>
+      {/* Trigger */}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => !disabled && setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "7px 8px 7px 10px",
+          background: open ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.32)",
+          border: `1px solid ${open ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.13)"}`,
+          borderRadius: 8,
+          color: open ? "rgba(185,198,215,0.6)" : "#e9eef5",
+          cursor: disabled ? "not-allowed" : "pointer",
+          fontSize: 13,
+          fontWeight: 700,
+          transition: "all 0.15s",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={current.logo}
+          alt=""
+          width={15}
+          height={15}
+          style={{ objectFit: "contain", opacity: open ? 0.5 : 0.85, flexShrink: 0 }}
+        />
+        <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {current.label}
+        </span>
+        <svg
+          width="9" height="5" viewBox="0 0 10 6" fill="none"
+          style={{ flexShrink: 0, opacity: 0.55, transition: "transform 0.15s", transform: open ? "rotate(180deg)" : "none" }}
+        >
+          <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {/* Dropdown panel */}
+      {open && (
+        <div
+          role="listbox"
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            right: 0,
+            background: "rgba(13,17,27,0.97)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 8,
+            zIndex: 300,
+            padding: "3px",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.55)",
+          }}
+        >
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              role="option"
+              aria-selected={opt.value === value}
+              disabled={disabled}
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "7px 10px",
+                background: opt.value === value ? "rgba(255,255,255,0.07)" : "transparent",
+                border: "none",
+                borderRadius: 5,
+                color: "rgba(170,185,205,0.8)",
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 700,
+                textAlign: "left",
+                transition: "background 0.1s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = opt.value === value ? "rgba(255,255,255,0.07)" : "transparent"; }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={opt.logo} alt="" width={15} height={15} style={{ objectFit: "contain", opacity: 0.78, flexShrink: 0 }} />
+              <span>{opt.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Cache key for sessionStorage (includes platform pair — ORDER-INDEPENDENT)
+// Sorting alphabetically so "opinion_probable" === "probable_opinion"
+function cacheKey(pA = "polymarket", pB = "opinion") {
+  const sorted = [pA, pB].sort();
+  return `arbitrage_cache_v2_${sorted[0]}_${sorted[1]}`;
+}
+
+/**
+ * Given a row from the engine and the display platform order,
+ * return { statsA, statsB } where statsA = stats for displayPlatformA column,
+ * statsB = stats for displayPlatformB column.
+ *
+ * Engine convention: polyStats = sideB data, opinionStats = sideA data.
+ * row.platformA / sideA.platform = engine's sideA platform.
+ * row.platformB / sideB.platform = engine's sideB platform.
+ */
+function getStatsForDisplay(row, displayPlatformA, displayPlatformB) {
+  // Engine's sideA platform
+  const engineSideA = row.sideA?.platform || row.platformA;
+  // polyStats = sideB, opinionStats = sideA
+  if (engineSideA === displayPlatformA) {
+    // sideA matches display column A → column A = opinionStats, column B = polyStats
+    return { statsA: row.opinionStats, statsB: row.polyStats };
+  }
+  // sideA matches display column B (swapped) → column A = polyStats, column B = opinionStats
+  return { statsA: row.polyStats, statsB: row.opinionStats };
+}
 
 // Get cache from sessionStorage (persists across page navigation)
-function getCache() {
+function getCache(pA, pB) {
   if (typeof window === "undefined") {
     return {
       bids: { rows: null, timestamp: null, matchedMarkets: null },
@@ -17,7 +165,7 @@ function getCache() {
     };
   }
   try {
-    const stored = sessionStorage.getItem(CACHE_KEY);
+    const stored = sessionStorage.getItem(cacheKey(pA, pB));
     if (stored) {
       const parsed = JSON.parse(stored);
       // Validate cache has correct structure
@@ -33,12 +181,12 @@ function getCache() {
 }
 
 // Save cache to sessionStorage
-function saveCache(mode, rows, timestamp, matchedMarkets = null) {
+function saveCache(mode, rows, timestamp, matchedMarkets = null, pA, pB) {
   if (typeof window === "undefined") return;
   try {
-    const cache = getCache();
+    const cache = getCache(pA, pB);
     cache[mode] = { rows, timestamp, matchedMarkets };
-    sessionStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+    sessionStorage.setItem(cacheKey(pA, pB), JSON.stringify(cache));
   } catch {}
 }
 
@@ -114,6 +262,46 @@ function ArbSortIcon({ active, direction }) {
   );
 }
 
+const PREDICTFUN_LOGO_SRC = "/predictfun_logo.svg?v=20260306";
+
+// Platform display maps
+const platformLogoMap = {
+  polymarket: "/2polymarket_600.webp",
+  opinion: "/2logo-opinion.webp",
+  probable: "/proable.svg",
+  predictfun: PREDICTFUN_LOGO_SRC,
+};
+const platformDisplayMap = {
+  polymarket: "Polymarket",
+  opinion: "Opinion",
+  probable: "Probable",
+  predictfun: "Predict.fun",
+};
+const platformColorMap = {
+  polymarket: "rgba(96,165,250,0.95)",
+  opinion: "rgba(249,115,22,1)",
+  probable: "rgba(168,85,247,1)",
+  predictfun: "rgba(99,102,241,1)",
+};
+const platformShortNameMap = {
+  polymarket: "POLY",
+  opinion: "OPN",
+  probable: "PROB",
+  predictfun: "PF",
+};
+const platformVolBorderColor = {
+  polymarket: "rgba(96,165,250,0.5)",
+  opinion: "rgba(249,115,22,0.5)",
+  probable: "rgba(168,85,247,0.5)",
+  predictfun: "rgba(99,102,241,0.5)",
+};
+const platformVolBgColor = {
+  polymarket: "rgba(96,165,250,0.1)",
+  opinion: "rgba(249,115,22,0.1)",
+  probable: "rgba(168,85,247,0.1)",
+  predictfun: "rgba(99,102,241,0.1)",
+};
+
 export default function ArbitageBoard() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -135,6 +323,10 @@ export default function ArbitageBoard() {
   const [scanMode, setScanMode] = useState("quick"); // "quick" (80 markets), "med" (200 markets), or "full" (all markets)
   const [isMobileView, setIsMobileView] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  
+  // Platform selector state
+  const [platformA, setPlatformA] = useState("polymarket");
+  const [platformB, setPlatformB] = useState("predictfun");
   
   // Track if user has ever scanned
   const [hasScanned, setHasScanned] = useState(false);
@@ -159,6 +351,14 @@ export default function ArbitageBoard() {
   // Keep a ref to bonusIds for async scan function
   const bonusIdsRef = useRef(bonusIds);
   useEffect(() => { bonusIdsRef.current = bonusIds; }, [bonusIds]);
+
+  // Probable boosted-points filter
+  const [probableBoostedIds, setProbableBoostedIds] = useState([]);
+  const [boostedProbableOnly, setBoostedProbableOnly] = useState(false);
+  const probableBoostedSet = useMemo(() => new Set((probableBoostedIds || []).map((x) => String(x))), [probableBoostedIds]);
+
+  // Predict.fun boosted filter
+  const [boostedPredictFunOnly, setBoostedPredictFunOnly] = useState(false);
 
   // Update "X ago" display every 30 seconds
   useEffect(() => {
@@ -266,9 +466,49 @@ export default function ArbitageBoard() {
     })();
   }, []);
 
+  // Load Probable boosted market IDs from cache or API when Probable is a selected platform
+  useEffect(() => {
+    if (platformA !== "probable" && platformB !== "probable") return;
+
+    const cached = getProbableBoostedCache();
+    if (cached?.ids) {
+      setProbableBoostedIds(cached.ids);
+      console.log("[Arb] Loaded Probable boosted IDs from cache:", cached.ids.length);
+      return;
+    }
+
+    (async () => {
+      try {
+        const res = await fetch("/api/probable/boosted-markets", { cache: "no-store" });
+        const j = await res.json();
+        const ids = j?.ids || [];
+        if (Array.isArray(ids)) {
+          setProbableBoostedIds(ids);
+          setProbableBoostedCache(ids);
+          console.log("[Arb] Fetched Probable boosted IDs from API:", ids.length);
+        }
+      } catch (e) {
+        console.error("[Arb] Failed to fetch Probable boosted IDs:", e);
+      }
+    })();
+  }, [platformA, platformB]);
+
+  // Reset boostedProbableOnly / boostedPredictFunOnly / bonusOnly when platforms change
+  useEffect(() => {
+    if (platformA !== "opinion" && platformB !== "opinion") {
+      setBonusOnly(false);
+    }
+    if (platformA !== "probable" && platformB !== "probable") {
+      setBoostedProbableOnly(false);
+    }
+    if (platformA !== "predictfun" && platformB !== "predictfun") {
+      setBoostedPredictFunOnly(false);
+    }
+  }, [platformA, platformB]);
+
   // Load from sessionStorage cache when switching modes or on mount
   useEffect(() => {
-    const cache = getCache();
+    const cache = getCache(platformA, platformB);
     const cached = cache[priceMode];
     if (cached?.rows && cached.rows.length > 0) {
       setRows(cached.rows);
@@ -279,12 +519,15 @@ export default function ArbitageBoard() {
       setHasScanned(true); // Cache exists = user has scanned before
       
       // Scan bonus for cached rows (defer to avoid race condition)
-      setTimeout(() => {
-        const marketIds = [...new Set(cached.rows.map((r) => r.opinionMarketId).filter(Boolean))];
-        if (marketIds.length > 0) {
-          scanBonusForMarkets(marketIds);
-        }
-      }, 200);
+      // Only scan for bonus if Opinion is one of the selected platforms
+      if (platformA === "opinion" || platformB === "opinion") {
+        setTimeout(() => {
+          const marketIds = [...new Set(cached.rows.map((r) => r.opinionMarketId).filter(Boolean))];
+          if (marketIds.length > 0) {
+            scanBonusForMarkets(marketIds);
+          }
+        }, 200);
+      }
     } else {
       // No cache, wait for user to scan
       setRows([]);
@@ -293,7 +536,7 @@ export default function ArbitageBoard() {
       setInitialized(true);
       setHasScanned(false); // Reset hasScanned when switching to mode without cache
     }
-  }, [priceMode]); // scanBonusForMarkets is stable (no deps)
+  }, [priceMode, platformA, platformB]); // scanBonusForMarkets is stable (no deps)
 
   // Cleanup SSE on unmount or mode change
   useEffect(() => {
@@ -317,7 +560,8 @@ export default function ArbitageBoard() {
     setStreamingRows([]);
     let latestMatchedPairs = 0;
 
-    const url = `/api/arbitage/stream?priceMode=${encodeURIComponent(priceMode)}&minArbPct=${encodeURIComponent(minArbPct)}&limit=${scanMode === "med" ? 140 : 80}&scanMode=${encodeURIComponent(scanMode)}`;
+    const streamLimit = scanMode === "full" ? 500 : scanMode === "med" ? 140 : 80;
+    const url = `/api/arbitage/stream?priceMode=${encodeURIComponent(priceMode)}&minArbPct=${encodeURIComponent(minArbPct)}&limit=${streamLimit}&scanMode=${encodeURIComponent(scanMode)}&platformA=${encodeURIComponent(platformA)}&platformB=${encodeURIComponent(platformB)}`;
     const es = new EventSource(url);
     eventSourceRef.current = es;
 
@@ -334,9 +578,9 @@ export default function ArbitageBoard() {
           latestMatchedPairs = data.total;
         }
         
-        // Check for Polymarket API error
-        if (data.phase === "error" && data.error === "POLYMARKET_UNAVAILABLE") {
-          setErr(data.errorMessage || "Cannot connect to Polymarket API. Try changing DNS to 8.8.8.8 or using a VPN.");
+        // Check for platform API error
+        if (data.phase === "error" && (data.error === "POLYMARKET_UNAVAILABLE" || data.error === "PROBABLE_UNAVAILABLE" || data.error === "PLATFORM_UNAVAILABLE")) {
+          setErr(data.errorMessage || `Cannot connect to exchange API. Try again later.`);
           es.close();
           eventSourceRef.current = null;
           setLoading(false);
@@ -383,19 +627,22 @@ export default function ArbitageBoard() {
       setStreamingRows((finalRows) => {
         const now = Date.now();
         const finalMatchedCount = latestMatchedPairs > 0 ? latestMatchedPairs : finalRows.length;
-        saveCache(priceMode, finalRows, now, finalMatchedCount);
+        saveCache(priceMode, finalRows, now, finalMatchedCount, platformA, platformB);
         setRows(finalRows);
         setLastScanTime(now);
         setMatchedMarketCount(finalMatchedCount);
         setHasScanned(true);
         
         // Extract unique opinionMarketIds for bonus scan (defer to after state update)
-        setTimeout(() => {
-          const marketIds = [...new Set(finalRows.map((r) => r.opinionMarketId).filter(Boolean))];
-          if (marketIds.length > 0) {
-            scanBonusForMarkets(marketIds);
-          }
-        }, 100);
+        // Only scan for bonus if Opinion is one of the selected platforms
+        if (platformA === "opinion" || platformB === "opinion") {
+          setTimeout(() => {
+            const marketIds = [...new Set(finalRows.map((r) => r.opinionMarketId).filter(Boolean))];
+            if (marketIds.length > 0) {
+              scanBonusForMarkets(marketIds);
+            }
+          }, 100);
+        }
         
         return finalRows;
       });
@@ -429,7 +676,7 @@ export default function ArbitageBoard() {
       setLoading(false);
       setProgress(null);
     };
-  }, [priceMode, minArbPct, scanMode]);
+  }, [priceMode, minArbPct, scanMode, platformA, platformB]);
 
   // Fallback: use regular fetch if SSE fails
   const loadDataFallback = useCallback(async () => {
@@ -438,7 +685,7 @@ export default function ArbitageBoard() {
       setErr("");
       setProgress({ phase: "loading", message: "Loading..." });
 
-      const url = `/api/arbitage/opportunities?mode=auto&priceMode=${encodeURIComponent(priceMode)}&minArbPct=${encodeURIComponent(minArbPct)}&limit=50&t=${Date.now()}`;
+      const url = `/api/arbitage/opportunities?mode=auto&priceMode=${encodeURIComponent(priceMode)}&minArbPct=${encodeURIComponent(minArbPct)}&platformA=${encodeURIComponent(platformA)}&platformB=${encodeURIComponent(platformB)}&limit=50&t=${Date.now()}`;
       
       const res = await fetch(url, { cache: "no-store" });
       const json = await res.json();
@@ -454,7 +701,7 @@ export default function ArbitageBoard() {
       const fallbackMatchedCount = newRows.length;
       
       // Save to sessionStorage cache
-      saveCache(priceMode, newRows, now, fallbackMatchedCount);
+      saveCache(priceMode, newRows, now, fallbackMatchedCount, platformA, platformB);
       
       setRows(newRows);
       setLastScanTime(now);
@@ -466,7 +713,7 @@ export default function ArbitageBoard() {
       setLoading(false);
       setProgress(null);
     }
-  }, [priceMode, minArbPct]);
+  }, [priceMode, minArbPct, platformA, platformB]);
 
   function handleRefresh() {
     // Use streaming by default
@@ -484,7 +731,7 @@ export default function ArbitageBoard() {
     setStreamingRows((currentRows) => {
       if (currentRows.length > 0) {
         const now = Date.now();
-        saveCache(priceMode, currentRows, now, currentRows.length);
+        saveCache(priceMode, currentRows, now, currentRows.length, platformA, platformB);
         setRows(currentRows);
         setLastScanTime(now);
         setMatchedMarketCount(currentRows.length);
@@ -501,19 +748,25 @@ export default function ArbitageBoard() {
   const sorted = useMemo(() => {
     const arr = Array.isArray(displayRows) ? [...displayRows] : [];
     
-    // Sort by selected field
+    // Sort by selected field — use display-mapped stats so sorting matches column headers
     arr.sort((a, b) => {
       if (sortField === "endDate") {
         const dateA = a.endDate ? new Date(a.endDate).getTime() : Infinity;
         const dateB = b.endDate ? new Date(b.endDate).getTime() : Infinity;
         return sortAsc ? dateA - dateB : dateB - dateA;
       } else if (sortField === "polyVolume") {
-        const volA = a.polyStats?.volume ?? 0;
-        const volB = b.polyStats?.volume ?? 0;
+        // "polyVolume" = column A (platformA) volume
+        const sA = getStatsForDisplay(a, platformA, platformB);
+        const sB = getStatsForDisplay(b, platformA, platformB);
+        const volA = sA.statsA?.volume ?? 0;
+        const volB = sB.statsA?.volume ?? 0;
         return sortAsc ? volA - volB : volB - volA;
       } else if (sortField === "opinionVolume") {
-        const volA = a.opinionStats?.volume ?? 0;
-        const volB = b.opinionStats?.volume ?? 0;
+        // "opinionVolume" = column B (platformB) volume
+        const sA = getStatsForDisplay(a, platformA, platformB);
+        const sB = getStatsForDisplay(b, platformA, platformB);
+        const volA = sA.statsB?.volume ?? 0;
+        const volB = sB.statsB?.volume ?? 0;
         return sortAsc ? volA - volB : volB - volA;
       } else {
         return sortAsc 
@@ -522,14 +775,15 @@ export default function ArbitageBoard() {
       }
     });
     return arr.filter((r) => {
-      // Filter by min arb %
+      // Filter by min arb % 
       if ((r.arbPct ?? 0) < minArbPct) return false;
       
-      // Filter by min Poly volume
-      if (minPolyVol > 0 && (r.polyStats?.volume ?? 0) < minPolyVol) return false;
+      // Filter by min Poly volume (column A = platformA)
+      const mapped = getStatsForDisplay(r, platformA, platformB);
+      if (minPolyVol > 0 && (mapped.statsA?.volume ?? 0) < minPolyVol) return false;
       
-      // Filter by min OPN volume
-      if (minOpnVol > 0 && (r.opinionStats?.volume ?? 0) < minOpnVol) return false;
+      // Filter by min OPN volume (column B = platformB)
+      if (minOpnVol > 0 && (mapped.statsB?.volume ?? 0) < minOpnVol) return false;
       
       // Filter by min shares at best bid/ask level
       // Both sides of the arbitrage trade must have at least minShares
@@ -559,7 +813,7 @@ export default function ArbitageBoard() {
       }
       return true;
     });
-  }, [displayRows, sortAsc, sortField, minArbPct, minShares, minPolyVol, minOpnVol]);
+  }, [displayRows, sortAsc, sortField, minArbPct, minShares, minPolyVol, minOpnVol, platformA, platformB]);
 
   // Apply bonus filter
   const filteredSorted = useMemo(() => {
@@ -572,9 +826,30 @@ export default function ArbitageBoard() {
         return bonusSet.has(marketId);
       });
     }
+
+    // Apply Probable boosted filter
+    if (boostedProbableOnly) {
+      result = result.filter((r) => {
+        // Use the pre-computed flag from the engine (direct embed from events API)
+        if (r.probableIsBoosted) return true;
+        // Fallback: check against fetched boosted IDs list
+        const pid = String(r.probableMarketId || "");
+        return pid && probableBoostedSet.has(pid);
+      });
+    }
+
+    // Apply Predict.fun boosted filter (active or upcoming boosts only, not expired)
+    if (boostedPredictFunOnly) {
+      const now = Date.now();
+      result = result.filter((r) => {
+        if (!r.predictfunIsBoosted) return false;
+        const endsMs = r.predictfunBoostEndsAt ? Date.parse(r.predictfunBoostEndsAt) : null;
+        return !endsMs || now < endsMs;
+      });
+    }
     
     return result;
-  }, [sorted, bonusOnly, bonusSet]);
+  }, [sorted, bonusOnly, bonusSet, boostedProbableOnly, probableBoostedSet, boostedPredictFunOnly]);
 
   // Apply search filter
   const searchFilteredRows = useMemo(() => {
@@ -610,7 +885,7 @@ export default function ArbitageBoard() {
   // Reset to first page whenever filtering/sorting mode changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [priceMode, scanMode, searchQuery, minArbPct, minShares, minPolyVol, minOpnVol, bonusOnly, sortField, sortAsc]);
+  }, [priceMode, scanMode, searchQuery, minArbPct, minShares, minPolyVol, minOpnVol, bonusOnly, boostedProbableOnly, sortField, sortAsc]);
 
   const paginatedRows = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -635,6 +910,21 @@ export default function ArbitageBoard() {
     return sorted.filter((r) => bonusSet.has(String(r.opinionMarketId || ""))).length;
   }, [sorted, bonusSet]);
 
+  // Count Probable boosted markets in current results
+  const boostedProbableCount = useMemo(() => {
+    return sorted.filter((r) => r.probableIsBoosted || (r.probableMarketId && probableBoostedSet.has(String(r.probableMarketId)))).length;
+  }, [sorted, probableBoostedSet]);
+
+  // Count Predict.fun boosted markets in current results (active or upcoming, not expired)
+  const boostedPredictFunCount = useMemo(() => {
+    const now = Date.now();
+    return sorted.filter((r) => {
+      if (!r.predictfunIsBoosted) return false;
+      const endsMs = r.predictfunBoostEndsAt ? Date.parse(r.predictfunBoostEndsAt) : null;
+      return !endsMs || now < endsMs;
+    }).length;
+  }, [sorted]);
+
   // Progress bar percentage
   const progressPct = progress?.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
   const showFullScanMatchedInTitle = scanMode === "full" && matchedMarketCount !== null && !loading;
@@ -651,13 +941,13 @@ export default function ArbitageBoard() {
     <div className="arb-board" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {/* Header */}
       <div className="panel arb-header" style={{ padding: 16 }}>
-        <div className="arb-header-top" style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-          <div className="arb-header-left">
+        <div className="arb-header-top" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", position: "relative" }}>
+          <div className="arb-header-left" style={{ flex: 1 }}>
             <div className="arb-title" style={{ fontSize: 22, fontWeight: 900 }}>Arbitrage</div>
             <div className="muted arb-subtitle" style={{ fontSize: 12, marginTop: 6 }}>
               {priceMode === "bids" 
-                ? <>Using best <b>BID</b> prices from Opinion & Polymarket.</>
-                : <>Using best <b>ASK</b> prices from Opinion & Polymarket.</>
+                ? <>Using best <b>BID</b> prices from {platformA.charAt(0).toUpperCase() + platformA.slice(1)} & {platformB.charAt(0).toUpperCase() + platformB.slice(1)}.</>
+                : <>Using best <b>ASK</b> prices from {platformA.charAt(0).toUpperCase() + platformA.slice(1)} & {platformB.charAt(0).toUpperCase() + platformB.slice(1)}.</>
               }
               {loading && progress?.message && (
                 <span style={{ marginLeft: 8, color: "rgba(255,180,50,0.9)" }}>
@@ -675,7 +965,73 @@ export default function ArbitageBoard() {
             ) : null}
           </div>
 
-          <div className="arb-header-right" style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          {/* ── Exchange Selector — absolutely centered on desktop ── */}
+          <div className="arb-header-exchange" style={{
+            position: "absolute",
+            left: "50%",
+            top: "50%",
+            transform: "translate(-50%, -50%)",
+            display: "flex",
+            alignItems: "flex-end",
+            gap: 6,
+            pointerEvents: "auto",
+          }}>
+            <div>
+              <div style={{ fontSize: 9, fontWeight: 700, color: "rgba(148,163,184,0.6)", marginBottom: 3, textTransform: "uppercase", letterSpacing: 1 }}>Exchange A</div>
+              <PlatformSelect
+                value={platformA}
+                onChange={(val) => {
+                  if (val === platformB) setPlatformB(platformA);
+                  setPlatformA(val);
+                }}
+                disabled={loading}
+                excludeValue={platformB}
+              />
+            </div>
+            {/* Swap */}
+            <button
+              type="button"
+              onClick={() => { setPlatformA(platformB); setPlatformB(platformA); }}
+              disabled={loading}
+              aria-label="Swap exchanges"
+              style={{
+                marginBottom: 1,
+                padding: "7px 9px",
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.11)",
+                borderRadius: 8,
+                cursor: loading ? "not-allowed" : "pointer",
+                color: "rgba(148,163,184,0.85)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "background 0.15s",
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => { if (!loading) e.currentTarget.style.background = "rgba(255,255,255,0.11)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7 16l-4-4 4-4" />
+                <path d="M17 8l4 4-4 4" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+              </svg>
+            </button>
+            <div>
+              <div style={{ fontSize: 9, fontWeight: 700, color: "rgba(148,163,184,0.6)", marginBottom: 3, textTransform: "uppercase", letterSpacing: 1 }}>Exchange B</div>
+              <PlatformSelect
+                value={platformB}
+                onChange={(val) => {
+                  if (val === platformA) setPlatformA(platformB);
+                  setPlatformB(val);
+                }}
+                disabled={loading}
+                excludeValue={platformA}
+              />
+            </div>
+          </div>
+
+          <div className="arb-header-right" style={{ display: "flex", gap: 10, alignItems: "center", flex: "0 0 auto" }}>
             <div className="arb-scan-btn-wrap" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
               {loading ? (
                 <button
@@ -853,6 +1209,81 @@ export default function ArbitageBoard() {
           </div>
         </div>
 
+        {/* Platform Selector — mobile-only (hidden on desktop via CSS, shown on mobile) */}
+        <div className="arb-platform-selector arb-platform-selector-mobile" style={{
+          display: "flex",
+          alignItems: "center",
+          width: "100%",
+          gap: 8,
+          marginTop: 10,
+          padding: "7px 10px",
+          background: "rgba(255,255,255,0.03)",
+          borderRadius: 10,
+          border: "1px solid rgba(255,255,255,0.08)",
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <PlatformSelect
+              value={platformA}
+              onChange={(val) => {
+                if (val === platformB) {
+                  setPlatformB(platformA);
+                }
+                setPlatformA(val);
+              }}
+              disabled={loading}
+              excludeValue={platformB}
+              width="100%"
+            />
+          </div>
+          {/* Swap Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setPlatformA(platformB);
+              setPlatformB(platformA);
+            }}
+            disabled={loading}
+            aria-label="Swap exchanges"
+            style={{
+              flexShrink: 0,
+              width: 32,
+              height: 32,
+              padding: 0,
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.12)",
+              borderRadius: 8,
+              cursor: loading ? "not-allowed" : "pointer",
+              color: "rgba(148,163,184,0.9)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "background 0.15s",
+            }}
+            onMouseEnter={(e) => { if (!loading) e.currentTarget.style.background = "rgba(255,255,255,0.12)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7 16l-4-4 4-4" />
+              <path d="M17 8l4 4-4 4" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+            </svg>
+          </button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <PlatformSelect
+              value={platformB}
+              onChange={(val) => {
+                if (val === platformA) {
+                  setPlatformA(platformB);
+                }
+                setPlatformB(val);
+              }}
+              disabled={loading}
+              excludeValue={platformA}
+              width="100%"
+            />
+          </div>
+        </div>
+
         {/* Filter Panel (Collapsible) */}
         {showFilters && (
           <div style={{ 
@@ -997,10 +1428,11 @@ export default function ArbitageBoard() {
                 </div>
               </div>
 
-              {/* Bonus Only Filter */}
+              {/* Bonus Only Filter - only shown when Opinion is one of the selected platforms */}
+              {(platformA === "opinion" || platformB === "opinion") && (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <label style={{ fontSize: 11, fontWeight: 800, color: "rgba(233,238,245,0.6)", height: 13 }}>
-                  BONUS FILTER
+                  OPN BONUS FILTER
                 </label>
                 <button
                   type="button"
@@ -1054,11 +1486,110 @@ export default function ArbitageBoard() {
                   )}
                 </button>
               </div>
+              )}
 
-              {/* Min Poly Volume */}
+              {/* Boosted Points Filter (Probable only) */}
+              {(platformA === "probable" || platformB === "probable") && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <label style={{ fontSize: 11, fontWeight: 800, color: "rgba(233,238,245,0.6)", height: 13 }}>
+                    BOOST FILTER
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setBoostedProbableOnly((v) => !v)}
+                    style={{
+                      height: 38,
+                      padding: "0 14px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      background: boostedProbableOnly ? "rgba(168,85,247,0.15)" : "rgba(0,0,0,0.2)",
+                      border: boostedProbableOnly ? "1px solid rgba(168,85,247,0.55)" : "1px solid rgba(255,255,255,0.1)",
+                      color: boostedProbableOnly ? "rgba(216,180,254,1)" : "rgba(233,238,245,0.7)",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src="/probable_logo.svg"
+                      alt=""
+                      width={20}
+                      height={20}
+                      style={{ opacity: boostedProbableOnly ? 1 : 0.45, flexShrink: 0 }}
+                    />
+                    <span>Boosted Only</span>
+                    {boostedProbableCount > 0 && (
+                      <span style={{
+                        padding: "2px 6px",
+                        borderRadius: 4,
+                        background: boostedProbableOnly ? "rgba(168,85,247,0.3)" : "rgba(255,255,255,0.1)",
+                        fontSize: 11,
+                        fontWeight: 800,
+                      }}>
+                        {boostedProbableCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Predict.fun Boost Filter */}
+              {(platformA === "predictfun" || platformB === "predictfun") && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <label style={{ fontSize: 11, fontWeight: 800, color: "rgba(233,238,245,0.6)", height: 13 }}>
+                    PF BOOSTED FILTER
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setBoostedPredictFunOnly((v) => !v)}
+                    style={{
+                      height: 38,
+                      padding: "0 14px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      background: boostedPredictFunOnly ? "rgba(99,102,241,0.18)" : "rgba(0,0,0,0.2)",
+                      border: boostedPredictFunOnly ? "1px solid rgba(99,102,241,0.6)" : "1px solid rgba(255,255,255,0.1)",
+                      color: boostedPredictFunOnly ? "rgba(165,180,252,1)" : "rgba(233,238,245,0.7)",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={PREDICTFUN_LOGO_SRC}
+                      alt=""
+                      width={18}
+                      height={18}
+                      style={{ opacity: boostedPredictFunOnly ? 1 : 0.45, flexShrink: 0, borderRadius: 3 }}
+                    />
+                    <span>Boosted Only</span>
+                    {boostedPredictFunCount > 0 && (
+                      <span style={{
+                        padding: "2px 6px",
+                        borderRadius: 4,
+                        background: boostedPredictFunOnly ? "rgba(99,102,241,0.3)" : "rgba(255,255,255,0.1)",
+                        fontSize: 11,
+                        fontWeight: 800,
+                      }}>
+                        {boostedPredictFunCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Min Platform A Volume */}
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <label style={{ fontSize: 11, fontWeight: 800, color: "rgba(233,238,245,0.6)", height: 13 }}>
-                  MIN POLY VOLUME
+                  MIN {platformShortNameMap[platformA] || platformA.toUpperCase()} VOLUME
                 </label>
                 <input
                   type="text"
@@ -1074,8 +1605,8 @@ export default function ArbitageBoard() {
                     width: 120,
                     padding: "0 10px",
                     borderRadius: 6,
-                    border: minPolyVol > 0 ? "1px solid rgba(96,165,250,0.5)" : "1px solid rgba(255,255,255,0.1)",
-                    background: minPolyVol > 0 ? "rgba(96,165,250,0.1)" : "rgba(0,0,0,0.2)",
+                    border: minPolyVol > 0 ? `1px solid ${platformVolBorderColor[platformA] || "rgba(96,165,250,0.5)"}` : "1px solid rgba(255,255,255,0.1)",
+                    background: minPolyVol > 0 ? (platformVolBgColor[platformA] || "rgba(96,165,250,0.1)") : "rgba(0,0,0,0.2)",
                     color: "rgba(233,238,245,0.9)",
                     fontSize: 13,
                     fontWeight: 700,
@@ -1085,10 +1616,10 @@ export default function ArbitageBoard() {
                 />
               </div>
 
-              {/* Min OPN Volume */}
+              {/* Min Platform B Volume */}
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <label style={{ fontSize: 11, fontWeight: 800, color: "rgba(233,238,245,0.6)", height: 13 }}>
-                  MIN OPN VOLUME
+                  MIN {platformShortNameMap[platformB] || platformB.toUpperCase()} VOLUME
                 </label>
                 <input
                   type="text"
@@ -1104,8 +1635,8 @@ export default function ArbitageBoard() {
                     width: 120,
                     padding: "0 10px",
                     borderRadius: 6,
-                    border: minOpnVol > 0 ? "1px solid rgba(249,115,22,0.5)" : "1px solid rgba(255,255,255,0.1)",
-                    background: minOpnVol > 0 ? "rgba(249,115,22,0.1)" : "rgba(0,0,0,0.2)",
+                    border: minOpnVol > 0 ? `1px solid ${platformVolBorderColor[platformB] || "rgba(249,115,22,0.5)"}` : "1px solid rgba(255,255,255,0.1)",
+                    background: minOpnVol > 0 ? (platformVolBgColor[platformB] || "rgba(249,115,22,0.1)") : "rgba(0,0,0,0.2)",
                     color: "rgba(233,238,245,0.9)",
                     fontSize: 13,
                     fontWeight: 700,
@@ -1118,7 +1649,7 @@ export default function ArbitageBoard() {
             {/* Scan mode description - moved outside to avoid height mismatch */}
             <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(233,238,245,0.6)", marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
               {scanMode === "quick" 
-                ? "Quick scan: Top 90 markets. Results available almost instantly."
+                ? "Quick scan: Top 90 markets. Results almost instantly."
                 : scanMode === "med"
                 ? "Med scan: Top 300 markets. May take up to 30 seconds."
                 : "Full scan: All markets. May take up to 1 minute."
@@ -1271,7 +1802,7 @@ export default function ArbitageBoard() {
         <div 
           style={{ 
             fontWeight: 900, 
-            color: sortField === "polyVolume" ? "rgba(255,180,50,1)" : "rgba(96,165,250,0.95)", 
+            color: sortField === "polyVolume" ? "rgba(255,180,50,1)" : (platformColorMap[platformA] || "rgba(96,165,250,0.95)"), 
             textAlign: "left", 
             textTransform: "uppercase", 
             fontSize: 13, 
@@ -1289,17 +1820,17 @@ export default function ArbitageBoard() {
               setSortAsc(false); // Start with highest first
             }
           }}
-          title="Click to sort by Polymarket 24h volume"
+          title={`Click to sort by ${platformDisplayMap[platformA] || "Platform A"} 24h volume`}
         >
           <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start" }}>
-            Polymarket Stats
+            {platformDisplayMap[platformA] || "Platform A"} Stats
             <ArbSortIcon active={sortField === "polyVolume"} direction={sortAsc} />
           </span>
         </div>
         <div 
           style={{ 
             fontWeight: 900, 
-            color: sortField === "opinionVolume" ? "rgba(255,180,50,1)" : "rgba(249,115,22,1)", 
+            color: sortField === "opinionVolume" ? "rgba(255,180,50,1)" : (platformColorMap[platformB] || "rgba(249,115,22,1)"), 
             textAlign: "left", 
             textTransform: "uppercase", 
             fontSize: 13, 
@@ -1317,10 +1848,10 @@ export default function ArbitageBoard() {
               setSortAsc(false); // Start with highest first
             }
           }}
-          title="Click to sort by Opinion 24h volume"
+          title={`Click to sort by ${platformDisplayMap[platformB] || "Platform B"} 24h volume`}
         >
           <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start" }}>
-            Opinion Stats
+            {platformDisplayMap[platformB] || "Platform B"} Stats
             <ArbSortIcon active={sortField === "opinionVolume"} direction={sortAsc} />
           </span>
         </div>
@@ -1423,14 +1954,22 @@ export default function ArbitageBoard() {
               ? `No results found for "${searchQuery.trim()}"`
               : bonusOnly 
                 ? `No bonus markets with arbitrage ≥ ${minArbPct.toFixed(2)}% found.`
-                : `No arbitrage opportunities ≥ ${minArbPct.toFixed(2)}% found.`}
+                : boostedProbableOnly
+                  ? `No boosted Probable markets with arbitrage ≥ ${minArbPct.toFixed(2)}% found.`
+                  : boostedPredictFunOnly
+                    ? `No boosted Predict.fun markets with arbitrage ≥ ${minArbPct.toFixed(2)}% found.`
+                    : `No arbitrage opportunities ≥ ${minArbPct.toFixed(2)}% found.`}
           </div>
           <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
             {searchQuery.trim()
               ? "Try a different search term or clear the search."
               : bonusOnly 
                 ? "Try disabling the bonus filter or adjusting other filters."
-                : "Try scanning again, or adjust your filters."}
+                : boostedProbableOnly
+                  ? "Try disabling the Probable boosted filter or adjusting other filters."
+                  : boostedPredictFunOnly
+                    ? "Try disabling the Predict.fun boost filter or adjusting other filters."
+                    : "Try scanning again, or adjust your filters."}
           </div>
         </div>
       ) : (
@@ -1440,7 +1979,13 @@ export default function ArbitageBoard() {
               key={r.id} 
               r={r} 
               priceMode={priceMode}
+              displayPlatformA={platformA}
+              displayPlatformB={platformB}
               isBonus={bonusSet.has(String(r.opinionMarketId || ""))}
+              isBoostedProbable={r.probableIsBoosted || probableBoostedSet.has(String(r.probableMarketId || ""))}
+              isBoostedPredictFun={!!r.predictfunIsBoosted}
+              pfBoostStartsAtMs={r.predictfunBoostStartsAt ? Date.parse(r.predictfunBoostStartsAt) : null}
+              pfBoostEndsAtMs={r.predictfunBoostEndsAt ? Date.parse(r.predictfunBoostEndsAt) : null}
               onCalculatorClick={() => setCalculatorRow(r)}
             />
           ))}
@@ -1574,48 +2119,67 @@ function PagerButton({ children, onClick, disabled, active }) {
      â†’ Poly shows YES orderbook, Opinion shows NO orderbook
 ======================================== */
 function MiniOrderbook({ row, priceMode }) {
-  const [platform, setPlatform] = useState("opinion"); // "poly" or "opinion"
+  // Map platform names to the API "platform" param values
+  const pA = row.platformA || row.sideA?.platform || "polymarket";
+  const pB = row.platformB || row.sideB?.platform || "opinion";
+  const apiPlatformA = pA === "polymarket" ? "poly" : pA; // API uses "poly" not "polymarket"
+  const apiPlatformB = pB === "polymarket" ? "poly" : pB;
+  const labelA = platformDisplayMap[pA] || pA;
+  const labelB = platformDisplayMap[pB] || pB;
+
+  const [platform, setPlatform] = useState(apiPlatformB); // default to side B
   const [ob, setOb] = useState(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Determine which token to show based on strategy
-  // Strategy lines: ["Buy YES (Poly)", "Buy NO (Opinion)"] or similar
+  // Strategy lines: ["Buy YES (Poly)", "Buy NO (Probable)"] or similar
+  // Parse which side (YES/NO) each platform buys from the tag in parentheses
+  // prices.opTag = sideA tag, prices.polyTag = sideB tag (legacy naming)
   const strategyLines = row.strategy ?? [];
-  const polyLine = strategyLines[0] || "";
-  const opLine = strategyLines[1] || "";
+  const tagA = row.prices?.opTag || "";
+  const tagB = row.prices?.polyTag || "";
+  
+  const sideALine = strategyLines.find(l => l.includes(`(${tagA})`)) || strategyLines[1] || "";
+  const sideBLine = strategyLines.find(l => l.includes(`(${tagB})`)) || strategyLines[0] || "";
+  
+  const sideABuysYes = /buy\s+yes/i.test(sideALine) || (/buy/i.test(sideALine) && !/no/i.test(sideALine));
+  const sideBBuysYes = /buy\s+yes/i.test(sideBLine) || (/buy/i.test(sideBLine) && !/no/i.test(sideBLine));
 
-  // Determine which side is bought on each platform
-  // e.g. "Buy NO (Poly)" â†’ poly buys NO â†’ show poly NO orderbook
-  const polyBuysYes = /buy\s+yes/i.test(polyLine) || (/buy/i.test(polyLine) && !/no/i.test(polyLine));
-  const opBuysYes = /buy\s+yes/i.test(opLine) || (/buy/i.test(opLine) && !/no/i.test(opLine));
-
-  // Memoize token IDs to prevent infinite re-render loop
+  // Token IDs: opYes/opNo = sideA tokens, polyYes/polyNo = sideB tokens (legacy naming)
   const rawIds = row.tokenIds || null;
-  const debugPoly = row.debug?.polyTokens || null;
-  const debugOp = row.debug?.opTokens || null;
+  const sideAYesTid = rawIds?.opYes || null;
+  const sideANoTid = rawIds?.opNo || null;
+  const sideBYesTid = rawIds?.polyYes || null;
+  const sideBNoTid = rawIds?.polyNo || null;
 
-  const polyYesTid = rawIds?.polyYes || debugPoly?.yesTokenId || null;
-  const polyNoTid = rawIds?.polyNo || debugPoly?.noTokenId || null;
-  const opYesTid = rawIds?.opYes || debugOp?.yes || null;
-  const opNoTid = rawIds?.opNo || debugOp?.no || null;
-
-  const hasTokenIds = Boolean(polyYesTid && polyNoTid && opYesTid && opNoTid);
+  const hasTokenIds = Boolean(sideAYesTid && sideANoTid && sideBYesTid && sideBNoTid);
 
   // Derive the specific token ID to fetch based on platform + strategy side
   const activeTokenId = useMemo(() => {
     if (!hasTokenIds) return null;
-    if (platform === "poly") {
-      return polyBuysYes ? polyYesTid : polyNoTid;
+    if (platform === apiPlatformA) {
+      // Side A tokens
+      return sideABuysYes ? sideAYesTid : sideANoTid;
     } else {
-      return opBuysYes ? opYesTid : opNoTid;
+      // Side B tokens
+      return sideBBuysYes ? sideBYesTid : sideBNoTid;
     }
-  }, [platform, polyBuysYes, opBuysYes, polyYesTid, polyNoTid, opYesTid, opNoTid, hasTokenIds]);
+  }, [platform, apiPlatformA, sideABuysYes, sideBBuysYes, sideAYesTid, sideANoTid, sideBYesTid, sideBNoTid, hasTokenIds]);
 
-  const sideLabel = platform === "poly"
-    ? (polyBuysYes ? (row.prices?.polyYesLabel || "YES") : (row.prices?.polyNoLabel || "NO"))
-    : (opBuysYes ? (row.prices?.opYesLabel || "YES") : (row.prices?.opNoLabel || "NO"));
+  useEffect(() => {
+    setPlatform(apiPlatformB);
+    setOb(null);
+  }, [row.id, apiPlatformB]);
+
+  useEffect(() => {
+    setOb(null);
+  }, [platform, activeTokenId]);
+
+  // Labels: opYesLabel/opNoLabel = sideA labels, polyYesLabel/polyNoLabel = sideB labels (legacy)
+  const sideLabel = platform === apiPlatformA
+    ? (sideABuysYes ? (row.prices?.opYesLabel || "YES") : (row.prices?.opNoLabel || "NO"))
+    : (sideBBuysYes ? (row.prices?.polyYesLabel || "YES") : (row.prices?.polyNoLabel || "NO"));
 
   // Fetch orderbook when expanded, platform changes, or refresh triggered
   useEffect(() => {
@@ -1703,7 +2267,7 @@ function MiniOrderbook({ row, priceMode }) {
       <div style={{ display: "flex", gap: 4, marginBottom: 2 }}>
         <button
           type="button"
-          onClick={() => setPlatform("poly")}
+          onClick={() => setPlatform(apiPlatformA)}
           style={{
             padding: "3px 8px",
             fontSize: 10,
@@ -1711,15 +2275,15 @@ function MiniOrderbook({ row, priceMode }) {
             borderRadius: 4,
             border: "none",
             cursor: "pointer",
-            background: platform === "poly" ? "rgba(96,165,250,0.25)" : "rgba(255,255,255,0.06)",
-            color: platform === "poly" ? "rgba(96,165,250,1)" : "rgba(233,238,245,0.6)",
+            background: platform === apiPlatformA ? `${platformColorMap[pA] || "rgba(96,165,250,1)"}40` : "rgba(255,255,255,0.06)",
+            color: platform === apiPlatformA ? (platformColorMap[pA] || "rgba(96,165,250,1)") : "rgba(233,238,245,0.6)",
           }}
         >
-          Poly
+          {labelA}
         </button>
         <button
           type="button"
-          onClick={() => setPlatform("opinion")}
+          onClick={() => setPlatform(apiPlatformB)}
           style={{
             padding: "3px 8px",
             fontSize: 10,
@@ -1727,11 +2291,11 @@ function MiniOrderbook({ row, priceMode }) {
             borderRadius: 4,
             border: "none",
             cursor: "pointer",
-            background: platform === "opinion" ? "rgba(249,115,22,0.25)" : "rgba(255,255,255,0.06)",
-            color: platform === "opinion" ? "rgba(249,115,22,1)" : "rgba(233,238,245,0.6)",
+            background: platform === apiPlatformB ? `${platformColorMap[pB] || "rgba(249,115,22,1)"}40` : "rgba(255,255,255,0.06)",
+            color: platform === apiPlatformB ? (platformColorMap[pB] || "rgba(249,115,22,1)") : "rgba(233,238,245,0.6)",
           }}
         >
-          Opinion
+          {labelB}
         </button>
         <button
           type="button"
@@ -1873,7 +2437,7 @@ function MiniOrderbook({ row, priceMode }) {
   );
 }
 
-function Row({ r, priceMode, isBonus, onCalculatorClick }) {
+function Row({ r, priceMode, displayPlatformA, displayPlatformB, isBonus, isBoostedProbable, isBoostedPredictFun, pfBoostStartsAtMs, pfBoostEndsAtMs, onCalculatorClick }) {
   return (
     <div
       className="arb-row"
@@ -1937,8 +2501,28 @@ function Row({ r, priceMode, isBonus, onCalculatorClick }) {
           </div>
 
           <div className="arb-row-links" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <VenueLine logoSrc="/2polymarket_600.webp" label="Polymarket" url={r.poly?.url} />
-            <VenueLine logoSrc="/2logo-opinion.webp" label="Opinion" url={r.opinion?.url} isBonus={isBonus} />
+            <VenueLine 
+              logoSrc={platformLogoMap[r.sideA?.platform || r.platformA || platformA] || "/2polymarket_600.webp"} 
+              label={platformDisplayMap[r.sideA?.platform || r.platformA || platformA] || "Exchange A"} 
+              url={r.sideA?.url || r.opinion?.url}
+              isBonus={(r.sideA?.platform === "opinion" || r.platformA === "opinion") ? isBonus : false}
+              isBoostProbable={(r.sideA?.platform === "probable" || r.platformA === "probable") && isBoostedProbable}
+              boostMultiplier={r.probableMultiplier}
+              isBoostPredictFun={(r.sideA?.platform === "predictfun" || r.platformA === "predictfun") && isBoostedPredictFun}
+              pfBoostStartsAtMs={pfBoostStartsAtMs}
+              pfBoostEndsAtMs={pfBoostEndsAtMs}
+            />
+            <VenueLine 
+              logoSrc={platformLogoMap[r.sideB?.platform || r.platformB || platformB] || "/2logo-opinion.webp"} 
+              label={platformDisplayMap[r.sideB?.platform || r.platformB || platformB] || "Exchange B"} 
+              url={r.sideB?.url || r.poly?.url} 
+              isBonus={(r.sideB?.platform === "opinion" || r.platformB === "opinion") ? isBonus : false}
+              isBoostProbable={(r.sideB?.platform === "probable" || r.platformB === "probable") && isBoostedProbable}
+              boostMultiplier={r.probableMultiplier}
+              isBoostPredictFun={(r.sideB?.platform === "predictfun" || r.platformB === "predictfun") && isBoostedPredictFun}
+              pfBoostStartsAtMs={pfBoostStartsAtMs}
+              pfBoostEndsAtMs={pfBoostEndsAtMs}
+            />
           </div>
           
           {/* Mobile-only strategy - shows first 2 lines below links */}
@@ -1957,20 +2541,26 @@ function Row({ r, priceMode, isBonus, onCalculatorClick }) {
         {(() => {
           const lines = (r.strategy ?? []).slice(0, 2);
           // Parse which price applies to each strategy line
+          // prices.poly* = sideB prices, prices.op* = sideA prices
+          // prices.polyTag = sideB tag (e.g. "Probable"), prices.opTag = sideA tag (e.g. "Poly")
           const getPriceForLine = (line) => {
             if (!r.prices) return null;
-            const isPolyLine = /\(Poly\)/i.test(line);
-            const polyYL = r.prices.polyYesLabel || "YES";
-            const polyNL = r.prices.polyNoLabel || "NO";
-            const opYL = r.prices.opYesLabel || "YES";
-            const opNL = r.prices.opNoLabel || "NO";
-            if (isPolyLine) {
-              if (line.includes(polyYL) && !line.includes(polyNL)) return r.prices.polyYes;
-              if (line.includes(polyNL)) return r.prices.polyNo;
+            const polyTag = r.prices.polyTag || "Poly";   // sideB tag
+            const opTag = r.prices.opTag || "Opinion";     // sideA tag
+            // Check which platform this line references by matching the tag
+            const isSideB = line.includes(`(${polyTag})`);
+            // sideB → poly* prices, sideA → op* prices
+            if (isSideB) {
+              const yL = r.prices.polyYesLabel || "YES";
+              const nL = r.prices.polyNoLabel || "NO";
+              if (line.includes(yL) && !line.includes(nL)) return r.prices.polyYes;
+              if (line.includes(nL)) return r.prices.polyNo;
               return /buy\s+yes/i.test(line) ? r.prices.polyYes : r.prices.polyNo;
             } else {
-              if (line.includes(opYL) && !line.includes(opNL)) return r.prices.opYes;
-              if (line.includes(opNL)) return r.prices.opNo;
+              const yL = r.prices.opYesLabel || "YES";
+              const nL = r.prices.opNoLabel || "NO";
+              if (line.includes(yL) && !line.includes(nL)) return r.prices.opYes;
+              if (line.includes(nL)) return r.prices.opNo;
               return /buy\s+yes/i.test(line) ? r.prices.opYes : r.prices.opNo;
             }
           };
@@ -2012,33 +2602,45 @@ function Row({ r, priceMode, isBonus, onCalculatorClick }) {
         })()}
       </div>
 
-      {/* Polymarket Stats col */}
-      <div className="arb-row-poly-stats" style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, padding: "2px 0", borderLeft: "1px solid rgba(255,255,255,0.10)", paddingLeft: 10 }}>
-        <div style={{ display: "flex", gap: 32 }}>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: "rgba(148,163,184,0.7)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>24H Volume</div>
-            <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(96,165,250,0.95)" }}>{formatDollarFull(r.polyStats?.volume)}</div>
+      {/* Platform A Stats col — dynamically mapped to correct stats based on display order */}
+      {(() => {
+        const { statsA } = getStatsForDisplay(r, displayPlatformA, displayPlatformB);
+        const colorA = platformColorMap[displayPlatformA] || "rgba(96,165,250,0.95)";
+        return (
+          <div className="arb-row-poly-stats" style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, padding: "2px 0", borderLeft: "1px solid rgba(255,255,255,0.10)", paddingLeft: 10 }}>
+            <div style={{ display: "flex", gap: 32 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "rgba(148,163,184,0.7)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>24H Volume</div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: colorA }}>{formatDollarFull(statsA?.volume)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "rgba(148,163,184,0.7)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>Liquidity</div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: colorA }}>{formatDollarFull(statsA?.liquidity)}</div>
+              </div>
+            </div>
           </div>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: "rgba(148,163,184,0.7)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>Liquidity</div>
-            <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(96,165,250,0.95)" }}>{formatDollarFull(r.polyStats?.liquidity)}</div>
-          </div>
-        </div>
-      </div>
+        );
+      })()}
 
-      {/* Opinion Stats col */}
-      <div className="arb-row-opinion-stats" style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, padding: "2px 0", borderLeft: "1px solid rgba(255,255,255,0.10)", paddingLeft: 10 }}>
-        <div style={{ display: "flex", gap: 35 }}>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: "rgba(148,163,184,0.7)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>24H Volume</div>
-            <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(249,115,22,1)" }}>{formatDollarFull(r.opinionStats?.volume)}</div>
+      {/* Platform B Stats col — dynamically mapped to correct stats based on display order */}
+      {(() => {
+        const { statsB } = getStatsForDisplay(r, displayPlatformA, displayPlatformB);
+        const colorB = platformColorMap[displayPlatformB] || "rgba(249,115,22,1)";
+        return (
+          <div className="arb-row-opinion-stats" style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, padding: "2px 0", borderLeft: "1px solid rgba(255,255,255,0.10)", paddingLeft: 10 }}>
+            <div style={{ display: "flex", gap: 35 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "rgba(148,163,184,0.7)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>24H Volume</div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: colorB }}>{formatDollarFull(statsB?.volume)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "rgba(148,163,184,0.7)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>Liquidity</div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: colorB }}>{formatDollarFull(statsB?.liquidity)}</div>
+              </div>
+            </div>
           </div>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: "rgba(148,163,184,0.7)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>Liquidity</div>
-            <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(249,115,22,1)" }}>{formatDollarFull(r.opinionStats?.liquidity)}</div>
-          </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Order Book col */}
       <div className="arb-row-orderbook" style={{ display: "flex", flexDirection: "column", justifyContent: "center", borderLeft: "1px solid rgba(255,255,255,0.10)", paddingLeft: 10, minWidth: 0 }}>
@@ -2099,7 +2701,27 @@ function Row({ r, priceMode, isBonus, onCalculatorClick }) {
   );
 }
 
-function VenueLine({ logoSrc, label, url, isBonus }) {
+function VenueLine({ logoSrc, label, url, isBonus, isBoostProbable, boostMultiplier, isBoostPredictFun, pfBoostStartsAtMs, pfBoostEndsAtMs }) {
+  // Compute Predict.fun boost status inline (board re-renders every 30s via forceUpdate)
+  let pfBoostStatus = null;
+  let pfCountdown = null;
+  if (isBoostPredictFun && pfBoostStartsAtMs && pfBoostEndsAtMs) {
+    const now = Date.now();
+    if (now < pfBoostEndsAtMs) {
+      if (now >= pfBoostStartsAtMs) {
+        pfBoostStatus = "active";
+      } else {
+        pfBoostStatus = "upcoming";
+        const totalMin = Math.floor((pfBoostStartsAtMs - now) / 60000);
+        const h = Math.floor(totalMin / 60);
+        const m = totalMin % 60;
+        pfCountdown = h > 0 ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m`;
+      }
+    }
+  } else if (isBoostPredictFun && (!pfBoostStartsAtMs || !pfBoostEndsAtMs)) {
+    // Boost flag set but no window — show as active
+    pfBoostStatus = "active";
+  }
   return (
     <a
       href={url || "#"}
@@ -2177,6 +2799,100 @@ function VenueLine({ logoSrc, label, url, isBonus }) {
             marginLeft: 4,
           }} 
         />
+      )}
+
+      {/* Boosted points badge - only for Probable boosted markets */}
+      {isBoostProbable && (
+        <span
+          title={`This market has ${boostMultiplier ? `${boostMultiplier}x ` : ""}boosted points`}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 3,
+            padding: "2px 6px",
+            borderRadius: 4,
+            background: "rgba(168,85,247,0.2)",
+            border: "1px solid rgba(168,85,247,0.45)",
+            marginLeft: 4,
+            flexShrink: 0,
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(216,180,254,0.9)" stroke="none">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+          </svg>
+          <span style={{
+            fontSize: 10,
+            fontWeight: 900,
+            color: "rgba(216,180,254,0.95)",
+            letterSpacing: 0.3,
+            lineHeight: 1,
+          }}>
+            {boostMultiplier && boostMultiplier > 1 ? `${boostMultiplier}x` : "BOOST"}
+          </span>
+        </span>
+      )}
+
+      {/* Predict.fun active boost badge */}
+      {isBoostPredictFun && pfBoostStatus === "active" && (
+        <span
+          title="This Predict.fun market has boosted points"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 3,
+            padding: "2px 6px",
+            borderRadius: 4,
+            background: "rgba(99,102,241,0.2)",
+            border: "1px solid rgba(99,102,241,0.5)",
+            marginLeft: 4,
+            flexShrink: 0,
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(165,180,252,0.9)" stroke="none">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+          </svg>
+          <span style={{
+            fontSize: 10,
+            fontWeight: 900,
+            color: "rgba(165,180,252,0.95)",
+            letterSpacing: 0.3,
+            lineHeight: 1,
+          }}>
+            BOOST
+          </span>
+        </span>
+      )}
+
+      {/* Predict.fun upcoming boost countdown */}
+      {isBoostPredictFun && pfBoostStatus === "upcoming" && pfCountdown && (
+        <span
+          title={`Predict.fun boost starts in ${pfCountdown}`}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 3,
+            padding: "2px 7px",
+            borderRadius: 4,
+            background: "rgba(99,102,241,0.12)",
+            border: "1px solid rgba(99,102,241,0.35)",
+            marginLeft: 4,
+            flexShrink: 0,
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(165,180,252,0.85)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 6v6l4 2" />
+          </svg>
+          <span style={{
+            fontSize: 10,
+            fontWeight: 900,
+            color: "rgba(165,180,252,0.85)",
+            letterSpacing: 0.2,
+            lineHeight: 1,
+          }}>
+            Boost in: {pfCountdown}
+          </span>
+        </span>
       )}
     </a>
   );

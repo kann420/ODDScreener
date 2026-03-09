@@ -1,10 +1,12 @@
 // API: Generate access codes (Admin only)
-// GET  /api/arbitage/access/generate?secret=...&action=generate&hours=24&count=1
+// GET  /api/arbitage/access/generate?secret=...  (DEV ONLY — disabled in production)
 // POST /api/arbitage/access/generate  (x-admin-secret header + JSON body)
 
 import { NextResponse } from "next/server";
 import { generateAccessCode, generateMultipleCodes, listAllCodes, getCodeStats, revokeCode } from "@/lib/accessCodeDb";
 import crypto from "crypto";
+
+const IS_DEV = process.env.NODE_ENV !== "production";
 
 // Admin secret - MUST be set in environment variable, no fallback for security
 const ADMIN_SECRET = process.env.ADMIN_SECRET;
@@ -31,8 +33,13 @@ function checkAdminAuth(request) {
   return checkAdminSecret(authHeader);
 }
 
-// ─── GET handler (browser-friendly, uses ?secret= query param) ───
+// ─── GET handler (browser-friendly, DEV ONLY) ───
 export async function GET(request) {
+  // Block in production — secret in URL gets logged by servers/CDNs
+  if (!IS_DEV) {
+    return NextResponse.json({ error: "GET disabled in production. Use POST with x-admin-secret header." }, { status: 405 });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const secret = searchParams.get("secret") || "";

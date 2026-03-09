@@ -2457,8 +2457,24 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
 }
 /* ===== END SMART MONEY MOBILE ===== */
 
+/* ── Arbitrage: Exchange selector positioning (desktop vs mobile) ── */
+/* On desktop: compact selector lives in arb-header-right; old row is hidden */
+.arb-platform-selector-mobile {
+  display: none !important;
+}
+/* arb-header-exchange is shown on desktop by default (flex in JSX inline style) */
+
 /* ===== ARBITRAGE MOBILE ===== */
 @media (max-width: 600px) {
+  /* Show the original full-width platform selector row on mobile */
+  .arb-platform-selector-mobile {
+    display: flex !important;
+  }
+  /* Hide compact header exchange selector on mobile */
+  .arb-header-exchange {
+    display: none !important;
+  }
+
   .arb-header {
     padding: 12px !important;
   }

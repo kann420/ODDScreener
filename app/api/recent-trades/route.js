@@ -18,6 +18,7 @@ export async function GET(req) {
       trades,
     });
   } catch (err) {
-    return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
+    console.error("[API /recent-trades] Error:", err);
+    return NextResponse.json({ ok: false, error: "Internal server error" }, { status: 500 });
   }
 }

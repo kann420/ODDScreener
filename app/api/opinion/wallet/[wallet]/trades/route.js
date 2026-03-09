@@ -251,8 +251,7 @@ export async function GET(request, { params }) {
         { 
           code: -1, 
           msg: `Upstream error: ${response.status}`, 
-          result: null,
-          upstream: data 
+          result: null
         },
         { status: response.status }
       );

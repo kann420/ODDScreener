@@ -163,7 +163,7 @@ export default function RootLayout({ children }) {
           color: '#e0e0e0',
           lineHeight: '1.5'
         }}>
-          ODDScreeners is currently in early beta. We're shipping daily updates to improve your experience. Use code <strong>8YfTc9</strong> on Opinion to get up to 10% fee discount. Follow us on <a href="https://x.com/ODDScreeners" target="_blank" rel="noopener noreferrer" style={{ color: '#e0e0e0', textDecoration: 'underline' }}>X</a>.
+          Use code <strong>8YfTc9</strong> on Opinion and code <strong>9DEDB</strong> on Predict.fun to get up to 10% fee discount. Follow us on <a href="https://x.com/ODDScreeners" target="_blank" rel="noopener noreferrer" style={{ color: '#e0e0e0', textDecoration: 'underline' }}>X</a>.
         </div>
 
         {/* Topbar */}
@@ -273,7 +273,7 @@ export default function RootLayout({ children }) {
         <div className="container">{children}</div>
 
         {/* New Premium Footer Bar (replaces old bottom-left & bottom-right footers) */}
-        <FooterBar version="1.4.0" live />
+        <FooterBar version="1.4.2.0" live />
       </body>
     </html>
   );

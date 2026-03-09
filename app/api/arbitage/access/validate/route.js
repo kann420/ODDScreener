@@ -3,22 +3,35 @@
 
 import { NextResponse } from "next/server";
 import { validateAndActivateCode } from "@/lib/accessCodeDb";
+import { checkRateLimit } from "@/lib/apiRateLimit";
+
+// Max 10 attempts per minute per IP
+const RATE_LIMIT_OPTS = { windowMs: 60_000, maxRequests: 10 };
 
 export async function POST(request) {
   try {
+    // Rate limit check
+    const rl = checkRateLimit(request, "access-validate", RATE_LIMIT_OPTS);
+    if (rl.limited) {
+      return NextResponse.json(
+        { error: "Too many attempts. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rl.resetMs / 1000)) } }
+      );
+    }
+
     const body = await request.json();
     const { code, deviceId } = body;
     
-    if (!code) {
+    if (!code || typeof code !== "string" || code.length > 100) {
       return NextResponse.json(
-        { error: "Access code is required" },
+        { error: "Invalid access code" },
         { status: 400 }
       );
     }
     
-    if (!deviceId) {
+    if (!deviceId || typeof deviceId !== "string" || deviceId.length > 255) {
       return NextResponse.json(
-        { error: "Device ID is required" },
+        { error: "Invalid device ID" },
         { status: 400 }
       );
     }

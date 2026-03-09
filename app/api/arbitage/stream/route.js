@@ -22,6 +22,8 @@ export async function GET(req) {
   const priceMode = searchParams.get("priceMode") || "bids";
   const limit = Math.max(1, Math.min(500, Math.floor(toNum(searchParams.get("limit"), 100))));
   const scanMode = searchParams.get("scanMode") || "quick"; // "quick" = 100 markets, "full" = unlimited
+  const platformA = searchParams.get("platformA") || "polymarket";
+  const platformB = searchParams.get("platformB") || "opinion";
 
   // AbortController to propagate client disconnect into the scan engine
   const scanAbort = new AbortController();
@@ -71,8 +73,10 @@ export async function GET(req) {
           minSimilarity,
           priceMode,
           limit,
-          scanMode, // Pass scan mode to control market limit
-          signal: scanAbort.signal, // Allow engine to abort early on disconnect
+          scanMode,
+          platformA,
+          platformB,
+          signal: scanAbort.signal,
           onProgress: (progress) => {
             // Progress update: { phase, current, total, message }
             send("progress", progress);
@@ -92,7 +96,7 @@ export async function GET(req) {
       } catch (err) {
         if (!closed && err?.name !== "AbortError") {
           console.error("[SSE scan] Error:", err);
-          send("error", { message: err.message || "Scan failed" });
+          send("error", { message: "Scan failed" });
         }
       } finally {
         clearInterval(heartbeat);

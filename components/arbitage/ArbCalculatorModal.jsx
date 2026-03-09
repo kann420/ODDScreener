@@ -1,197 +1,41 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
+import {
+  OPINION_REFERRAL_CODE,
+  calculateArbPnlByShares,
+  appendReferralCode,
+  buildReferralDiscounts,
+} from "@/lib/utils/arbCalculator";
+import { PREDICTFUN_REFERRAL_CODE } from "@/lib/utils/predictfunFee";
 
-/**
- * Opinion Fee Calculator
- * Fee formula from docs: https://docs.opinion.trade/trade-on-opinion.trade/fees
- * 
- * Fee is assessed PER matched fill:
- * - For each fill i with price Pi¢ and quantity Qi:
- *   - Notional_i = Qi × (Pi¢ / 100)
- *   - D = (1 - user_discount) × (1 - transaction_discount) × (1 - user_referral_discount)
- *   - Effective fee rate_i = topic_rate × pi × (1 - pi) × D
- *   - Raw fee_i = Notional_i × Effective fee rate_i
- *   - Fee charged per fill_i = max(Raw fee_i, $0.25)  // $0.25 minimum PER FILL (promo: 50% off Mar 1-15)
- * - Total Opinion fee = sum(Fee charged per fill_i)
- * 
- * Default topic_rate = 1% (0.01) — 50% promo Mar 1-15 (normally 2%)
- * Min fee = $0.25 per fill (normally $0.50)
- * Max fee = 1% of notional (normally 2%)
- * 
- * Fill estimation based on orderbook depth:
- * - Notional < $90 → 1 fill
- * - Notional $90-200 → 2 fills
- * - Notional $200-500 → 4 fills
- * - Notional > $500 → 5 + floor((notional-500)/200) fills
- */
+const PLATFORM_CONFIG = {
+  polymarket: {
+    label: "POLYMARKET",
+    color: "rgba(80,160,255,1)",
+    buttonBg: "rgba(80,160,255,0.92)",
+    buttonLabel: "Polymarket",
+  },
+  opinion: {
+    label: "OPINION",
+    color: "rgba(255,140,50,1)",
+    buttonBg: "rgba(181,83,56,0.92)",
+    buttonLabel: "Opinion",
+  },
+  probable: {
+    label: "PROBABLE",
+    color: "rgba(168,85,247,1)",
+    buttonBg: "rgba(130,60,210,0.92)",
+    buttonLabel: "Probable",
+  },
+  predictfun: {
+    label: "PREDICT.FUN",
+    color: "rgba(99,102,241,1)",
+    buttonBg: "rgba(79,70,229,0.92)",
+    buttonLabel: "Predict.fun",
+  },
+};
 
-/**
- * Estimate number of fills based on notional value
- * - Notional < $50 → 1 fill
- * - Notional $50-100 → 2 fills
- * - Notional $100-200 → 3 fills
- * - Notional $200-$300 → 4 fills
- * - Notional $300-$400 → 5 fills
- * - Notional > $400 → use max fee 2% (return -1 to signal this)
- */
-function estimateNumFills(notional) {
-  if (notional < 50) return 1;
-  if (notional < 100) return 2;
-  if (notional < 200) return 3;
-  if (notional < 300) return 4;
-  if (notional < 400) return 5;
-  // For large orders > $400, use max fee 2%
-  return -1; // Signal to use max fee
-}
-
-function calculateOpinionFee({
-  price,           // Price in decimal (0-1), e.g., 0.85 = 85¢
-  quantity,        // Number of shares
-  topicRate = 0.01,       // 50% promo Mar 1-15: 1% (normally 2%)
-  userDiscount = 0,       // 0-1
-  transactionDiscount = 0, // 0-1
-  referralDiscount = 0,   // 0-1 (default 0, pass 0.1 for 10% referral discount)
-}) {
-  const totalNotional = price * quantity;
-  
-  // Max fee is 1% of notional (50% promo Mar 1-15; normally 2%)
-  const maxFee = totalNotional * 0.01;
-  
-  // Estimate number of fills based on notional
-  const numFills = estimateNumFills(totalNotional);
-  
-  // Discount multiplier: D = (1 - user_discount) × (1 - transaction_discount) × (1 - referral_discount)
-  const D = (1 - userDiscount) * (1 - transactionDiscount) * (1 - referralDiscount);
-  
-  let baseTotalFee;
-  let rawFeePerFill = 0;
-  let feePerFill = 0;
-  let isCapped = false;
-  
-  if (numFills === -1) {
-    // For notional > $400, use max fee (1% during promo; normally 2%)
-    baseTotalFee = maxFee;
-    isCapped = true;
-  } else {
-    // Effective fee rate at this price (without discounts for base calculation)
-    const baseEffectiveRate = topicRate * price * (1 - price);
-    
-    // Calculate notional per fill (assume equal distribution)
-    const notionalPerFill = totalNotional / numFills;
-    
-    // Calculate raw fee per fill (before minimum, without discounts)
-    rawFeePerFill = notionalPerFill * baseEffectiveRate;
-    
-    // Apply $0.25 minimum per fill (50% promo Mar 1-15; normally $0.50)
-    feePerFill = Math.max(rawFeePerFill, 0.25);
-    
-    // Total fee before discount = sum of all fills
-    baseTotalFee = feePerFill * numFills;
-    
-    // Cap at max fee if exceeded
-    if (baseTotalFee > maxFee) {
-      baseTotalFee = maxFee;
-      isCapped = true;
-    }
-  }
-  
-  // Apply discounts to total fee
-  let totalFee = baseTotalFee * D;
-  
-  // Ensure minimum $0.25 total fee (absolute floor; 50% promo Mar 1-15; normally $0.50)
-  totalFee = Math.max(totalFee, 0.25);
-  
-  const isMinimumApplied = totalFee <= 0.25;
-  
-  // Calculate effective fee percentage for display
-  const feePercentage = totalNotional > 0 ? (totalFee / totalNotional) * 100 : 0;
-  
-  // Effective rate with discounts
-  const baseEffectiveRate = topicRate * price * (1 - price);
-  const effectiveRate = baseEffectiveRate * D;
-
-  return {
-    fee: totalFee,
-    baseFee: baseTotalFee,
-    effectiveRate,
-    feePercentage,
-    notional: totalNotional,
-    numFills: numFills === -1 ? 'max' : numFills,
-    rawFeePerFill,
-    feePerFill,
-    maxFee,
-    discountMultiplier: D,
-    isMinimumApplied,
-    isCapped,
-  };
-}
-
-/**
- * Calculate arbitrage PNL based on share count
- */
-function calculateArbPnlByShares({
-  shares,         // Number of shares to buy
-  polyPrice,      // Polymarket price (decimal 0-1)
-  opinionPrice,   // Opinion price (decimal 0-1)
-  polySide,       // "YES" or "NO" - which side to buy on Poly
-  opinionSide,    // "YES" or "NO" - which side to buy on Opinion
-  referralDiscount = 0,  // 0 = no referral, 0.1 = 10% discount
-}) {
-  if (!shares || shares <= 0 || !polyPrice || !opinionPrice) {
-    return null;
-  }
-
-  // Costs
-  const polyCost = shares * polyPrice;
-  const opinionCost = shares * opinionPrice;
-  
-  // Polymarket fee = 0
-  const polyFee = 0;
-  
-  // Opinion fee
-  const opinionFeeResult = calculateOpinionFee({
-    price: opinionPrice,
-    quantity: shares,
-    referralDiscount,
-  });
-  const opinionFee = opinionFeeResult.fee;
-  
-  // Total costs
-  const polyTotalCost = polyCost + polyFee;
-  const opinionTotalCost = opinionCost + opinionFee;
-  const totalCost = polyTotalCost + opinionTotalCost;
-  
-  // Return: One side always wins, so return = shares * $1 = shares
-  const toReturn = shares;
-  
-  // Net PNL
-  const netPnl = toReturn - totalCost;
-  
-  // ROI
-  const roi = totalCost > 0 ? (netPnl / totalCost) * 100 : 0;
-  
-  return {
-    shares,
-    polyCost,
-    opinionCost,
-    polyFee,
-    opinionFee,
-    opinionFeeRate: opinionFeeResult.effectiveRate,
-    opinionFeePercentage: opinionFeeResult.feePercentage,
-    isMinimumFeeApplied: opinionFeeResult.isMinimumApplied,
-    isFeeMaxCapped: opinionFeeResult.isCapped,
-    numFills: opinionFeeResult.numFills,
-    polyTotalCost,
-    opinionTotalCost,
-    totalCost,
-    toReturn,
-    netPnl,
-    roi,
-  };
-}
-
-// Calculator Icon SVG (iPhone style)
 function CalculatorIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -209,7 +53,6 @@ function CalculatorIcon() {
   );
 }
 
-// Copy Icon SVG
 function CopyIcon({ copied }) {
   if (copied) {
     return (
@@ -226,28 +69,77 @@ function CopyIcon({ copied }) {
   );
 }
 
-// Helper functions
+function ExternalLinkIcon() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M14 5h5v5" />
+      <path d="M10 14L19 5" />
+      <path d="M19 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4" />
+    </svg>
+  );
+}
+
 function formatUsd(value) {
   if (!Number.isFinite(value)) return "$0.00";
   return `$${value.toFixed(2)}`;
 }
 
 function formatCents(decimalPrice) {
-  if (!Number.isFinite(decimalPrice)) return "0¢";
-  const cents = decimalPrice * 100;
-  return `${cents.toFixed(1)}¢`;
+  if (!Number.isFinite(decimalPrice)) return "0c";
+  return `${(decimalPrice * 100).toFixed(1)}c`;
 }
 
-// Helper components
+function getDisplayMarketTitle(row) {
+  const candidates = [
+    row?.parentTitle,
+    row?.sideA?.title,
+    row?.sideB?.title,
+    row?.title,
+  ].filter(Boolean);
+  if (!candidates.length) return "Unknown Market";
+  return candidates.sort((a, b) => String(b).length - String(a).length)[0];
+}
+
+function getDisplayOutcome(row) {
+  return row?.outcome || row?.title || row?.sideB?.title || null;
+}
+
+function getStrategyLine(strategy, tag, fallbackIndex) {
+  return strategy.find((line) => line.includes(`(${tag})`)) || strategy[fallbackIndex] || "";
+}
+
+function getPriceForSide(prices, buyYes, side) {
+  if (side === "A") {
+    return (buyYes ? prices.opYes : prices.opNo) || 0;
+  }
+  return (buyYes ? prices.polyYes : prices.polyNo) || 0;
+}
+
+function getLabelForSide(prices, buyYes, side) {
+  if (side === "A") {
+    return buyYes ? (prices.opYesLabel || "YES") : (prices.opNoLabel || "NO");
+  }
+  return buyYes ? (prices.polyYesLabel || "YES") : (prices.polyNoLabel || "NO");
+}
+
 function RowItem({ label, value, copyValue, highlight, bold }) {
   const [itemCopied, setItemCopied] = useState(false);
-  
-  const handleCopy = () => {
-    if (copyValue) {
-      navigator.clipboard.writeText(copyValue);
-      setItemCopied(true);
-      setTimeout(() => setItemCopied(false), 1500);
-    }
+
+  const handleCopy = async () => {
+    if (!copyValue) return;
+    await navigator.clipboard.writeText(copyValue);
+    setItemCopied(true);
+    setTimeout(() => setItemCopied(false), 1500);
   };
 
   let valueColor = "rgba(255,255,255,0.9)";
@@ -255,23 +147,23 @@ function RowItem({ label, value, copyValue, highlight, bold }) {
   if (highlight === "orange") valueColor = "rgba(255,140,50,1)";
 
   return (
-    <div className="arb-calc-row" style={{ 
-      display: "flex", 
-      justifyContent: "space-between", 
+    <div className="arb-calc-row" style={{
+      display: "flex",
+      justifyContent: "space-between",
       alignItems: "flex-start",
       fontSize: 12,
       flexWrap: "wrap",
       gap: 4,
     }}>
-      <span style={{ 
-        color: highlight ? valueColor : "rgba(255,255,255,0.5)", 
+      <span style={{
+        color: highlight ? valueColor : "rgba(255,255,255,0.5)",
         fontWeight: highlight || bold ? 700 : 400,
         flexShrink: 0,
       }}>
         {label}
       </span>
-      <span style={{ 
-        color: valueColor, 
+      <span style={{
+        color: valueColor,
         fontWeight: bold ? 800 : 600,
         display: "flex",
         alignItems: "center",
@@ -294,6 +186,7 @@ function RowItem({ label, value, copyValue, highlight, bold }) {
               alignItems: "center",
             }}
             title="Copy"
+            type="button"
           >
             <CopyIcon copied={itemCopied} />
           </button>
@@ -303,77 +196,125 @@ function RowItem({ label, value, copyValue, highlight, bold }) {
   );
 }
 
+function ReferralRow({ checked, onChange, label, code, copied, onCopy, tint }) {
+  return (
+    <div style={{
+      padding: "14px 20px",
+      borderTop: "1px solid rgba(255,255,255,0.1)",
+      background: "rgba(255,255,255,0.02)",
+    }}>
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+        flexWrap: "wrap",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={(e) => onChange(e.target.checked)}
+            style={{ width: 16, height: 16, cursor: "pointer" }}
+          />
+          <span style={{ fontSize: 15, color: "rgb(255, 255, 255)" }}>
+            {label}
+          </span>
+        </div>
+        <button
+          onClick={onCopy}
+          type="button"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "8px 14px",
+            background: `${tint}4d`,
+            borderRadius: 6,
+            fontSize: 13,
+            fontWeight: 700,
+            color: copied ? "rgba(80,200,120,1)" : "rgba(255,180,120,1)",
+            cursor: "pointer",
+            border: "none",
+            transition: "all 0.2s",
+          }}
+          title="Click to copy"
+        >
+          {code}
+          <CopyIcon copied={copied} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ArbCalculatorModal({ row, onClose }) {
   const [shareSize, setShareSize] = useState(100);
-  const [useReferral, setUseReferral] = useState(true);
-  const [copied, setCopied] = useState(false);
-  
-  // Extract prices from row
+  const [useOpinionReferral, setUseOpinionReferral] = useState(true);
+  const [usePredictFunReferral, setUsePredictFunReferral] = useState(true);
+  const [copiedCode, setCopiedCode] = useState("");
+
+  const platformA = row?.platformA || row?.sideA?.platform || "opinion";
+  const platformB = row?.platformB || row?.sideB?.platform || "polymarket";
+  const configA = PLATFORM_CONFIG[platformA] || PLATFORM_CONFIG.opinion;
+  const configB = PLATFORM_CONFIG[platformB] || PLATFORM_CONFIG.polymarket;
   const prices = row?.prices || {};
   const strategy = Array.isArray(row?.strategy) ? row.strategy : [];
-  
-  // Determine which sides based on strategy
-  // Strategy can be like ["Buy YES (Poly)", "Buy NO (Opinion)"]
-  // or ["Buy KC (Poly-Moneyline)", "Buy GX (Opinion)"] for custom outcomes
-  const strategyStr = strategy.join(" ");
-  
-  // Extract labels from prices (set by engine) - fallback to YES/NO
-  const polyYesLabel = prices.polyYesLabel || "YES";
-  const polyNoLabel = prices.polyNoLabel || "NO";
-  const opYesLabel = prices.opYesLabel || "YES";
-  const opNoLabel = prices.opNoLabel || "NO";
-  const polyTag = prices.polyTag || "Poly";
-  const opTag = prices.opTag || "Opinion";
-  
-  // Detect which side to buy: check if the Poly strategy line contains the "yes" label
-  // Strategy[0] is always the Poly side, Strategy[1] is always the Opinion side
-  const polyStrategyLine = strategy[0] || "";
-  const opinionStrategyLine = strategy[1] || "";
-  
-  // If the poly strategy line contains the yesLabel, we buy the "yes" side (index 0)
-  const polyBuysYesSide = polyStrategyLine.includes(polyYesLabel);
-  const opinionBuysYesSide = opinionStrategyLine.includes(opYesLabel);
-  
-  // Labels to display on the badge
-  const polyBuySideLabel = polyBuysYesSide ? polyYesLabel : polyNoLabel;
-  const opinionBuySideLabel = opinionBuysYesSide ? opYesLabel : opNoLabel;
-  
-  // For internal calculation purposes, map to YES/NO
-  const polyBuySide = polyBuysYesSide ? "YES" : "NO";
-  const opinionBuySide = opinionBuysYesSide ? "YES" : "NO";
-  
-  // Get prices based on sides (these are ASK prices for buying)
-  const polyPrice = polyBuysYesSide 
-    ? (prices.polyYes || 0) / 100  // Convert cents to decimal
-    : (prices.polyNo || 0) / 100;
-  const opinionPrice = opinionBuysYesSide
-    ? (prices.opYes || 0) / 100
-    : (prices.opNo || 0) / 100;
-  
-  // Calculate referral discount based on checkbox
-  const referralDiscount = useReferral ? 0.1 : 0;
-  
-  // Calculate PNL
+  const tagA = prices.opTag || configA.label;
+  const tagB = prices.polyTag || configB.label;
+
+  const sideALine = getStrategyLine(strategy, tagA, 1);
+  const sideBLine = getStrategyLine(strategy, tagB, 0);
+  const sideABuysYes = /buy\s+yes/i.test(sideALine) || (/buy/i.test(sideALine) && !/\bno\b/i.test(sideALine));
+  const sideBBuysYes = /buy\s+yes/i.test(sideBLine) || (/buy/i.test(sideBLine) && !/\bno\b/i.test(sideBLine));
+  const sideALabel = getLabelForSide(prices, sideABuysYes, "A");
+  const sideBLabel = getLabelForSide(prices, sideBBuysYes, "B");
+  const priceA = getPriceForSide(prices, sideABuysYes, "A") / 100;
+  const priceB = getPriceForSide(prices, sideBBuysYes, "B") / 100;
+  const hasOpinion = platformA === "opinion" || platformB === "opinion";
+  const hasPredictFun = platformA === "predictfun" || platformB === "predictfun";
+
+  const referralDiscounts = buildReferralDiscounts({
+    useOpinionReferral,
+    usePredictFunReferral,
+  });
+  const enabledReferral = {
+    opinion: useOpinionReferral,
+    predictfun: usePredictFunReferral,
+  };
+
   const result = useMemo(() => {
     return calculateArbPnlByShares({
       shares: shareSize,
-      polyPrice,
-      opinionPrice,
-      polySide: polyBuySide,
-      opinionSide: opinionBuySide,
-      referralDiscount,
+      sideAPrice: priceA,
+      sideBPrice: priceB,
+      platformA,
+      platformB,
+      referralDiscounts,
     });
-  }, [shareSize, polyPrice, opinionPrice, polyBuySide, opinionBuySide, referralDiscount]);
-  
-  // Handle copy referral code
-  const handleCopyReferral = () => {
-    navigator.clipboard.writeText("8YfTc9");
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  }, [shareSize, priceA, priceB, platformA, platformB, referralDiscounts]);
+
+  const sideAUrl = appendReferralCode(row?.sideA?.url || row?.opinion?.url || "#", platformA, enabledReferral);
+  const sideBUrl = appendReferralCode(row?.sideB?.url || row?.poly?.url || "#", platformB, enabledReferral);
+  const marketTitle = getDisplayMarketTitle(row);
+  const outcomeTitle = getDisplayOutcome(row);
+
+  const handleCopyCode = async (platform) => {
+    const code = platform === "predictfun" ? PREDICTFUN_REFERRAL_CODE : OPINION_REFERRAL_CODE;
+    await navigator.clipboard.writeText(code);
+    setCopiedCode(platform);
+    setTimeout(() => setCopiedCode(""), 2000);
   };
 
+  const footerNotes = [
+    hasOpinion ? "* Min Opinion fee is $0.25 if Market Price matched. Fees range: 0% - 1%." : null,
+    hasOpinion ? "* Opinion 50% Fee Discount Event: Mar 1 - Mar 15, 2026" : null,
+    platformA === "probable" || platformB === "probable" ? "* Probable fee applies to taker orders only. Makers trade free." : null,
+    hasPredictFun ? "* Min Predict.fun fee is $0.0002 if Market Price matched. Fees range: 0.018% - 2%." : null,
+  ].filter(Boolean);
+
   return (
-    <div 
+    <div
       style={{
         position: "fixed",
         top: 0,
@@ -385,13 +326,14 @@ export default function ArbCalculatorModal({ row, onClose }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        zIndex: 9999,
+        zIndex: 10000,
+        padding: 20,
       }}
       onClick={onClose}
     >
       <div
         style={{
-          background: "linear-gradient(180deg, rgba(30,30,35,1) 0%, rgba(20,20,25,1) 100%)",
+          background: "linear-gradient(135deg, rgba(30,30,35,0.98), rgba(20,20,25,0.98))",
           borderRadius: 16,
           width: "95%",
           maxWidth: 600,
@@ -401,8 +343,7 @@ export default function ArbCalculatorModal({ row, onClose }) {
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div style={{ 
+        <div style={{
           padding: "16px 20px",
           borderBottom: "1px solid rgba(255,255,255,0.1)",
           display: "flex",
@@ -415,6 +356,7 @@ export default function ArbCalculatorModal({ row, onClose }) {
           </div>
           <button
             onClick={onClose}
+            type="button"
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -426,56 +368,59 @@ export default function ArbCalculatorModal({ row, onClose }) {
               fontWeight: 600,
             }}
           >
-            CLOSE ✕
+            CLOSE X
           </button>
         </div>
 
-        {/* Market Info */}
-        <div style={{ 
+        <div style={{
           padding: "12px 20px",
           borderBottom: "1px solid rgba(255,255,255,0.1)",
           background: "rgba(0,0,0,0.2)",
         }}>
-          <div style={{ 
-            fontSize: 11, 
-            fontWeight: 700, 
+          <div style={{
+            fontSize: 11,
+            fontWeight: 700,
             color: "rgba(255,255,255,0.4)",
             marginBottom: 4,
           }}>
             MARKET
           </div>
-          <div style={{ 
-            fontSize: 13, 
-            fontWeight: 600, 
+          <div style={{
+            fontSize: 13,
+            fontWeight: 600,
             color: "rgba(255,255,255,0.9)",
             lineHeight: 1.4,
           }}>
-            {row?.poly?.title || row?.opinion?.question || "Unknown Market"}
+            {marketTitle}
           </div>
-          {row?.outcome && (
-            <div style={{ 
+          {outcomeTitle && (
+            <div style={{
               marginTop: 6,
-              fontSize: 11, 
-              fontWeight: 600, 
+              fontSize: 11,
+              fontWeight: 600,
               color: "rgba(150,150,255,0.9)",
             }}>
-              Outcome: {row.outcome}
+              Outcome: {outcomeTitle}
             </div>
           )}
+          <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: configA.color }}>{configA.label}</span>
+            <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: 700 }}>vs</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: configB.color }}>{configB.label}</span>
+          </div>
         </div>
 
-        {/* Share Size Input */}
         <div style={{ padding: "16px 20px" }}>
           <div style={{ marginBottom: 8 }}>
             <label style={{ fontSize: 11, fontWeight: 800, color: "rgba(255,255,255,0.5)" }}>
-              ○ SHARE SIZE
+              o SHARE SIZE
             </label>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <input
               type="number"
               value={shareSize}
-              onChange={(e) => setShareSize(Math.max(0, parseInt(e.target.value) || 0))}
+              onChange={(e) => setShareSize(Math.max(0, parseInt(e.target.value || "0", 10) || 0))}
               style={{
                 flex: 1,
                 padding: "12px 14px",
@@ -493,6 +438,7 @@ export default function ArbCalculatorModal({ row, onClose }) {
                 <button
                   key={size}
                   onClick={() => setShareSize(size)}
+                  type="button"
                   style={{
                     padding: "8px 12px",
                     fontSize: 12,
@@ -511,68 +457,68 @@ export default function ArbCalculatorModal({ row, onClose }) {
           </div>
         </div>
 
-        {/* Results */}
         {result && (
-          <div style={{ 
-            display: "grid", 
+          <div style={{
+            display: "grid",
             gridTemplateColumns: "1fr 1fr",
             borderTop: "1px solid rgba(255,255,255,0.1)",
           }}>
-            {/* Polymarket Side */}
-            <div style={{ 
+            <div style={{
               padding: "16px 20px",
               borderRight: "1px solid rgba(255,255,255,0.1)",
             }}>
-              <div style={{ 
-                display: "flex", 
-                alignItems: "center", 
+              <div style={{
+                display: "flex",
+                alignItems: "center",
                 justifyContent: "space-between",
                 marginBottom: 14,
               }}>
-                <span style={{ fontSize: 13, fontWeight: 800, color: "rgba(80,160,255,1)" }}>POLYMARKET SIDE</span>
-                <span style={{ 
+                <span style={{ fontSize: 13, fontWeight: 800, color: configA.color }}>{configA.label} SIDE</span>
+                <span style={{
                   padding: "4px 10px",
                   borderRadius: 4,
                   fontSize: 11,
                   fontWeight: 800,
-                  background: polyBuySide === "YES" ? "rgba(80,200,120,0.2)" : "rgba(255,100,100,0.2)",
-                  color: polyBuySide === "YES" ? "rgba(80,200,120,1)" : "rgba(255,100,100,1)",
+                  background: sideABuysYes ? "rgba(80,200,120,0.2)" : "rgba(255,100,100,0.2)",
+                  color: sideABuysYes ? "rgba(80,200,120,1)" : "rgba(255,100,100,1)",
                 }}>
-                  {polyBuySideLabel}
+                  {sideALabel}
                 </span>
               </div>
-              
+
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <RowItem label="AVG SHARE PRICE" value={formatCents(polyPrice)} />
-                <RowItem label="TOTAL COST" value={formatUsd(result.polyCost)} copyValue={result.polyCost.toFixed(2)} />
-                <RowItem label="EST. FEE" value="$0" highlight="green" />
-                <RowItem label="TOTAL COST (INC. FEES)" value={formatUsd(result.polyTotalCost)} bold />
+                <RowItem label="AVG SHARE PRICE" value={formatCents(priceA)} />
+                <RowItem label="TOTAL COST" value={formatUsd(result.sideACost)} copyValue={result.sideACost.toFixed(2)} />
+                <RowItem label={result.sideAFeeLabelPct ? `EST. FEE (${result.sideAFeeLabelPct})` : "EST. FEE"} value={result.sideAFeeLabel} highlight={result.sideAFee === 0 ? "green" : "orange"} />
+                <RowItem label="TOTAL COST (INC. FEES)" value={formatUsd(result.sideATotal)} bold />
                 <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 10, marginTop: 4 }}>
-                  <RowItem 
-                    label="TO RETURN" 
+                  <RowItem
+                    label="TO RETURN"
                     value={
                       <>
-                        {formatUsd(result.toReturn)} 
+                        {formatUsd(result.toReturn)}
                         <span className="arb-calc-profit" style={{ color: "rgba(80,200,120,0.9)", marginLeft: 6, fontSize: 12 }}>
-                          [+{formatUsd(result.toReturn - result.polyTotalCost)}]
+                          [+{formatUsd(result.toReturn - result.sideATotal)}]
                         </span>
                       </>
-                    } 
-                    bold 
+                    }
+                    bold
                   />
                 </div>
               </div>
 
               <a
-                href={row.poly?.url || "#"}
+                href={sideAUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="arb-calc-link"
+                aria-label={`Open ${configA.label} market`}
+                title={`Open ${configA.label} market`}
                 style={{
                   display: "block",
                   marginTop: 16,
                   padding: "12px",
-                  background: "rgba(80,160,255,0.9)",
+                  background: configA.buttonBg,
                   borderRadius: 8,
                   textAlign: "center",
                   color: "#fff",
@@ -581,66 +527,68 @@ export default function ArbCalculatorModal({ row, onClose }) {
                   textDecoration: "none",
                 }}
               >
-                Polymarket ↗
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                  <span>{configA.buttonLabel}</span>
+                  <span style={{ display: "inline-flex", opacity: 0.9 }}>
+                    <ExternalLinkIcon />
+                  </span>
+                </span>
               </a>
             </div>
 
-            {/* Opinion Side */}
             <div style={{ padding: "16px 20px" }}>
-              <div style={{ 
-                display: "flex", 
-                alignItems: "center", 
+              <div style={{
+                display: "flex",
+                alignItems: "center",
                 justifyContent: "space-between",
                 marginBottom: 14,
               }}>
-                <span style={{ fontSize: 13, fontWeight: 800, color: "rgba(255,140,50,1)" }}>OPINION SIDE</span>
-                <span style={{ 
+                <span style={{ fontSize: 13, fontWeight: 800, color: configB.color }}>{configB.label} SIDE</span>
+                <span style={{
                   padding: "4px 10px",
                   borderRadius: 4,
                   fontSize: 11,
                   fontWeight: 800,
-                  background: opinionBuySide === "YES" ? "rgba(80,200,120,0.2)" : "rgba(255,100,100,0.2)",
-                  color: opinionBuySide === "YES" ? "rgba(80,200,120,1)" : "rgba(255,100,100,1)",
+                  background: sideBBuysYes ? "rgba(80,200,120,0.2)" : "rgba(255,100,100,0.2)",
+                  color: sideBBuysYes ? "rgba(80,200,120,1)" : "rgba(255,100,100,1)",
                 }}>
-                  {opinionBuySideLabel}
+                  {sideBLabel}
                 </span>
               </div>
-              
+
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <RowItem label="AVG SHARE PRICE" value={formatCents(opinionPrice)} />
-                <RowItem label="TOTAL COST" value={formatUsd(result.opinionCost)} copyValue={result.opinionCost.toFixed(2)} />
-                <RowItem 
-                  label={`EST. FEE (~${result.opinionFeePercentage.toFixed(2)}%)`} 
-                  value={`~${formatUsd(result.opinionFee)}`} 
-                  highlight="orange" 
-                />
-                <RowItem label="TOTAL COST (INC. FEES)" value={formatUsd(result.opinionTotalCost)} bold />
+                <RowItem label="AVG SHARE PRICE" value={formatCents(priceB)} />
+                <RowItem label="TOTAL COST" value={formatUsd(result.sideBCost)} copyValue={result.sideBCost.toFixed(2)} />
+                <RowItem label={result.sideBFeeLabelPct ? `EST. FEE (${result.sideBFeeLabelPct})` : "EST. FEE"} value={result.sideBFeeLabel} highlight={result.sideBFee === 0 ? "green" : "orange"} />
+                <RowItem label="TOTAL COST (INC. FEES)" value={formatUsd(result.sideBTotal)} bold />
                 <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 10, marginTop: 4 }}>
-                  <RowItem 
-                    label="TO RETURN" 
+                  <RowItem
+                    label="TO RETURN"
                     value={
                       <>
-                        {formatUsd(result.toReturn)} 
+                        {formatUsd(result.toReturn)}
                         <span className="arb-calc-profit" style={{ color: "rgba(80,200,120,0.9)", marginLeft: 6, fontSize: 12 }}>
-                          [+{formatUsd(result.toReturn - result.opinionTotalCost)}]
+                          [+{formatUsd(result.toReturn - result.sideBTotal)}]
                         </span>
                       </>
-                    } 
-                    bold 
+                    }
+                    bold
                   />
                 </div>
               </div>
 
               <a
-                href={row.opinion?.url || "#"}
+                href={sideBUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="arb-calc-link"
+                aria-label={`Open ${configB.label} market`}
+                title={`Open ${configB.label} market`}
                 style={{
                   display: "block",
                   marginTop: 16,
                   padding: "12px",
-                  background: "rgba(181,83,56,0.9)",
+                  background: configB.buttonBg,
                   borderRadius: 8,
                   textAlign: "center",
                   color: "#fff",
@@ -649,31 +597,35 @@ export default function ArbCalculatorModal({ row, onClose }) {
                   textDecoration: "none",
                 }}
               >
-                Opinion ↗
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                  <span>{configB.buttonLabel}</span>
+                  <span style={{ display: "inline-flex", opacity: 0.9 }}>
+                    <ExternalLinkIcon />
+                  </span>
+                </span>
               </a>
             </div>
           </div>
         )}
 
-        {/* NET PNL Summary */}
         {result && (
-          <div style={{ 
+          <div style={{
             padding: "16px 20px",
             borderTop: "1px solid rgba(255,255,255,0.1)",
             background: result.netPnl >= 0 ? "rgba(80,200,120,0.1)" : "rgba(255,100,100,0.1)",
           }}>
-            <div style={{ 
-              display: "flex", 
-              alignItems: "center", 
+            <div style={{
+              display: "flex",
+              alignItems: "center",
               justifyContent: "space-between",
             }}>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.5)", marginBottom: 4 }}>
                   COMBINED NET PNL
                 </div>
-                <div style={{ 
-                  fontSize: 24, 
-                  fontWeight: 800, 
+                <div style={{
+                  fontSize: 24,
+                  fontWeight: 800,
                   color: result.netPnl >= 0 ? "rgba(80,200,120,1)" : "rgba(255,100,100,1)",
                 }}>
                   {result.netPnl >= 0 ? "+" : ""}{formatUsd(result.netPnl)}
@@ -683,9 +635,9 @@ export default function ArbCalculatorModal({ row, onClose }) {
                 <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.5)", marginBottom: 4 }}>
                   ROI
                 </div>
-                <div style={{ 
-                  fontSize: 20, 
-                  fontWeight: 800, 
+                <div style={{
+                  fontSize: 20,
+                  fontWeight: 800,
                   color: result.roi >= 0 ? "rgba(80,200,120,1)" : "rgba(255,100,100,1)",
                 }}>
                   {result.roi >= 0 ? "+" : ""}{result.roi.toFixed(2)}%
@@ -695,67 +647,49 @@ export default function ArbCalculatorModal({ row, onClose }) {
           </div>
         )}
 
-        {/* Referral Section */}
-        <div style={{ 
-          padding: "14px 20px",
-          borderTop: "1px solid rgba(255,255,255,0.1)",
-          background: "rgba(255,255,255,0.02)",
-        }}>
-          <div style={{ 
-            display: "flex", 
-            alignItems: "center", 
-            justifyContent: "space-between",
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <input
-                type="checkbox"
-                checked={useReferral}
-                onChange={(e) => setUseReferral(e.target.checked)}
-                style={{ width: 16, height: 16, cursor: "pointer" }}
-              />
-              <span style={{ fontSize: 15, color: "rgb(255, 255, 255)" }}>
-                Use Code on Opinion to get Up To 10% Fee Discount
-              </span>
-            </div>
-            <button 
-              onClick={handleCopyReferral}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "8px 14px",
-                background: "rgba(181,83,56,0.3)",
-                borderRadius: 6,
-                fontSize: 13,
-                fontWeight: 700,
-                color: copied ? "rgba(80,200,120,1)" : "rgba(255,180,120,1)",
-                cursor: "pointer",
-                border: "none",
-                transition: "all 0.2s",
-              }}
-              title="Click to copy"
-            >
-              8YfTc9
-              <CopyIcon copied={copied} />
-            </button>
-          </div>
-        </div>
+        {hasOpinion && (
+          <ReferralRow
+            checked={useOpinionReferral}
+            onChange={setUseOpinionReferral}
+            label="Use Code on Opinion to get Up To 10% Fee Discount"
+            code={OPINION_REFERRAL_CODE}
+            copied={copiedCode === "opinion"}
+            onCopy={() => handleCopyCode("opinion")}
+            tint="rgba(181,83,56,0.3)"
+          />
+        )}
 
-        {/* Footer Note */}
-        <div className="arb-calc-note" style={{ 
+        {hasPredictFun && (
+          <ReferralRow
+            checked={usePredictFunReferral}
+            onChange={setUsePredictFunReferral}
+            label="Use Code on Predict.fun to get Up To 10% Fee Discount"
+            code={PREDICTFUN_REFERRAL_CODE}
+            copied={copiedCode === "predictfun"}
+            onCopy={() => handleCopyCode("predictfun")}
+            tint="rgba(79,70,229,0.3)"
+          />
+        )}
+
+        <div className="arb-calc-note" style={{
           padding: "12px 20px",
           borderTop: "1px solid rgba(255,255,255,0.05)",
           fontSize: 14,
           color: "rgb(253, 253, 253)",
           textAlign: "center",
         }}>
-          * Opinion Fee applies to Market Order only; Limit Order are not charged.
-          <br />
-          <br />
-          * Minimum Opinion fee is $0.25 if Market Price matched. Fees range from 0% to 1%.
-          <br />
-          <br />
-          <span style={{ color: "#FFD700", fontWeight: 600 }}>🎉 Opinion 50% Fee Discount Event: Mar 1 – Mar 15, 2026</span>
+          {footerNotes.map((note, index) => (
+            <div
+              key={note}
+              style={{
+                color: note.includes("Opinion 50% Fee Discount Event") ? "#FFD700" : "rgb(253, 253, 253)",
+                fontWeight: note.includes("Opinion 50% Fee Discount Event") ? 600 : 400,
+                marginTop: index === 0 ? 0 : 16,
+              }}
+            >
+              {note}
+            </div>
+          ))}
         </div>
       </div>
     </div>

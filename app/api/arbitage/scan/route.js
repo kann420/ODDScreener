@@ -30,9 +30,11 @@ export async function GET(req) {
     const minSimilarity = Math.max(0.1, Math.min(1, toNum(searchParams.get("minSimilarity"), 0.35)));
     const limit = Math.max(1, Math.min(200, Math.floor(toNum(searchParams.get("limit"), 50))));
     const scanMode = searchParams.get("mode") === "full" ? "full" : "quick";
-    const wantDebug = searchParams.get("debug") === "1" || searchParams.get("debug") === "true";
+    const wantDebug = process.env.NODE_ENV === "development" && (searchParams.get("debug") === "1" || searchParams.get("debug") === "true");
+    const platformA = searchParams.get("platformA") || "polymarket";
+    const platformB = searchParams.get("platformB") || "opinion";
 
-    const result = await scanArbitageOpportunities({ minArbPct, minSimilarity, limit, scanMode });
+    const result = await scanArbitageOpportunities({ minArbPct, minSimilarity, limit, scanMode, platformA, platformB });
 
     const rows = Array.isArray(result?.rows) ? result.rows : [];
     const debug = Array.isArray(result?.debug) ? result.debug : [];
