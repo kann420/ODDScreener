@@ -18,13 +18,10 @@
 
 import { NextResponse } from "next/server";
 import { polyFetch } from "@/lib/polyFetch";
-import { enforceIpRateLimit } from "@/lib/apiRouteProtection";
 import { clearArbitrageSessionCookie, requireArbitrageAccess } from "@/lib/arbitrageAccessSession";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const RATE_LIMIT_OPTS = { windowMs: 5 * 60_000, maxRequests: 12 };
 
 // ============================================================================
 // Configuration
@@ -2245,14 +2242,6 @@ export async function GET(request) {
       clearArbitrageSessionCookie(response);
       return response;
     }
-
-    const limited = enforceIpRateLimit(
-      request,
-      "arbitrage-wallet-positions",
-      RATE_LIMIT_OPTS,
-      "Too many wallet position requests. Please wait before refreshing again."
-    );
-    if (limited) return limited;
 
     const { searchParams } = new URL(request.url);
     

@@ -1118,8 +1118,8 @@ export default function OrderbookView({ marketId, title: initialTitle, yesTokenI
                 </div>
               ) : (
                 <div className="trades-empty-content" style={{ padding: "32px 0" }}>
-                  <span className="trades-empty-title">No rules available</span>
-                  <span className="trades-empty-hint">This market has no resolution rules</span>
+                  <span className="trades-empty-title">Loading rules...</span>
+                  <span className="trades-empty-hint">Resolution rules are still loading</span>
                 </div>
               )}
             </div>
@@ -1311,7 +1311,6 @@ export default function OrderbookView({ marketId, title: initialTitle, yesTokenI
     </div>
   );
 }
-
 
 
 

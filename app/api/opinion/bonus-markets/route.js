@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { opinionFetch, opinionFetchAllMarkets } from "@/lib/opinion";
-import { enforceIpRateLimit } from "@/lib/apiRouteProtection";
 import fs from "fs/promises";
 import path from "path";
 
@@ -14,8 +13,6 @@ import path from "path";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const RATE_LIMIT_OPTS = { windowMs: 60_000, maxRequests: 12 };
 
 // ===== CACHE CONFIG =====
 const CACHE_MS = 12 * 60 * 60 * 1000; // 12 hours cache (bonus markets don't change often)
@@ -180,14 +177,6 @@ async function scanBonusMarkets(limit) {
 
 export async function GET(req) {
   try {
-    const limited = enforceIpRateLimit(
-      req,
-      "opinion-bonus-markets",
-      RATE_LIMIT_OPTS,
-      "Too many bonus market scans. Please wait and try again."
-    );
-    if (limited) return limited;
-
     // Ensure file cache is loaded on first request
     await ensureCacheLoaded();
     

@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
 import { XMLParser } from "fast-xml-parser";
-import { enforceIpRateLimit } from "@/lib/apiRouteProtection";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const RATE_LIMIT_OPTS = { windowMs: 60_000, maxRequests: 30 };
 
 function googleNewsRssUrl(q) {
   const query = q && q.trim().length ? q.trim() : "Bitcoin OR Ethereum OR Solana OR gold";
@@ -58,14 +55,6 @@ function dedup(items) {
 }
 
 export async function GET(req) {
-  const limited = enforceIpRateLimit(
-    req,
-    "news-hot",
-    RATE_LIMIT_OPTS,
-    "Too many hot news requests. Please slow down."
-  );
-  if (limited) return limited;
-
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q") || "";
 

@@ -3,25 +3,12 @@
 
 import { NextResponse } from "next/server";
 import { validateAndActivateCode } from "@/lib/accessCodeDb";
-import { checkRateLimit } from "@/lib/apiRateLimit";
 import { clearArbitrageSessionCookie, setArbitrageSessionCookie } from "@/lib/arbitrageAccessSession";
-
-// Max 10 attempts per minute per IP
-const RATE_LIMIT_OPTS = { windowMs: 60_000, maxRequests: 10 };
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request) {
   try {
-    // Rate limit check
-    const rl = checkRateLimit(request, "access-validate", RATE_LIMIT_OPTS);
-    if (rl.limited) {
-      return NextResponse.json(
-        { error: "Too many attempts. Please try again later." },
-        { status: 429, headers: { "Retry-After": String(Math.ceil(rl.resetMs / 1000)) } }
-      );
-    }
-
     const body = await request.json();
     const { code, deviceId } = body;
     

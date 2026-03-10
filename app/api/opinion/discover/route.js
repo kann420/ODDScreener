@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
 import { getMarketsCache, fetchMarkets } from "@/app/MarketsContent";
-import { enforceIpRateLimit } from "@/lib/apiRouteProtection";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const RATE_LIMIT_OPTS = { windowMs: 60_000, maxRequests: 90 };
 
 /**
  * GET /api/opinion/discover
@@ -21,14 +18,6 @@ const RATE_LIMIT_OPTS = { windowMs: 60_000, maxRequests: 90 };
  */
 export async function GET(req) {
   try {
-    const limited = enforceIpRateLimit(
-      req,
-      "opinion-discover",
-      RATE_LIMIT_OPTS,
-      "Too many discover requests. Please slow down."
-    );
-    if (limited) return limited;
-
     const cache = getMarketsCache();
     const now = Date.now();
     const isWarm = cache.data && !cache.data.error && (now - cache.fetchedAt) < cache.TTL;

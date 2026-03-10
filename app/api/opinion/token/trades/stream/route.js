@@ -3,29 +3,11 @@
 // The API key stays on the server - never exposed to client.
 
 import { addMarketClient, getMarketTrades } from "@/lib/marketTradesHub";
-import { acquireIpSseLimit } from "@/lib/apiRouteProtection";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const STREAM_START_RATE_LIMIT_OPTS = { windowMs: 60_000, maxRequests: 20 };
-const STREAM_CONCURRENCY_OPTS = { maxConcurrent: 4, staleMs: 10 * 60_000 };
-
 export async function GET(req) {
-  const streamGuard = acquireIpSseLimit(
-    req,
-    "opinion-token-trades-stream",
-    STREAM_START_RATE_LIMIT_OPTS,
-    STREAM_CONCURRENCY_OPTS,
-    {
-      rateLimitMessage: "Too many live trade stream requests. Please wait and try again.",
-      busyMessage: "Too many live trade streams from this IP. Please close another tab and try again.",
-    }
-  );
-  if (streamGuard.response) {
-    return streamGuard.response;
-  }
-
   const { searchParams } = new URL(req.url);
   const marketIdParam = searchParams.get("marketId");
   const rootMarketIdParam = searchParams.get("rootMarketId");
@@ -34,7 +16,6 @@ export async function GET(req) {
   const rootMarketId = rootMarketIdParam != null ? Number(rootMarketIdParam) : null;
 
   if (!Number.isFinite(marketId) && !Number.isFinite(rootMarketId)) {
-    streamGuard.release();
     return new Response(JSON.stringify({ error: "marketId or rootMarketId is required" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
@@ -72,7 +53,6 @@ export async function GET(req) {
       try {
         remove = addMarketClient(sub, client);
       } catch (e) {
-        streamGuard.release();
         controller.enqueue(
           encoder.encode(
             `event: error\ndata: ${JSON.stringify({ error: String(e?.message || e) })}\n\n`
@@ -83,13 +63,10 @@ export async function GET(req) {
 
       req.signal.addEventListener("abort", () => {
         try { remove(); } catch {}
-        streamGuard.release();
         try { controller.close(); } catch {}
       });
     },
-    cancel() {
-      streamGuard.release();
-    },
+    cancel() {},
   });
 
   return new Response(stream, {

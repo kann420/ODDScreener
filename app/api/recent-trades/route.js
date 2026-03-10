@@ -1,20 +1,11 @@
 import { NextResponse } from "next/server";
 import { queryRecentTradesForMarket } from "@/lib/recentTradesDb";
-import { enforceIpRateLimit } from "@/lib/apiRouteProtection";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(req) {
   try {
-    const limited = enforceIpRateLimit(
-      req,
-      "recent-trades",
-      { windowMs: 60_000, maxRequests: 60 },
-      "Too many recent trade requests. Please slow down."
-    );
-    if (limited) return limited;
-
     const { searchParams } = new URL(req.url);
     const marketId = searchParams.get("marketId");
 

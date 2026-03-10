@@ -12,12 +12,9 @@
  */
 
 import { NextResponse } from "next/server";
-import { enforceIpRateLimit } from "@/lib/apiRouteProtection";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const RATE_LIMIT_OPTS = { windowMs: 5 * 60_000, maxRequests: 20 };
 
 // Get base URL from env or use default (proxy bypasses geo-restrictions on datacenter IPs)
 function getOpenApiBase() {
@@ -196,14 +193,6 @@ async function fetchThumbnailsOnDemand(marketIds, apiKey, baseUrl) {
 
 export async function GET(request, { params }) {
   try {
-    const limited = enforceIpRateLimit(
-      request,
-      "opinion-wallet-trades",
-      RATE_LIMIT_OPTS,
-      "Too many wallet trade requests. Please wait and try again."
-    );
-    if (limited) return limited;
-
     const { wallet } = await params;
     
     // Validate wallet address

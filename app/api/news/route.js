@@ -1,10 +1,8 @@
 import Parser from "rss-parser";
-import { enforceIpRateLimit } from "@/lib/apiRouteProtection";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const RATE_LIMIT_OPTS = { windowMs: 60_000, maxRequests: 30 };
 
 const parser = new Parser({
   customFields: {
@@ -54,14 +52,6 @@ function normalize(source, item) {
 }
 
 export async function GET(req) {
-  const limited = enforceIpRateLimit(
-    req,
-    "news-feed",
-    RATE_LIMIT_OPTS,
-    "Too many news feed requests. Please slow down."
-  );
-  if (limited) return limited;
-
   // Optional: support q=... để lọc phía server theo title
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get("q") || "").trim().toLowerCase();

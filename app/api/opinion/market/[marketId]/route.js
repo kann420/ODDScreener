@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { opinionFetch } from "@/lib/opinion";
-import { enforceIpRateLimit } from "@/lib/apiRouteProtection";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const RATE_LIMIT_OPTS = { windowMs: 60_000, maxRequests: 240 };
 const TTL_MS = 30_000;
 const CACHE = globalThis.__OPINION_MARKET_DETAIL_CACHE__ ?? (globalThis.__OPINION_MARKET_DETAIL_CACHE__ = new Map());
 const MAX_CACHE_SIZE = 2000;
@@ -30,14 +28,6 @@ function cacheSet(key, value) {
 
 export async function GET(req, { params }) {
   try {
-    const limited = enforceIpRateLimit(
-      req,
-      "opinion-market-detail",
-      RATE_LIMIT_OPTS,
-      "Too many market detail requests. Please slow down."
-    );
-    if (limited) return limited;
-
     const marketId = params?.marketId;
     if (!marketId) {
       return NextResponse.json({ errno: -1, errormsg: "missing_marketId", result: null }, { status: 400 });
