@@ -7,18 +7,9 @@
 import { streamArbitageOpportunities } from "@/lib/arbitageEngine";
 import { NextResponse } from "next/server";
 import { clearArbitrageSessionCookie, requireArbitrageAccess } from "@/lib/arbitrageAccessSession";
-import {
-  acquireConcurrentLimitByKey,
-  checkRateLimitByKey,
-  getClientIp,
-  releaseConcurrentLimitByKey,
-} from "@/lib/apiRateLimit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const STREAM_START_RATE_LIMIT_OPTS = { windowMs: 15 * 60_000, maxRequests: 4 };
-const STREAM_CONCURRENCY_OPTS = { maxConcurrent: 1, staleMs: 20 * 60_000 };
 
 function toNum(v, fallback) {
   const n = Number(v);
@@ -35,38 +26,6 @@ export async function GET(req) {
     clearArbitrageSessionCookie(response);
     return response;
   }
-
-  const streamKey = auth.deviceId;
-  const ip = getClientIp(req);
-  const requestRateLimit = checkRateLimitByKey(streamKey, "arb-stream-start", STREAM_START_RATE_LIMIT_OPTS);
-  if (requestRateLimit.limited) {
-    console.warn(`[ArbStream] Rate limited device=${streamKey} ip=${ip}`);
-    return NextResponse.json(
-      { ok: false, error: "rate_limited", message: "Too many stream scans. Please wait and try again." },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(Math.ceil(requestRateLimit.resetMs / 1000)),
-        },
-      }
-    );
-  }
-
-  const activeLimit = acquireConcurrentLimitByKey(streamKey, "arb-stream-active", STREAM_CONCURRENCY_OPTS);
-  if (activeLimit.limited) {
-    console.warn(`[ArbStream] Concurrent stream denied device=${streamKey} ip=${ip}`);
-    return NextResponse.json(
-      { ok: false, error: "stream_busy", message: "A stream is already running for this device." },
-      { status: 429, headers: { "Retry-After": "10" } }
-    );
-  }
-
-  let streamReleased = false;
-  const releaseStreamSlot = () => {
-    if (streamReleased) return;
-    streamReleased = true;
-    releaseConcurrentLimitByKey("arb-stream-active", streamKey);
-  };
 
   const { searchParams } = new URL(req.url);
   
@@ -153,7 +112,6 @@ export async function GET(req) {
         }
       } finally {
         clearInterval(heartbeat);
-        releaseStreamSlot();
         if (!closed) {
           closed = true;
           try { controller.close(); } catch { /* already closed */ }
@@ -163,7 +121,6 @@ export async function GET(req) {
     cancel() {
       // Called when client disconnects / stream is cancelled
       scanAbort.abort();
-      releaseStreamSlot();
     }
   });
 
