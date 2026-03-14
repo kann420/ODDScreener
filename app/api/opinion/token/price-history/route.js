@@ -50,7 +50,7 @@ export async function GET(req) {
       return json({ errno: -1, errormsg: "missing_token_id", result: null }, "MISS");
     }
 
-    const key = `price-history:${token_id}:${interval}:${start_at}`;
+    const key = `price-history:${token_id}:${interval}:${start_at}:${end_at}`;
     const cached = cacheGet(key);
     if (cached) return json(cached, "HIT");
 

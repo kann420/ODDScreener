@@ -456,10 +456,10 @@ function MarketRowV2({
         const m = computeMidFromOrderbook(obJson);
         const pts = parseHistory(phJson?.result);
 
-        // Compute liquidity: sum(bids.size) + sum(asks.size)
+        // Compute quote-side liquidity in USD: sum(price * shares) across both sides.
         const ob = normalizeOrderbook(obJson?.result ?? obJson);
-        const totalLiq = (ob.bids || []).reduce((s, b) => s + b.shares, 0)
-          + (ob.asks || []).reduce((s, a) => s + a.shares, 0);
+        const totalLiq = (ob.bids || []).reduce((s, b) => s + ((b.price || 0) * (b.shares || 0)), 0)
+          + (ob.asks || []).reduce((s, a) => s + ((a.price || 0) * (a.shares || 0)), 0);
         setLiquidity(totalLiq);
         if (totalLiq > 0 && onLiquidityLoaded) onLiquidityLoaded(market?.marketId, totalLiq);
 

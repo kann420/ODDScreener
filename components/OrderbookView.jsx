@@ -737,10 +737,10 @@ export default function OrderbookView({ marketId, title: initialTitle, yesTokenI
   const bidsD = useMemo(() => buildBidsDepth(bids), [bids]);
   const asksD = useMemo(() => buildAsksDepth(asks), [asks]);
 
-  // Compute total liquidity: sum of all bid sizes + all ask sizes
+  // Compute quote-side liquidity in USD: sum(price * shares) across both sides.
   const totalLiquidity = useMemo(() => {
-    const bidLiq = (bids || []).reduce((s, b) => s + (b.shares || 0), 0);
-    const askLiq = (asks || []).reduce((s, a) => s + (a.shares || 0), 0);
+    const bidLiq = (bids || []).reduce((s, b) => s + (b.total || ((b.shares || 0) * (b.price || 0))), 0);
+    const askLiq = (asks || []).reduce((s, a) => s + (a.total || ((a.shares || 0) * (a.price || 0))), 0);
     return bidLiq + askLiq;
   }, [bids, asks]);
 
@@ -1311,7 +1311,6 @@ export default function OrderbookView({ marketId, title: initialTitle, yesTokenI
     </div>
   );
 }
-
 
 
 

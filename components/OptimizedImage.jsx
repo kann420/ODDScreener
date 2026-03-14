@@ -12,7 +12,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 
 /**
  * Sử dụng wsrv.nl để resize và optimize external images
@@ -34,6 +34,12 @@ export function getOptimizedImageUrl(url, width = 300, quality = 80) {
   
   // Skip local images - Next.js handles these
   if (url.startsWith("/")) return url;
+
+  try {
+    new URL(url);
+  } catch {
+    return url;
+  }
   
   // Use wsrv.nl for external images
   // Supports: resize, WebP/AVIF output, caching
@@ -53,6 +59,12 @@ export function getOptimizedImageUrl(url, width = 300, quality = 80) {
  */
 export function getOptimizedSrcSet(url, sizes = [100, 200, 300, 400]) {
   if (!url || url.endsWith(".svg") || url.startsWith("data:") || url.startsWith("/")) {
+    return undefined;
+  }
+
+  try {
+    new URL(url);
+  } catch {
     return undefined;
   }
   
@@ -99,44 +111,17 @@ export function OptimizedImage({
     );
   }
   
-  // Local images - use Next.js Image (automatic optimization)
-  if (src.startsWith("/")) {
-    return (
-      <Image
-        src={src}
-        alt={alt}
-        width={width}
-        height={height}
-        className={className}
-        style={style}
-        priority={priority}
-        quality={quality}
-        {...props}
-      />
-    );
-  }
-  
-  // External images - use wsrv.nl proxy for optimization
-  const optimizedSrc = getOptimizedImageUrl(src, width || 300, quality);
-  const srcSet = getOptimizedSrcSet(src, [
-    Math.round((width || 300) * 0.5),
-    width || 300,
-    Math.round((width || 300) * 1.5),
-    Math.round((width || 300) * 2),
-  ]);
-  
   return (
-    <img
-      src={optimizedSrc}
-      srcSet={srcSet}
+    <Image
+      src={src}
       sizes={sizes || `${width || 300}px`}
       alt={alt}
       width={width}
       height={height}
       className={className}
       style={style}
-      loading={priority ? "eager" : "lazy"}
-      decoding="async"
+      priority={priority}
+      quality={quality}
       onError={onError}
       {...props}
     />
@@ -153,15 +138,10 @@ export function OptimizedThumbnail({
   radius = 10,
   priority = false,
   className,
+  sizes,
 }) {
   const [errored, setErrored] = useState(false);
   const showImg = Boolean(url) && !errored;
-
-  // Pre-compute optimized URL
-  const optimizedUrl = useMemo(() => {
-    if (!url || errored) return null;
-    return getOptimizedImageUrl(url, size * 2, 80); // 2x for retina
-  }, [url, size, errored]);
 
   return (
     <div
@@ -179,14 +159,15 @@ export function OptimizedThumbnail({
         justifyContent: "center",
       }}
     >
-      {showImg && optimizedUrl ? (
-        <img
-          src={optimizedUrl}
+      {showImg ? (
+        <Image
+          src={url}
           alt=""
           width={size}
           height={size}
-          loading={priority ? "eager" : "lazy"}
-          decoding="async"
+          sizes={sizes || `${size}px`}
+          priority={priority}
+          quality={80}
           style={{
             width: "100%",
             height: "100%",

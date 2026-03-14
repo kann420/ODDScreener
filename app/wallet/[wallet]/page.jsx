@@ -17,6 +17,7 @@ import WalletHeader from "@/components/wallet-tracker/WalletHeader";
 import PositionsTable from "@/components/wallet-tracker/PositionsTable";
 import ClosedPositionsTable from "@/components/wallet-tracker/ClosedPositionsTable";
 import ActivityList from "@/components/wallet-tracker/ActivityList";
+import RebateTab from "@/components/wallet-tracker/RebateTab";
 import { 
   isValidWalletAddress,
   shortenAddress 
@@ -862,6 +863,12 @@ export default function WalletPage() {
             >
               Activity
             </TabButton>
+            <TabButton
+              active={activeTab === "rebate"}
+              onClick={() => setActiveTab("rebate")}
+            >
+              Rebate
+            </TabButton>
           </div>
         </div>
         
@@ -997,6 +1004,16 @@ export default function WalletPage() {
                 chainId={chainId}
               />
             )}
+          </div>
+        )}
+        
+        {/* Rebate Tab Content */}
+        {activeTab === "rebate" && (
+          <div style={{ marginTop: 16 }}>
+            <RebateTab
+              trades={trades}
+              isLoading={tradesLoading}
+            />
           </div>
         )}
       </div>

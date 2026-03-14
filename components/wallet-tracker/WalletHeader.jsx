@@ -475,6 +475,17 @@ export default function WalletHeader({
               {isLoading ? <Skeleton width={70} height={26} /> : formatUSD(stats?.weeklyVolume || 0)}
             </div>
           </div>
+          
+          {/* Est. Rebate (daily UTC) */}
+          <div style={{ position: "relative" }}>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}>
+              <span>Est. Rebate</span>
+              <InfoTooltip text="Estimated maker rebate for today (UTC). Rebates are calculated and distributed daily. Only limit orders (maker fills) earn rebates. Formula: amount × p × (1−p) × 4% × 50%." />
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: (stats?.dailyEstRebate || 0) > 0 ? "#22c55e" : "#fff" }}>
+              {isLoading ? <Skeleton width={70} height={26} /> : formatUSD(stats?.dailyEstRebate || 0)}
+            </div>
+          </div>
         </div>
       </div>
       

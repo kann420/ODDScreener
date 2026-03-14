@@ -383,7 +383,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
   const [isLoadingFull, setIsLoadingFull] = useState(needsFullFetch);
   const markets = fullMarkets ?? ssrMarkets;
 
-  const [activeTab, setActiveTab] = useState("bonus"); // "new" | "trending" | "bonus" | "all"
+  const [activeTab, setActiveTab] = useState("bonus"); // "new" | "trending" | "bonus" | "rebate" | "all"
   const [volMode, setVolMode] = useState("24h"); // "24h" | "all"
   const [currentPage, setCurrentPage] = useState(1);
   const [visible, setVisible] = useState(6);
@@ -410,6 +410,9 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
 
   // ✅ State for API-fetched top 10 trending markets (real volume24h from server)
   const [trendingApiMarkets, setTrendingApiMarkets] = useState([]);
+  // ✅ State for Rebate tab: top 10 markets with highest maker rebate potential
+  const [rebateApiMarkets, setRebateApiMarkets] = useState([]);
+  const [rebateLoading, setRebateLoading] = useState(false);
   const newMarketsPollRef = useRef(false);
 
   const bonusCacheAppliedRef = useRef(false);
@@ -586,6 +589,51 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
       newMarketsPollRef.current = false;
     };
   }, [activeTab]);
+
+  // ✅ Fetch top 10 rebate markets when Rebate tab is activated
+  useEffect(() => {
+    if (activeTab !== "rebate") return;
+    if (rebateApiMarkets.length > 0) return; // Already fetched
+
+    let cancelled = false;
+    setRebateLoading(true);
+
+    const doFetch = async (attempt = 0) => {
+      try {
+        const res = await fetch("/api/opinion/rebate-markets", { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.errno === 0 && Array.isArray(json.markets) && json.markets.length > 0) {
+          // Normalize to match market row format
+          const normalized = json.markets.map(m => ({
+            ...m,
+            title: m.marketTitle || m.title || "",
+            volume24h: Number(m.volume24h || 0),
+            volume: Number(m.volume || 0),
+          }));
+          setRebateApiMarkets(normalized);
+          console.log(`[Rebate] Fetched ${normalized.length} top rebate markets`);
+        } else if (attempt < 2) {
+          setTimeout(() => { if (!cancelled) doFetch(attempt + 1); }, 3000);
+          return;
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error("[Rebate] API fetch failed:", err.message);
+          if (attempt < 2) {
+            setTimeout(() => { if (!cancelled) doFetch(attempt + 1); }, 3000);
+            return;
+          }
+        }
+      } finally {
+        if (!cancelled) setRebateLoading(false);
+      }
+    };
+
+    doFetch();
+    return () => { cancelled = true; };
+  }, [activeTab, rebateApiMarkets.length]);
 
   // ✅ Fetch top 10 markets by volume24h from API when trending/all tab is activated
   // Uses /api/opinion/trending-markets (sortBy=5 = volume24h desc, 1 API call)
@@ -926,12 +974,18 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
     return activeMarkets;
   }, [activeMarkets, trendingApiMarkets]);
 
+  // ✅ REBATE: markets with most smart-money activity (from API)
+  const rebateMarkets = useMemo(() => {
+    return rebateApiMarkets;
+  }, [rebateApiMarkets]);
+
   const currentTabMarkets = useMemo(() => {
     if (activeTab === "new") return newMarkets;
     if (activeTab === "trending") return trendingMarkets;
     if (activeTab === "bonus") return bonusMarkets;
+    if (activeTab === "rebate") return rebateMarkets;
     return allMarkets;
-  }, [activeTab, newMarkets, trendingMarkets, bonusMarkets, allMarkets]);
+  }, [activeTab, newMarkets, trendingMarkets, bonusMarkets, rebateMarkets, allMarkets]);
 
   const filteredMarkets = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -1218,6 +1272,26 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
             }}
           >
             BONUS
+          </button>
+
+          <button
+            onClick={() => handleTabChange("rebate")}
+            aria-pressed={activeTab === "rebate"}
+            style={{
+              padding: "10px 16px",
+              borderRadius: 8,
+              border: "1px solid",
+              borderColor: activeTab === "rebate" ? "rgba(139, 92, 246, 0.55)" : "rgba(255,255,255,0.12)",
+              background: activeTab === "rebate" ? "rgba(139, 92, 246, 0.12)" : "transparent",
+              color: activeTab === "rebate" ? "#a78bfa" : "#fff",
+              cursor: "pointer",
+              fontSize: 14,
+              fontWeight: 700,
+              lineHeight: 1.2,
+              transition: "all 0.2s",
+            }}
+          >
+            REBATE
           </button>
 
           <button
@@ -1544,6 +1618,8 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
           ? `Top ${Math.min(TRENDING_COUNT, sortedMarkets.length)} markets by 24h volume`
           : activeTab === "bonus"
           ? `${sortedMarkets.length} bonus markets`
+          : activeTab === "rebate"
+          ? `${sortedMarkets.length} markets by maker rebate potential`
           : `${sortedMarkets.length} markets total`}
       </div>
     </div>

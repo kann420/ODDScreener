@@ -83,7 +83,7 @@ export function MarketRowSkeleton() {
 }
 
 // Tab bar skeleton - matches NEW/TRENDING/BONUS/ALL tabs
-export function TabBarSkeleton() {
+export function TabBarSkeleton({ tabs = ['NEW', 'TRENDING', 'BONUS', 'ALL'] }) {
   return (
     <div style={{
       display: 'flex',
@@ -91,7 +91,7 @@ export function TabBarSkeleton() {
       gap: '8px',
       padding: '0 4px',
     }}>
-      {['NEW', 'TRENDING', 'BONUS', 'ALL'].map((tab, i) => (
+      {tabs.map((tab, i) => (
         <div key={tab} className="skeleton-box" style={{
           padding: '8px 16px',
           borderRadius: '8px',
@@ -145,7 +145,7 @@ export function TableHeaderSkeleton() {
 }
 
 // Full page skeleton - complete discover page loading state
-export function DiscoverPageSkeleton({ rowCount = 10 }) {
+export function DiscoverPageSkeleton({ rowCount = 10, tabs }) {
   return (
     <div className="col" style={{ gap: 12, paddingBottom: 72 }}>
       {/* Main market list panel */}
@@ -155,7 +155,7 @@ export function DiscoverPageSkeleton({ rowCount = 10 }) {
           padding: '14px 16px',
           borderBottom: '1px solid var(--border)',
         }}>
-          <TabBarSkeleton />
+          <TabBarSkeleton tabs={tabs} />
         </div>
 
         {/* Table header */}

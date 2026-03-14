@@ -54,3 +54,5 @@ reports/
 .github/skills/
 .vscode/
 
+# Local launcher scripts - keep out of GitHub
+local-dev.cmd

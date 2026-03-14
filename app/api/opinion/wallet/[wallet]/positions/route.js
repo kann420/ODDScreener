@@ -56,9 +56,9 @@ function startThumbnailCacheRefresh(apiKey, baseUrl) {
   }
 
   lastRefreshStart = now;
-  
-  // Run in background - don't await
-  (async () => {
+
+  // Run in background - don't await, but keep the promise for dedupe
+  cacheRefreshPromise = (async () => {
     try {
       console.log("[thumbnailCache] Starting cache refresh...");
       // Fetch activated and resolved markets (all types)
