@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { opinionFetch } from "@/lib/opinion";
+import { queryTrades } from "@/lib/smartMoneyDb";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,52 +27,42 @@ if (!globalThis.__REBATE_SM_CACHE_V2__) globalThis.__REBATE_SM_CACHE_V2__ = _reb
 
 /**
  * Query SmartMoney DB for Opinion markets with recent whale activity.
+ * Uses the shared smartMoneyDb module (same DB connection the stream uses).
  * Groups by COALESCE(rootMarketId, marketId) so categorical children
  * roll up to their parent.
  */
 function getSmartMoneyMarkets() {
   try {
-    const Database = require("better-sqlite3");
-    const path = require("path");
-    const fs = require("fs");
+    // queryTrades uses getDb() which handles DB creation/path/globalThis caching
+    const trades = queryTrades({ hours: 4, minAmount: 100, limit: 5000, platform: "opinion" });
 
-    const DEFAULT_DB = path.join(process.cwd(), "data", "smartmoney.sqlite");
-    const DB_PATH = process.env.SMART_MONEY_DB_PATH || DEFAULT_DB;
+    if (!trades || trades.length === 0) return [];
 
-    if (!fs.existsSync(DB_PATH)) {
-      console.warn("[RebateMarkets] SmartMoney DB not found at", DB_PATH);
-      return [];
+    // Group by root market (categorical) or marketId (binary)
+    const groups = new Map();
+    for (const t of trades) {
+      const key = t.rootMarketId || t.marketId;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          groupKey: key,
+          sampleMarketId: t.marketId,
+          rootMarketId: t.rootMarketId || null,
+          marketTitle: t.marketTitle || "",
+          tradeCount: 0,
+          totalAmount: 0,
+          lastTradeTs: 0,
+        });
+      }
+      const g = groups.get(key);
+      g.tradeCount++;
+      g.totalAmount += (t.amount || 0);
+      if (t.ts > g.lastTradeTs) g.lastTradeTs = t.ts;
     }
 
-    const db = new Database(DB_PATH, { readonly: true });
-    db.pragma("journal_mode = WAL");
-
-    // Discover which optional columns exist (prod DB may lack newer migrations)
-    const colInfo = db.prepare("PRAGMA table_info(trades)").all();
-    const colNames = new Set(colInfo.map(c => c.name));
-
-    const cutoff = Date.now() - 4 * 60 * 60 * 1000; // 4 hours ago
-
-    const rows = db.prepare(`
-      SELECT
-        COALESCE(rootMarketId, marketId) AS groupKey,
-        MIN(marketId)                    AS sampleMarketId,
-        MAX(rootMarketId)                AS rootMarketId,
-        MAX(marketTitle)                 AS marketTitle,
-        COUNT(*)                         AS tradeCount,
-        SUM(amount)                      AS totalAmount,
-        MAX(ts)                          AS lastTradeTs
-      FROM trades
-      WHERE platform = 'opinion'
-        AND ts >= ?
-        AND amount >= 100
-      GROUP BY groupKey
-      ORDER BY tradeCount DESC
-      LIMIT 30
-    `).all(cutoff);
-
-    db.close();
-    return rows;
+    // Sort by trade count desc, take top 30
+    return [...groups.values()]
+      .sort((a, b) => b.tradeCount - a.tradeCount)
+      .slice(0, 30);
   } catch (err) {
     console.error("[RebateMarkets] Error reading SmartMoney DB:", err.message);
     return [];
