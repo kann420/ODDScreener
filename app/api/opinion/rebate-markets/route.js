@@ -54,7 +54,6 @@ function getSmartMoneyMarkets() {
         MIN(marketId)                    AS sampleMarketId,
         MAX(rootMarketId)                AS rootMarketId,
         MAX(marketTitle)                 AS marketTitle,
-        MAX(marketImageUrl)              AS thumbnailUrl,
         COUNT(*)                         AS tradeCount,
         SUM(amount)                      AS totalAmount,
         COUNT(DISTINCT signer)           AS uniqueWallets,
@@ -152,7 +151,7 @@ async function buildRebateMarkets() {
           resolvedAt: market.resolvedAt || 0,
           status: market.status,
           statusEnum: market.statusEnum,
-          thumbnailUrl: market.thumbnailUrl || row.thumbnailUrl || null,
+          thumbnailUrl: market.thumbnailUrl || null,
           // Smart money metrics
           price,
           smTradeCount: row.tradeCount,
