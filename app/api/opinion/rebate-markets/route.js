@@ -46,6 +46,10 @@ function getSmartMoneyMarkets() {
     const db = new Database(DB_PATH, { readonly: true });
     db.pragma("journal_mode = WAL");
 
+    // Discover which optional columns exist (prod DB may lack newer migrations)
+    const colInfo = db.prepare("PRAGMA table_info(trades)").all();
+    const colNames = new Set(colInfo.map(c => c.name));
+
     const cutoff = Date.now() - 4 * 60 * 60 * 1000; // 4 hours ago
 
     const rows = db.prepare(`
@@ -56,7 +60,6 @@ function getSmartMoneyMarkets() {
         MAX(marketTitle)                 AS marketTitle,
         COUNT(*)                         AS tradeCount,
         SUM(amount)                      AS totalAmount,
-        COUNT(DISTINCT signer)           AS uniqueWallets,
         MAX(ts)                          AS lastTradeTs
       FROM trades
       WHERE platform = 'opinion'
