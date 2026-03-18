@@ -19,13 +19,17 @@ function cacheGet(key) {
     CACHE.delete(key);
     return null;
   }
+  // LRU promotion: move to end so eviction targets least-recently-used
+  CACHE.delete(key);
+  CACHE.set(key, hit);
   return hit.v;
 }
 
 function cacheSet(key, value) {
+  CACHE.delete(key);
   if (CACHE.size >= MAX_CACHE_SIZE) {
-    const oldest = CACHE.keys().next().value;
-    CACHE.delete(oldest);
+    const lruKey = CACHE.keys().next().value;
+    CACHE.delete(lruKey);
   }
   CACHE.set(key, { t: Date.now(), v: value });
 }
