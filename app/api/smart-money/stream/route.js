@@ -1,4 +1,4 @@
-import { addClient, getLatest, startSmartMoneyHub } from "@/lib/smartMoneyHub";
+import { getSmartMoneyPlatformAdapter, normalizeSmartMoneyPlatform } from "@/lib/smartMoneyPlatform";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -6,23 +6,25 @@ export const dynamic = "force-dynamic";
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const warm = searchParams.get("warm");
+  const platform = normalizeSmartMoneyPlatform(searchParams.get("platform"));
+  const adapter = getSmartMoneyPlatformAdapter(platform);
 
   if (warm === "1" || warm === "true") {
-    startSmartMoneyHub();
+    await adapter.start();
     return new Response("ok", {
       status: 200,
       headers: { "Cache-Control": "no-store" },
     });
   }
 
-  startSmartMoneyHub();
+  await adapter.start();
 
   const minAmount = Number(searchParams.get("minAmount") || 200);
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
     start(controller) {
-      const snapshot = getLatest()
+      const snapshot = adapter.getLatest()
         .filter((x) => Number(x.amount) >= minAmount)
         .slice(0, 100);
 
@@ -39,7 +41,7 @@ export async function GET(req) {
         },
       };
 
-      const remove = addClient(client);
+      const remove = adapter.addClient(client);
 
       req.signal.addEventListener("abort", () => {
         remove();

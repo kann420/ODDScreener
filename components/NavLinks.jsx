@@ -31,7 +31,7 @@ export default function NavLinks() {
     <>
       {/* Desktop Navigation */}
       <div className="nav nav-desktop">
-        <Link href="/" className={isActive("/") ? "active" : ""}>
+        <Link href="/predictfun" className={isActive("/predictfun") ? "active" : ""}>
           Discover
         </Link>
 
@@ -50,7 +50,6 @@ export default function NavLinks() {
           className={pathname?.startsWith("/wallet") ? "nav-smart active" : "nav-smart"}
         >
           <span className="nav-smart-title">Wallet Tracker</span>
-          <span className="nav-smart-badge">NEW</span>
         </Link>
 
         <Link
@@ -58,7 +57,6 @@ export default function NavLinks() {
           className={isActive("/smart-money") ? "nav-smart active" : "nav-smart"}
         >
           <span className="nav-smart-title">Smart Money</span>
-          <span className="nav-smart-badge">NEW</span>
         </Link>
 
         <span className="nav-disabled">
@@ -113,7 +111,7 @@ export default function NavLinks() {
         </div>
 
         <nav className="mobile-menu-nav">
-          <Link href="/" className={`mobile-menu-item ${isActive("/") ? "active" : ""}`}>
+          <Link href="/predictfun" className={`mobile-menu-item ${isActive("/predictfun") ? "active" : ""}`}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="11" cy="11" r="8"/>
               <line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -126,7 +124,6 @@ export default function NavLinks() {
               <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
             </svg>
             Smart Money
-            <span className="mobile-menu-badge">NEW</span>
           </Link>
 
           <Link href="/arbitage" className={`mobile-menu-item ${isActive("/arbitage") ? "active" : ""}`}>
@@ -144,7 +141,6 @@ export default function NavLinks() {
               <line x1="1" y1="10" x2="23" y2="10"/>
             </svg>
             Wallet Tracker
-            <span className="mobile-menu-badge">NEW</span>
           </Link>
 
           <div className="mobile-menu-divider" />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback, useDeferredValue, memo } from "react";
+import Link from "next/link";
 import MarketRowV2 from "@/components/MarketRowV2";
 import { getDiscoverCache, setDiscoverCache, getBonusCache, setBonusCache } from "@/lib/clientCache";
 
@@ -1209,7 +1210,20 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
   const deferredSearch = useDeferredValue(search);
 
   return (
-    <div className="panel market-list-panel" style={{ padding: 12 }}>
+    <>
+      {/* Mobile Platform Switcher — separate panel, mobile only */}
+      <div className="mobile-platform-switcher">
+        <Link href="/opinion" className="mobile-platform-btn active-opinion">
+          <img src="/2logo-opinion.webp" alt="Opinion" width={20} height={20} style={{ borderRadius: 4 }} />
+          <span>Opinion</span>
+        </Link>
+        <Link href="/predictfun" className="mobile-platform-btn">
+          <img src="/predictfun_logo.svg" alt="Predict.fun" width={20} height={20} />
+          <span>Predict.fun</span>
+        </Link>
+      </div>
+
+      <div className="panel market-list-panel" style={{ padding: 12 }}>
       {/* Top Bar: Tabs + Search + Volume Mode */}
       <div className="market-topbar">
         {/* Tabs: NEW | TRENDING | BONUS | ALL */}
@@ -1623,6 +1637,7 @@ export default function MarketListClient({ initialMarkets, markets: marketsProp,
           : `${sortedMarkets.length} markets total`}
       </div>
     </div>
+    </>
   );
 }
 

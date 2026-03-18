@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ODDScreeners - Thank You</title>
+  <meta name="description" content="ODDScreeners - Prediction Market Explorer">
+  <link rel="icon" href="/public/favicon.ico">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #000;
+      --panel: rgba(255, 255, 255, 0.03);
+      --text: #fff;
+      --muted: #cecfd2;
+      --accent: #ff7a12;
+      --success: #39d98a;
+      --ring: rgba(255, 255, 255, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at 50% 0%, rgba(255, 115, 15, 0.18), transparent 34%),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, Arial, sans-serif;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .shell {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .nav {
+      display: flex;
+      justify-content: center;
+      padding: 20px 32px 0;
+    }
+
+    .nav a {
+      display: inline-flex;
+      align-items: center;
+      text-decoration: none;
+    }
+
+    .nav img {
+      width: 220px;
+      max-width: 44vw;
+      height: auto;
+      display: block;
+    }
+
+    .hero {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 24px 72px;
+    }
+
+    .card {
+      width: min(920px, 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 24px;
+      padding: 56px 24px;
+    }
+
+    .icon {
+      width: 96px;
+      height: 96px;
+      border-radius: 999px;
+      background: var(--success);
+      display: grid;
+      place-items: center;
+      box-shadow: 0 14px 44px rgba(57, 217, 138, 0.18);
+    }
+
+    .icon::before {
+      content: "";
+      width: 26px;
+      height: 14px;
+      border-left: 6px solid #fff;
+      border-bottom: 6px solid #fff;
+      transform: rotate(-45deg) translateY(-2px);
+      display: block;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(40px, 4.6vw, 60px);
+      line-height: 1.08;
+      letter-spacing: -0.04em;
+      font-weight: 700;
+      max-width: 880px;
+    }
+
+    p {
+      margin: 0;
+      font-size: clamp(18px, 1.65vw, 28px);
+      line-height: 1.55;
+      color: var(--muted);
+      max-width: 720px;
+    }
+
+    .actions {
+      padding-top: 8px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 196px;
+      gap: 12px;
+      height: 54px;
+      padding: 0 28px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 175, 92, 0.5);
+      background: linear-gradient(180deg, #ff9a2e 0%, #ff7a12 100%);
+      color: #111;
+      font-size: 18px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: transform .2s ease, box-shadow .2s ease, opacity .2s ease;
+      box-shadow:
+        inset 0 1px 10px rgba(255, 255, 255, 0.08),
+        0 0 0 3px rgba(255, 122, 18, 0.18),
+        0 14px 34px rgba(255, 122, 18, 0.2);
+    }
+
+    .button:hover {
+      transform: translateY(-1px);
+      box-shadow:
+        inset 0 1px 10px rgba(255, 255, 255, 0.1),
+        0 0 0 4px rgba(255, 122, 18, 0.22),
+        0 16px 38px rgba(255, 122, 18, 0.26);
+    }
+
+    .button-icon {
+      width: 18px;
+      height: 18px;
+      display: inline-block;
+      flex: none;
+    }
+
+    .button-icon svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    @media (max-width: 809px) {
+      .nav {
+        padding-top: 16px;
+      }
+
+      .nav img {
+        width: 180px;
+        max-width: 52vw;
+      }
+
+      .card {
+        padding: 32px 12px 56px;
+        gap: 20px;
+      }
+
+      .icon {
+        width: 84px;
+        height: 84px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="nav">
+      <a href="/" aria-label="ODDScreeners home">
+        <img src="/public/ODDScreenerslogo.svg" alt="ODDScreeners">
+      </a>
+    </header>
+
+    <main class="hero">
+      <section class="card">
+        <div class="icon" aria-hidden="true"></div>
+        <h1>Thank you for your interest in ODDScreeners</h1>
+        <p>Our team will contact you as soon as possible.</p>
+        <div class="actions">
+          <a class="button" href="/">
+            <span>Get started now</span>
+            <span class="button-icon" aria-hidden="true">
+              <svg viewBox="0 0 18 18" fill="none">
+                <path d="M4.25 13.75L13.75 4.25" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M7.5 4.25H13.75V10.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+          </a>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

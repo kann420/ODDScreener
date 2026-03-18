@@ -2,6 +2,8 @@ import "./globals.css";
 import Script from "next/script";
 import NavLinks from "../components/NavLinks";
 import FooterBar from "../components/FooterBar";
+import AppSidebar from "../components/AppSidebar";
+import SearchOverlay from "../components/SearchOverlay";
 
 // ===== GOOGLE FONTS CDN =====
 // Using Google Fonts CDN directly for exact rendering match
@@ -11,7 +13,7 @@ const GA_MEASUREMENT_ID = "G-P1NXMB82YZ";
 
 export const metadata = {
   title: "ODDScreeners - Prediction Markets Explorer",
-  description: "Realtime price charts and trading history on Opinion, Polymarket, Kalshi, and more.",
+  description: "Realtime price charts and trading history on Predictdotfun, Opinion, Polymarket, Kalshi, and more.",
   icons: {
     icon: "/favicon.ico",
     shortcut: "/favicon.ico",
@@ -62,7 +64,8 @@ export default function RootLayout({ children }) {
             --desktop-container-padding-x: 14px;
           }
           *, *::before, *::after { box-sizing: border-box; }
-          html, body { height: 100%; margin: 0; }
+          html { height: 100%; margin: 0; }
+          body { min-height: 100%; margin: 0; }
           body {
             background: var(--bg);
             color: var(--text);
@@ -96,6 +99,10 @@ export default function RootLayout({ children }) {
               --desktop-container-max-width: none;
               --desktop-container-padding-x: 4px;
             }
+          }
+          /* Sidebar offset - desktop only */
+          @media (min-width: 769px) {
+            body { padding-left: 56px; }
           }
           /* Skeleton animation */
           @keyframes skeleton-pulse {
@@ -142,10 +149,12 @@ export default function RootLayout({ children }) {
         </Script>
         
         {/* Smart Money hub warm-up - load after page is interactive */}
+        {/* Skip on Predict.fun route to avoid unnecessary Opinion API calls */}
         <Script id="smart-money-warmup" strategy="lazyOnload">
           {`
             // Warm up the smart money API after page is fully loaded
-            if (typeof fetch !== 'undefined') {
+            // Skip on /predictfun — it's independent from Opinion
+            if (typeof fetch !== 'undefined' && !window.location.pathname.startsWith('/predictfun')) {
               fetch('/api/smart-money/warm', { method: 'GET', priority: 'low' })
                 .catch(() => {}); // Silently fail if warmup fails
             }
@@ -154,6 +163,11 @@ export default function RootLayout({ children }) {
       </head>
 
       <body>
+        {/* Global Sidebar - desktop only (hidden via CSS on mobile) */}
+        <AppSidebar />
+        {/* Global Search Overlay */}
+        <SearchOverlay />
+
         {/* Notification Banner */}
         <div className="notification-banner" style={{
           background: 'linear-gradient(90deg, #1a1a1a 0%, #2d2d2d 100%)',
@@ -179,8 +193,9 @@ export default function RootLayout({ children }) {
             >
               {/* LEFT: brand + nav */}
               <div className="topbar-left" style={{ display: "flex", alignItems: "center", gap: 18 }}>
-                <a className="brand" href="/" aria-label="ODDScreeners">
+                <div className="brand" aria-label="ODDScreeners" title="ODDScreeners">
                   <img
+                    className="brand-logo"
                     src="/2oddscreeners_logo.webp"
                     alt="ODDScreeners"
                     width={160}
@@ -195,76 +210,12 @@ export default function RootLayout({ children }) {
                       maxHeight: "none",
                     }}
                   />
-                </a>
+                </div>
 
                 <NavLinks />
               </div>
 
               <div style={{ flex: 1 }} />
-
-              {/* RIGHT: Platform logos */}
-              <div className="platform-logos" style={{ display: "flex", alignItems: "center", gap: 16, marginRight: 28 }}>
-                <a href="https://app.opinion.trade?code=8YfTc9" target="_blank" rel="noopener noreferrer" title="Opinion">
-                  <img
-                    src="/2logo-opinion.webp"
-                    alt="Opinion"
-                    width={42}
-                    height={42}
-                    loading="lazy"
-                    decoding="async"
-                    style={{
-                      height: 42,
-                      width: "auto",
-                      display: "block",
-                    }}
-                  />
-                </a>
-                <img
-                  src="/2polymarket_600.webp"
-                  alt="Polymarket"
-                  title="Polymarket - Coming Soon"
-                  width={42}
-                  height={42}
-                  loading="lazy"
-                  decoding="async"
-                  style={{
-                    height: 42,
-                    width: "auto",
-                    display: "block",
-                    filter: "grayscale(100%) opacity(0.4)",
-                  }}
-                />
-                <img
-                  src="/kalshi.svg"
-                  alt="Kalshi"
-                  title="Kalshi - Coming Soon"
-                  width={42}
-                  height={42}
-                  loading="lazy"
-                  decoding="async"
-                  style={{
-                    height: 42,
-                    width: "auto",
-                    display: "block",
-                    filter: "grayscale(100%) opacity(0.4)",
-                  }}
-                />
-                <img
-                  src="/proable.svg"
-                  alt="Proable"
-                  title="Proable - Coming Soon"
-                  width={42}
-                  height={42}
-                  loading="lazy"
-                  decoding="async"
-                  style={{
-                    height: 42,
-                    width: "auto",
-                    display: "block",
-                    filter: "grayscale(100%) opacity(0.4)",
-                  }}
-                />
-              </div>
             </div>
           </div>
         </div>
@@ -273,7 +224,7 @@ export default function RootLayout({ children }) {
         <div className="container">{children}</div>
 
         {/* New Premium Footer Bar (replaces old bottom-left & bottom-right footers) */}
-        <FooterBar version="1.4.2.0" live />
+        <FooterBar version="1.5.0" live />
       </body>
     </html>
   );

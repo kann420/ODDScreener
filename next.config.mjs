@@ -33,6 +33,7 @@ const nextConfig = {
       { protocol: "https", hostname: "**.kalshi.com" },
       { protocol: "https", hostname: "**.cloudfront.net" },
       { protocol: "https", hostname: "**.googleapis.com" },
+      { protocol: "https", hostname: "static.predict.fun" },
     ],
     
     // Device sizes for responsive images (optimized for common breakpoints)
@@ -121,6 +122,29 @@ const nextConfig = {
           },
         ],
       },
+    ];
+  },
+
+  async rewrites() {
+    return {
+      beforeFiles: [
+        { source: '/', destination: '/landing/index.html' },
+        { source: '/contact', destination: '/landing/contact.html' },
+        { source: '/thankyou', destination: '/landing/thankyou.html' },
+      ],
+    };
+  },
+
+  async redirects() {
+    return [
+      { source: '/launch', destination: '/opinion', permanent: false },
+      { source: '/www.tread.fi/index.html', destination: '/', permanent: false },
+      { source: '/www.tread.fi/contact', destination: '/contact', permanent: false },
+      { source: '/www.tread.fi/contact.html', destination: '/contact', permanent: false },
+      { source: '/contact.html', destination: '/contact', permanent: false },
+      { source: '/www.tread.fi/thankyou', destination: '/thankyou', permanent: false },
+      { source: '/www.tread.fi/thankyou.html', destination: '/thankyou', permanent: false },
+      { source: '/thankyou.html', destination: '/thankyou', permanent: false },
     ];
   },
 

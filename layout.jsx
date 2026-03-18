@@ -2,7 +2,7 @@ import "./globals.css";
 
 export const metadata = {
   title: "ODDScreeners - Prediction Markets Explorer",
-  description: "Realtime price charts and trading history on Opinion, Polymarket, Kalshi, and more."
+  description: "Realtime price charts and trading history on Predictdotfun, Opinion, Polymarket, Kalshi, and more."
 };
 
 export default function RootLayout({ children }) {

@@ -16,10 +16,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { isValidWalletAddress } from "@/lib/walletTracker/format";
 import ArbitrageManagePanel from "@/components/wallet-tracker/ArbitrageManagePanel";
 import OpinionWalletLanding from "@/components/wallet-tracker/OpinionWalletLanding";
+import PredictFunWalletLanding from "@/components/wallet-tracker/PredictFunWalletLanding";
 import SavedWalletsDropdown, { saveWalletAddress } from "@/components/wallet-tracker/SavedWallets";
 
 // Tab constants
 const TAB_OPINION = "opinion";
+const TAB_PREDICTFUN = "predictfun";
 const TAB_ARBITRAGE = "arbitrage";
 
 // Inner component that uses useSearchParams
@@ -42,15 +44,17 @@ function WalletLandingContent() {
   // -------------------------------------------------------------------------
   // Tab state: read from URL params, default to "opinion"
   // -------------------------------------------------------------------------
-  const [activeTab, setActiveTab] = useState(TAB_OPINION);
+  const [activeTab, setActiveTab] = useState(TAB_PREDICTFUN);
   
   // Initialize tab from URL query param on mount
   useEffect(() => {
     const tabParam = searchParams.get("tab");
     if (tabParam === TAB_ARBITRAGE) {
       setActiveTab(TAB_ARBITRAGE);
-    } else {
+    } else if (tabParam === TAB_OPINION) {
       setActiveTab(TAB_OPINION);
+    } else {
+      setActiveTab(TAB_PREDICTFUN);
     }
   }, [searchParams]);
   
@@ -60,12 +64,13 @@ function WalletLandingContent() {
     
     // Update URL to reflect tab choice (preserves other params if any)
     const params = new URLSearchParams(searchParams.toString());
-    if (tab === TAB_OPINION) {
+    if (tab === TAB_PREDICTFUN) {
       params.delete("tab"); // Default tab, no need for param
-      // Also clear arbitrage-specific params when switching away
       params.delete("poly");
       params.delete("opinion");
       params.delete("same");
+    } else if (tab === TAB_OPINION) {
+      params.set("tab", tab);
     } else {
       params.set("tab", tab);
     }
@@ -97,11 +102,16 @@ function WalletLandingContent() {
     }
     
     setError("");
-    
+
     // Save wallet to localStorage for future use
     saveWalletAddress(trimmed);
-    
-    router.push(`/wallet/${trimmed}`);
+
+    // Route to appropriate wallet profile based on active tab
+    if (activeTab === TAB_PREDICTFUN) {
+      router.push(`/wallet/predictfun/${trimmed}`);
+    } else {
+      router.push(`/wallet/${trimmed}`);
+    }
   };
   
   const handleInputChange = (e) => {
@@ -126,6 +136,13 @@ function WalletLandingContent() {
           Opinion Wallet Track
         </button>
         <button
+          className={`wallet-tab ${activeTab === TAB_PREDICTFUN ? "active-pf" : ""}`}
+          onClick={() => handleTabChange(TAB_PREDICTFUN)}
+          style={isMobile ? { padding: "6px 10px", fontSize: 12 } : {}}
+        >
+          Predict.fun Wallet Track
+        </button>
+        <button
           className={`wallet-tab ${activeTab === TAB_ARBITRAGE ? "active" : ""}`}
           onClick={() => handleTabChange(TAB_ARBITRAGE)}
           style={isMobile ? { padding: "6px 10px", fontSize: 12 } : {}}
@@ -142,10 +159,12 @@ function WalletLandingContent() {
           {/* Title Section */}
           <div className="wallet-header-wrapper" style={isMobile ? { marginBottom: 2, marginTop: -8 } : {}}>
             <h1 className="wallet-main-title">
-              Wallet Tracker
+              {activeTab === TAB_PREDICTFUN ? "Predict.fun Wallet Tracker" : "Wallet Tracker"}
             </h1>
             <p className="wallet-subtitle">
-              Track active/closed positions and history trades on Opinion.
+              {activeTab === TAB_PREDICTFUN
+                ? "Track active positions and trade history on Predict.fun."
+                : "Track active/closed positions and history trades on Opinion."}
             </p>
           </div>
 
@@ -156,17 +175,20 @@ function WalletLandingContent() {
             style={isMobile ? { marginTop: 28, marginBottom: 8, gap: 6 } : {}}
           >
             <div style={{ position: "relative" }}>
-              <SavedWalletsDropdown 
+              <SavedWalletsDropdown
                 onSelect={(wallet) => setWalletInput(wallet)}
                 currentValue={walletInput}
               />
-              <div className="wallet-input-wrapper" style={isMobile ? { padding: "8px 10px" } : {}}>
-                <svg 
+              <div className="wallet-input-wrapper" style={{
+                ...(isMobile ? { padding: "8px 10px" } : {}),
+                borderColor: activeTab === TAB_PREDICTFUN ? "#8b5cf6" : "#f97316",
+              }}>
+                <svg
                   width={isMobile ? "16" : "20"}
                   height={isMobile ? "16" : "20"}
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
                   strokeWidth="2"
                   className="wallet-input-icon"
                 >
@@ -184,18 +206,26 @@ function WalletLandingContent() {
                 />
               </div>
             </div>
-            
+
             {error && (
               <div className="wallet-error">{error}</div>
             )}
-            
-            <button type="submit" className="wallet-search-btn" style={isMobile ? { padding: "8px 16px", fontSize: 13 } : {}}>
+
+            <button type="submit" className="wallet-search-btn" style={{
+              ...(isMobile ? { padding: "8px 16px", fontSize: 13 } : {}),
+              background: activeTab === TAB_PREDICTFUN
+                ? "linear-gradient(90deg, #a78bfa 0%, #8b5cf6 100%)"
+                : "linear-gradient(90deg, #ffaf89 0%, #f97316 100%)",
+            }}>
               Track Wallet
             </button>
           </form>
 
-          {/* Hero Section (Showcase) */}
-          <OpinionWalletLanding />
+          {/* Hero Section (Showcase) - only for Opinion tab */}
+          {activeTab === TAB_OPINION && <OpinionWalletLanding />}
+
+          {/* Hero Section (Showcase) - only for Predict.fun tab */}
+          {activeTab === TAB_PREDICTFUN && <PredictFunWalletLanding />}
         </div>
       )}
       
@@ -232,6 +262,13 @@ function WalletLandingContent() {
         .wallet-tab.active {
           background: linear-gradient(135deg, rgba(249, 115, 22, 0.15), rgba(251, 146, 60, 0.15));
           border-color: #f97316;
+          color: var(--text);
+          font-weight: 600;
+        }
+
+        .wallet-tab.active-pf {
+          background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(167, 139, 250, 0.15));
+          border-color: #8b5cf6;
           color: var(--text);
           font-weight: 600;
         }

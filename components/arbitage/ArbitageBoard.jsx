@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import ArbCalculatorModal from "./ArbCalculatorModal";
-import { getOptimizedImageUrl } from "@/components/OptimizedImage";
+import { OptimizedImage } from "@/components/OptimizedImage";
 import { getBonusCache, setBonusCache, getProbableBoostedCache, setProbableBoostedCache } from "@/lib/clientCache";
 
 // ── Platform definitions (logos + labels) ──────────────────────────────────
@@ -2470,13 +2470,13 @@ function Row({ r, priceMode, displayPlatformA, displayPlatformB, isBonus, isBoos
             }}
           >
             {r.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img 
-                src={getOptimizedImageUrl(r.imageUrl, 240, 80)} 
+              <OptimizedImage
+                src={r.imageUrl}
                 alt="" 
-                loading="lazy"
-                decoding="async"
-                style={{ width: "100%", height: "100%", objectFit: "cover" }} 
+                width={120}
+                height={78}
+                sizes="120px"
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
             ) : (
               <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>

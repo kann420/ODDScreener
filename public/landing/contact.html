@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ODDScreeners - Prediction Market Explorer</title>
+  <meta name="description" content="ODDScreeners - Prediction Market Explorer">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="ODDScreeners - Prediction Market Explorer">
+  <meta property="og:description" content="ODDScreeners - Prediction Market Explorer">
+  <meta property="og:image" content="/public/ODDScreenerslogo.svg">
+  <meta property="og:url" content="/contact">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="ODDScreeners - Prediction Market Explorer">
+  <meta name="twitter:description" content="ODDScreeners - Prediction Market Explorer">
+  <meta name="twitter:image" content="/public/ODDScreenerslogo.svg">
+  <link rel="icon" href="/public/favicon.ico" sizes="any">
+  <link rel="shortcut icon" href="/public/favicon.ico">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #000;
+      --panel: rgba(255, 255, 255, 0.06);
+      --panel-border: rgba(255, 255, 255, 0.09);
+      --panel-strong: rgba(255, 255, 255, 0.12);
+      --text: #fff;
+      --muted: #cecfd2;
+      --muted-2: #7e838b;
+      --accent: #ff7a12;
+      --accent-ring: rgba(255, 122, 18, 0.22);
+      --line: rgba(255, 255, 255, 0.08);
+      --footer-bg: #161616;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at 50% 0%, rgba(255, 115, 15, 0.16), transparent 34%),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, Arial, sans-serif;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .page {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .nav-shell {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      justify-content: center;
+      padding: 16px 24px;
+    }
+
+    .nav {
+      width: min(1200px, 100%);
+      min-height: 65px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 12px 24px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.62);
+      backdrop-filter: blur(30px);
+      -webkit-backdrop-filter: blur(30px);
+    }
+
+    .brand {
+      flex: 1 1 0;
+      display: flex;
+      align-items: center;
+    }
+
+    .brand img {
+      width: 220px;
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 42px;
+      flex: 0 1 auto;
+    }
+
+    .nav-links a {
+      font-size: 16px;
+      font-weight: 500;
+      line-height: 1.5;
+      color: #fff;
+    }
+
+    .nav-links a:hover {
+      opacity: 0.82;
+    }
+
+    .nav-action {
+      flex: 1 1 0;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .pill-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 132px;
+      height: 41px;
+      padding: 0 22px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 175, 92, 0.42);
+      background: linear-gradient(180deg, #ff9126 0%, #ff7010 100%);
+      color: #121212;
+      font-size: 14px;
+      font-weight: 600;
+      box-shadow:
+        inset 0 1px 10px rgba(255, 255, 255, 0.08),
+        0 0 0 3px rgba(255, 122, 18, 0.18);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .pill-button:hover {
+      transform: translateY(-1px);
+      box-shadow:
+        inset 0 1px 10px rgba(255, 255, 255, 0.1),
+        0 0 0 4px rgba(255, 122, 18, 0.22);
+    }
+
+    .main {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      padding: 52px 24px 96px;
+    }
+
+    .contact-layout {
+      width: min(1200px, 100%);
+      display: grid;
+      grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+      gap: 56px;
+      align-items: start;
+    }
+
+    .intro {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      padding-top: 24px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      justify-content: center;
+      min-height: 40px;
+      padding: 0 18px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(0, 0, 0, 0.52);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(44px, 5vw, 68px);
+      line-height: 1.03;
+      letter-spacing: -0.05em;
+      font-weight: 700;
+      max-width: 12ch;
+    }
+
+    .intro p {
+      margin: 0;
+      max-width: 42ch;
+      font-size: 19px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+
+    .contact-card {
+      border: 1px solid var(--panel-border);
+      border-radius: 22px;
+      background:
+        radial-gradient(circle at 50% 0%, rgba(255, 122, 18, 0.08), transparent 38%),
+        rgba(24, 16, 12, 0.76);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+      padding: 28px;
+    }
+
+    .contact-card form {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .field label {
+      font-size: 12px;
+      font-weight: 500;
+      color: #888;
+    }
+
+    .field input,
+    .field select,
+    .field textarea {
+      width: 100%;
+      border: 1px solid var(--panel-strong);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.06);
+      color: #fff;
+      font: inherit;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .field input,
+    .field select {
+      min-height: 56px;
+      padding: 0 16px;
+      font-size: 15px;
+    }
+
+    .field textarea {
+      min-height: 168px;
+      padding: 14px 16px;
+      resize: vertical;
+      font-size: 15px;
+      line-height: 1.55;
+    }
+
+    .field input::placeholder,
+    .field textarea::placeholder {
+      color: #999;
+    }
+
+    .field input:focus,
+    .field select:focus,
+    .field textarea:focus {
+      border-color: #ff9830;
+      box-shadow: 0 0 0 3px rgba(255, 152, 48, 0.14);
+    }
+
+    .submit {
+      width: 100%;
+      min-height: 58px;
+      border: 0;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #ff9126 0%, #ff7010 100%);
+      color: #111;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: inset 0 1px 10px rgba(255, 255, 255, 0.08);
+      transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+    }
+
+    .submit:hover {
+      transform: translateY(-1px);
+      box-shadow:
+        inset 0 1px 10px rgba(255, 255, 255, 0.1),
+        0 10px 22px rgba(255, 122, 18, 0.18);
+    }
+
+    .submit:disabled {
+      opacity: 0.72;
+      cursor: wait;
+    }
+
+    .status {
+      min-height: 21px;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+
+    .status.error {
+      color: #ff8b8b;
+    }
+
+    .fine-print {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.55;
+      color: var(--muted-2);
+    }
+
+    .fine-print a {
+      color: var(--muted);
+      text-decoration: underline;
+    }
+
+    .honeypot {
+      position: absolute;
+      inset: auto;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .footer {
+      margin-top: auto;
+      background: var(--footer-bg);
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding: 28px 32px 24px;
+    }
+
+    .footer-inner {
+      width: min(1200px, 100%);
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .footer-top {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      min-height: 42px;
+    }
+
+    .footer-top .brand-logo {
+      width: 190px;
+      height: 40px;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .footer-top .brand-logo img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .footer-divider {
+      width: 1px;
+      height: 26px;
+      background: rgba(255, 255, 255, 0.24);
+      flex: 0 0 auto;
+    }
+
+    .footer-copy {
+      font-size: 16px;
+      line-height: 1.5;
+      color: #fff;
+    }
+
+    .footer-bottom {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .footer-bottom p {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.5;
+      color: #7e838b;
+    }
+
+    .footer-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .footer-actions a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      color: rgba(255, 255, 255, 0.84);
+    }
+
+    .footer-actions svg {
+      width: 24px;
+      height: 24px;
+      display: block;
+    }
+
+    @media (max-width: 1023px) {
+      .contact-layout {
+        grid-template-columns: 1fr;
+        gap: 32px;
+      }
+
+      .intro {
+        padding-top: 0;
+      }
+    }
+
+    @media (max-width: 809px) {
+      .nav-shell {
+        padding: 16px;
+      }
+
+      .nav {
+        min-height: 56px;
+        padding: 10px 16px;
+        gap: 12px;
+      }
+
+      .brand img {
+        width: 168px;
+      }
+
+      .nav-links {
+        gap: 18px;
+      }
+
+      .nav-links a {
+        font-size: 14px;
+      }
+
+      .nav-action .pill-button {
+        min-width: 112px;
+        height: 38px;
+        padding: 0 18px;
+        font-size: 13px;
+      }
+
+      .main {
+        padding: 28px 16px 72px;
+      }
+
+      .contact-card {
+        padding: 20px 16px;
+      }
+
+      .row {
+        grid-template-columns: 1fr;
+      }
+
+      .footer {
+        padding: 22px 16px 18px;
+      }
+
+      .footer-top {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .footer-divider {
+        display: none;
+      }
+
+      .footer-bottom {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="nav-shell">
+      <header class="nav" id="navbar">
+        <div class="brand">
+          <a href="/" aria-label="ODDScreeners home">
+            <img src="/public/ODDScreenerslogo.svg" alt="ODDScreeners">
+          </a>
+        </div>
+        <nav class="nav-links" aria-label="Primary">
+          <a href="https://x.com/ODDScreeners" target="_blank" rel="noopener">X</a>
+          <a href="https://oddscreeners.gitbook.io/oddscreeners-docs" target="_blank" rel="noopener">Docs</a>
+          <a href="/contact" aria-current="page">Contact us</a>
+        </nav>
+        <div class="nav-action">
+          <a class="pill-button" href="/launch">Launch App</a>
+        </div>
+      </header>
+    </div>
+
+    <main class="main">
+      <div class="contact-layout">
+        <section class="intro">
+          <div class="eyebrow">Contact</div>
+          <h1>Contact us</h1>
+          <p>
+            If you have any collaboration plans with us or feedback on our products that we can improve,
+            please fill out the form and we will contact you as soon as possible.
+          </p>
+        </section>
+
+        <section class="contact-card">
+          <form id="odds-contact-form" method="post" action="/api/contact">
+            <div class="row">
+              <div class="field">
+                <label for="first-name">First name</label>
+                <input id="first-name" name="Name" type="text" placeholder="First name" required>
+              </div>
+              <div class="field">
+                <label for="last-name">Last name</label>
+                <input id="last-name" name="Lastname" type="text" placeholder="Last name" required>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="email">Email</label>
+              <input id="email" name="Email" type="email" placeholder="hello@gmail.com" required>
+            </div>
+
+            <div class="field">
+              <label for="interest">Product Interest</label>
+              <select id="interest" name="Location" required>
+                <option value="" selected disabled>Select...</option>
+                <option value="Partnership">Partnership</option>
+                <option value="Product Inquiry">Product Inquiry</option>
+                <option value="Feedback">Feedback</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="message">Tell us more</label>
+              <textarea
+                id="message"
+                name="Text Area"
+                placeholder="Write your message here..."
+                required
+              ></textarea>
+            </div>
+
+            <input class="honeypot" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+
+            <button class="submit" type="submit">Submit</button>
+            <div class="status" id="contact-status" aria-live="polite"></div>
+
+            <p class="fine-print">
+              By clicking Submit, you agree to allow ODDScreeners to process and store the provided information
+              for contact purposes and agree to the
+              <a href="https://www.social.plus/legal" target="_blank" rel="noopener">Privacy Policy</a>.
+            </p>
+          </form>
+        </section>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <div class="footer-top">
+          <a class="brand-logo" href="/" aria-label="ODDScreeners home">
+            <img src="/public/ODDScreenerslogo.svg" alt="ODDScreeners">
+          </a>
+          <div class="footer-divider" aria-hidden="true"></div>
+          <div class="footer-copy">Real-Time Data &amp; Arbitrage for Prediction Market</div>
+        </div>
+        <div class="footer-bottom">
+          <p>&copy; 2026 ODDScreeners. All rights reserved.</p>
+          <div class="footer-actions" aria-label="Footer links">
+            <a href="https://oddscreeners.gitbook.io/oddscreeners-docs" target="_blank" rel="noopener" aria-label="Docs">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M7 3.75A1.75 1.75 0 0 1 8.75 2h4.69c.46 0 .9.18 1.22.5l2.84 2.84c.32.32.5.76.5 1.22v11.69A1.75 1.75 0 0 1 16.25 20h-7.5A1.75 1.75 0 0 1 7 18.25V3.75Z" stroke="currentColor" stroke-width="1.7"/>
+                <path d="M13 2.75V6.5c0 .41.34.75.75.75h3.75" stroke="currentColor" stroke-width="1.7"/>
+                <path d="M9.5 10h5M9.5 13h5M9.5 16h3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              </svg>
+            </a>
+            <a href="https://x.com/ODDScreeners" target="_blank" rel="noopener" aria-label="X">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 4L20 20M20 4L4 20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              </svg>
+            </a>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
+  <script>
+    (() => {
+      const form = document.getElementById("odds-contact-form");
+      const status = document.getElementById("contact-status");
+      if (!(form instanceof HTMLFormElement) || !(status instanceof HTMLElement)) return;
+
+      const query = new URLSearchParams(window.location.search);
+      if (query.get("contact") === "error") {
+        status.textContent = "Unable to send your message right now. Please try again.";
+        status.classList.add("error");
+      }
+
+      form.addEventListener("submit", () => {
+        const button = form.querySelector('button[type="submit"]');
+        if (button instanceof HTMLButtonElement) {
+          button.disabled = true;
+          button.textContent = "Sending...";
+        }
+        status.textContent = "";
+        status.classList.remove("error");
+      });
+    })();
+  </script>
+</body>
+</html>
