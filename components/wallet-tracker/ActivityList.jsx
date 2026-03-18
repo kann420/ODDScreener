@@ -108,7 +108,7 @@ function ActivityRowDesktop({ trade, chainId }) {
             <img src={marketImage} alt="" className="activity-icon-img" onError={(e) => {
               e.target.style.display = 'none';
               e.target.parentElement.style.background = "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)";
-              e.target.parentElement.innerHTML = displayTitle?.charAt(0) || "?";
+              e.target.parentElement.textContent = displayTitle?.charAt(0) || "?";
             }} />
           ) : displayTitle?.charAt(0) || "?"}
         </div>
@@ -177,7 +177,7 @@ function ActivityCardMobile({ trade, chainId }) {
             <img src={marketImage} alt="" className="activity-icon-img" onError={(e) => {
               e.target.style.display = 'none';
               e.target.parentElement.style.background = "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)";
-              e.target.parentElement.innerHTML = displayTitle?.charAt(0) || "?";
+              e.target.parentElement.textContent = displayTitle?.charAt(0) || "?";
             }} />
           ) : displayTitle?.charAt(0) || "?"}
         </div>
