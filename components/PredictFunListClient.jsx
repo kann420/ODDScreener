@@ -24,6 +24,12 @@ function getVolumeTotal(m) {
   return num(m?.stats?.volumeTotalUsd ?? 0);
 }
 
+function getBoostDistanceMs(market, now = Date.now()) {
+  const startMs = toMs(market?.boostStartsAt);
+  if (!startMs) return Number.POSITIVE_INFINITY;
+  return Math.abs(startMs - now);
+}
+
 function toMs(v) {
   if (!v) return 0;
   if (typeof v === "string") {
@@ -110,6 +116,8 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
       setSortConfig({ key: "volume", direction: "desc" });
     } else if (tab === "new") {
       setSortConfig({ key: null, direction: null });
+    } else if (tab === "boost") {
+      setSortConfig({ key: null, direction: null });
     } else {
       setSortConfig({ key: "volume", direction: "desc" });
     }
@@ -137,17 +145,27 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
   const boostMarkets = useMemo(() => {
     if (!markets.length) return [];
     const now = Date.now();
-    return markets.filter((m) => {
-      if (!m.isBoosted) return false;
-      const start = m.boostStartsAt ? Date.parse(m.boostStartsAt) : null;
-      const end = m.boostEndsAt ? Date.parse(m.boostEndsAt) : null;
-      // Include if: active boost window, OR upcoming (starts within 7 days), OR no window defined
-      if (Number.isFinite(start) && Number.isFinite(end)) {
-        const sevenDays = 7 * 24 * 60 * 60 * 1000;
-        return now < end || (start > now && start - now < sevenDays);
-      }
-      return true; // isBoosted=true but no window -> include
-    });
+    return markets
+      .filter((m) => {
+        if (!m.isBoosted) return false;
+        const start = m.boostStartsAt ? Date.parse(m.boostStartsAt) : null;
+        const end = m.boostEndsAt ? Date.parse(m.boostEndsAt) : null;
+        // Include if: active boost window, OR upcoming (starts within 7 days), OR no window defined
+        if (Number.isFinite(start) && Number.isFinite(end)) {
+          const sevenDays = 7 * 24 * 60 * 60 * 1000;
+          return now < end || (start > now && start - now < sevenDays);
+        }
+        return true; // isBoosted=true but no window -> include
+      })
+      .sort((a, b) => {
+        const distanceDiff = getBoostDistanceMs(a, now) - getBoostDistanceMs(b, now);
+        if (distanceDiff !== 0) return distanceDiff;
+
+        const startDiff = toMs(a?.boostStartsAt) - toMs(b?.boostStartsAt);
+        if (startDiff !== 0) return startDiff;
+
+        return getVolume24h(b) - getVolume24h(a);
+      });
   }, [markets]);
 
   // ALL: everything sorted by volume
@@ -185,6 +203,9 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
     if (activeTab === "trending" && !sortConfig.key) {
       effectiveSortKey = "volume";
       effectiveSortDir = "desc";
+    }
+    if (activeTab === "boost" && !sortConfig.key) {
+      return arr; // Keep boost-time priority order from boostMarkets
     }
     if (activeTab === "new" && effectiveSortKey === "volume") {
       return arr; // Keep newest first
@@ -582,13 +603,6 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
         )}
       </div>
 
-      {/* Loading indicator */}
-      {isLoadingFull && (
-        <div style={{ textAlign: "center", padding: "8px 0", fontSize: 12, color: "rgba(139, 92, 246, 0.7)" }}>
-          Loading more markets...&nbsp;&nbsp;{markets.length} markets total
-        </div>
-      )}
-
       {/* Column Headers */}
       <div
         className="market-row-desktop"
@@ -634,6 +648,7 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
             initialData={rowMetricsMap[String(market.id)] ?? null}
             volMode={displayVolMode}
             isBoost={activeTab === "boost"}
+            showBoostTime={activeTab === "boost" || activeTab === "all"}
             priority={i < 3}
             relatedCount={Math.max(0, (categoryCountMap[market.categorySlug] || 1) - 1)}
             onChanceLoaded={handleChanceLoaded}

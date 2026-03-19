@@ -41,11 +41,46 @@ function fmtExpires(isoOrMs) {
   return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 }
 
+function fmtBoostStartsAtUtc(isoOrMs) {
+  if (!isoOrMs) return "";
+  const ms = typeof isoOrMs === "string" ? Date.parse(isoOrMs) : Number(isoOrMs);
+  if (!Number.isFinite(ms) || ms <= 0) return "";
+
+  const d = new Date(ms);
+  if (isNaN(d.getTime())) return "";
+
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const hours = String(d.getUTCHours()).padStart(2, "0");
+  const minutes = String(d.getUTCMinutes()).padStart(2, "0");
+
+  return `at ${hours}:${minutes} (UTC) on ${months[d.getUTCMonth()]} ${d.getUTCDate()}`;
+}
+
+function BoostMeta({ text }) {
+  if (!text) return null;
+  return (
+    <span
+      className="mono"
+      style={{
+        fontSize: 11,
+        lineHeight: "16px",
+        fontWeight: 700,
+        color: "rgba(226,188,99,0.88)",
+        whiteSpace: "nowrap",
+        flex: "0 0 auto",
+      }}
+    >
+      {text}
+    </span>
+  );
+}
+
 function PredictFunMarketRow({
   market,
   initialData = null,
   volMode = "24h",
   isBoost = false,
+  showBoostTime = false,
   priority = false,
   relatedCount = 0,
   onChanceLoaded,
@@ -180,6 +215,9 @@ function PredictFunMarketRow({
     }
     return market.isBoosted === true;
   })();
+  const boostStartsAtText =
+    showBoostTime && market?.isBoosted ? fmtBoostStartsAtUtc(market?.boostStartsAt) : "";
+  const showBoostBadge = isBoost || market?.isBoosted || boostActive;
 
   const detailUrl = market?.id ? `/predictfun/market/${market.id}` : "/predictfun";
 
@@ -252,7 +290,8 @@ function PredictFunMarketRow({
                     {relatedCount} related market{relatedCount !== 1 ? "s" : ""}
                   </span>
                 )}
-                {(isBoost || boostActive) ? <PredictFunBoostBadge /> : null}
+                {showBoostBadge ? <PredictFunBoostBadge /> : null}
+                {boostStartsAtText ? <BoostMeta text={boostStartsAtText} /> : null}
               </div>
             </div>
           </div>
@@ -322,7 +361,8 @@ function PredictFunMarketRow({
                     {relatedCount} related market{relatedCount !== 1 ? "s" : ""}
                   </span>
                 )}
-                {(isBoost || boostActive) ? <PredictFunBoostBadge /> : null}
+                {showBoostBadge ? <PredictFunBoostBadge /> : null}
+                {boostStartsAtText ? <BoostMeta text={boostStartsAtText} /> : null}
               </div>
             </div>
           </div>
@@ -360,6 +400,7 @@ export default memo(PredictFunMarketRow, (prevProps, nextProps) => {
     prevProps.initialData === nextProps.initialData &&
     prevProps.volMode === nextProps.volMode &&
     prevProps.isBoost === nextProps.isBoost &&
+    prevProps.showBoostTime === nextProps.showBoostTime &&
     prevProps.priority === nextProps.priority &&
     prevProps.relatedCount === nextProps.relatedCount
   );

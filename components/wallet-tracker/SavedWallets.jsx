@@ -11,6 +11,14 @@ import { useState, useEffect, useRef } from "react";
 const STORAGE_KEY = "oddscreeners_saved_wallets";
 const MAX_SAVED = 5;
 
+function normalizeWalletAddress(address) {
+  return String(address || "").trim();
+}
+
+function walletKey(address) {
+  return normalizeWalletAddress(address).toLowerCase();
+}
+
 /**
  * Get saved wallets from localStorage
  */
@@ -18,7 +26,10 @@ export function getSavedWallets() {
   if (typeof window === "undefined") return [];
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : [];
+    const parsed = saved ? JSON.parse(saved) : [];
+    return Array.isArray(parsed)
+      ? parsed.map((wallet) => normalizeWalletAddress(wallet)).filter(Boolean)
+      : [];
   } catch {
     return [];
   }
@@ -31,11 +42,13 @@ export function saveWalletAddress(address) {
   if (typeof window === "undefined" || !address) return;
   
   try {
-    const trimmed = address.trim().toLowerCase();
+    const trimmed = normalizeWalletAddress(address);
+    if (!trimmed) return;
+    const key = walletKey(trimmed);
     let saved = getSavedWallets();
     
-    // Remove if already exists (to move to top)
-    saved = saved.filter(w => w !== trimmed);
+    // Remove if already exists (to move to top), preserving the original casing
+    saved = saved.filter((w) => walletKey(w) !== key);
     
     // Add to front
     saved.unshift(trimmed);
@@ -78,7 +91,8 @@ export default function SavedWalletsDropdown({ onSelect, currentValue }) {
   }, [show]);
   
   // Filter out current value and empty wallets
-  const filteredWallets = savedWallets.filter(w => w && w !== currentValue?.trim().toLowerCase());
+  const currentKey = walletKey(currentValue);
+  const filteredWallets = savedWallets.filter((w) => w && walletKey(w) !== currentKey);
   
   if (filteredWallets.length === 0) {
     return null;

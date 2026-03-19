@@ -751,6 +751,49 @@ span[style*="opacity:0.001"] {
         .odds-faq-list {
           max-width: 100%;
         }
+        /* Fix hero section too short on mobile — subtitle + buttons hidden behind promo video */
+        .framer-e006b9 {
+          max-height: none !important;
+          height: auto !important;
+          min-height: 560px !important;
+        }
+        .framer-e006b9 .framer-1xmfp64 {
+          max-height: none !important;
+          height: auto !important;
+        }
+        .framer-e006b9 .framer-1fifjqb {
+          max-height: none !important;
+          height: auto !important;
+        }
+        /* Reduce excessive footer height on mobile */
+        .framer-1oj5hwc-container,
+        footer[data-framer-name="Mobile"] {
+          height: auto !important;
+          min-height: auto !important;
+          max-height: none !important;
+        }
+        .framer-163lso1 {
+          height: auto !important;
+          min-height: auto !important;
+          padding-bottom: 24px !important;
+        }
+        .framer-9ijvn4 {
+          height: auto !important;
+          min-height: auto !important;
+        }
+        .framer-1np3p7q {
+          height: auto !important;
+          min-height: auto !important;
+        }
+        .framer-1tqnzmg {
+          height: auto !important;
+          min-height: auto !important;
+        }
+        .framer-1xtpr6m {
+          height: auto !important;
+          min-height: auto !important;
+          padding: 16px 0 !important;
+        }
       }
 
       .odds-faq-item + .odds-faq-item {
@@ -1743,6 +1786,16 @@ span[style*="opacity:0.001"] {
         }
 
         function patchOverviewText() {
+          // Replace hero subtitle text
+          document.querySelectorAll('p').forEach((p) => {
+            if (!(p instanceof HTMLElement)) return;
+            const t = (p.textContent || '').trim();
+            if (t.includes('all-in-one dashboard') && t.includes('exploring markets, analyzing data')) {
+              p.innerHTML = '<span style="opacity:1;display:inline">An all-in-one dashboard for exploring, analyzing &amp; finding arbitrage across prediction market.</span>';
+              p.style.setProperty('opacity', '1', 'important');
+            }
+          });
+
           // Replace "Introduction" badge → "Overview"
           document.querySelectorAll('p, span, div').forEach((node) => {
             if (!(node instanceof HTMLElement)) return;
@@ -2164,6 +2217,34 @@ span[style*="opacity:0.001"] {
           });
         }
 
+        function patchMobileFooter() {
+          // Only on mobile/tablet
+          const mql = window.matchMedia('(max-width: 809.98px)');
+          if (!mql.matches) return;
+          // Find the visible mobile footer
+          const footer = [...document.querySelectorAll('footer')].find(f => f.getBoundingClientRect().height > 0);
+          if (!footer) return;
+          // Collapse all nested flex containers — override flex-basis and height
+          footer.querySelectorAll('*').forEach(el => {
+            if (!(el instanceof HTMLElement)) return;
+            const cs = getComputedStyle(el);
+            const basis = parseFloat(cs.flexBasis);
+            const h = el.getBoundingClientRect().height;
+            const contentH = [...el.children].reduce((sum, c) => sum + c.getBoundingClientRect().height, 0);
+            // If flex-basis is large and exceeds content, collapse it
+            if (basis > 100 && h > contentH + 60) {
+              el.style.setProperty('flex-basis', 'auto', 'important');
+              el.style.setProperty('height', 'auto', 'important');
+            }
+          });
+          footer.style.setProperty('height', 'auto', 'important');
+          footer.style.setProperty('flex-basis', 'auto', 'important');
+          if (footer.parentElement instanceof HTMLElement) {
+            footer.parentElement.style.setProperty('height', 'auto', 'important');
+            footer.parentElement.style.setProperty('flex-basis', 'auto', 'important');
+          }
+        }
+
         function patchLaunchTargets() {
           document.querySelectorAll("a").forEach((link) => {
             if (!(link instanceof HTMLAnchorElement)) return;
@@ -2184,9 +2265,14 @@ span[style*="opacity:0.001"] {
 
           if (!card) return;
 
-          const mediaContainer = card.querySelector(".framer-phwin5-container");
-          if (!mediaContainer) return;
-
+          // Inject into ALL .framer-phwin5-container slots (desktop + mobile SSR variants)
+          card.querySelectorAll(".framer-phwin5-container").forEach((mediaContainer) => {
+            if (!(mediaContainer instanceof HTMLElement)) return;
+            _patchTradeSlot(mediaContainer, createTradeGroupMarkup);
+          });
+          return;
+        }
+        function _patchTradeSlot(mediaContainer, createTradeGroupMarkup) {
           mediaContainer.querySelectorAll(":scope > *").forEach((child) => {
             if (!(child instanceof HTMLElement)) return;
             if (child.classList.contains("odds-trade-tracking-media")) return;
@@ -2232,14 +2318,37 @@ span[style*="opacity:0.001"] {
 
           if (!card) return;
 
-          const title = card.querySelector("h5");
-          const body = card.querySelector("p");
-          if (title) title.textContent = ARBITRAGE_TITLE;
-          if (body) body.textContent = ARBITRAGE_SUBTITLE;
+          // Patch ALL h5/p across SSR variants (desktop + mobile)
+          card.querySelectorAll("h5, h6").forEach((h) => {
+            const t = (h.textContent || "").trim();
+            if (t === "vCeFi - Verifiable, On-Chain" || t === "Arbitrage Scanner" || t === ARBITRAGE_TITLE) {
+              h.textContent = ARBITRAGE_TITLE;
+            }
+          });
+          card.querySelectorAll("p").forEach((p) => {
+            const t = (p.textContent || "").trim();
+            if (t.includes("Soulbound") || t.includes("Arbitrage isn")) {
+              p.textContent = ARBITRAGE_SUBTITLE;
+            }
+            // Hide stale "vCefi" label
+            if (t === "vCefi") {
+              p.style.display = "none";
+            }
+          });
 
-          const mediaSlot = card.querySelector(".framer-1yx8wcu-container");
-          if (!mediaSlot) return;
+          // Hide the old "Integration" / "vCefi" graphics on mobile
+          card.querySelectorAll('[data-framer-name="Integration"], [data-framer-name="vCefi"]').forEach((el) => {
+            if (el instanceof HTMLElement) el.style.display = "none";
+          });
 
+          // Inject into ALL .framer-1yx8wcu-container slots (desktop + mobile SSR variants)
+          card.querySelectorAll(".framer-1yx8wcu-container").forEach((mediaSlot) => {
+            if (!(mediaSlot instanceof HTMLElement)) return;
+            _patchArbSlot(mediaSlot);
+          });
+          return;
+        }
+        function _patchArbSlot(mediaSlot) {
           mediaSlot.querySelectorAll(":scope > *").forEach((child) => {
             if (!(child instanceof HTMLElement)) return;
             if (child.classList.contains("odds-arbitrage-media")) return;
@@ -2264,6 +2373,8 @@ span[style*="opacity:0.001"] {
             mediaSlot.appendChild(root);
           }
 
+          mediaSlot.style.setProperty("min-height", "300px", "important");
+
           const firstGroup = root.querySelector(".odds-arbitrage-group");
           if (!firstGroup) return;
           const loopHeight = firstGroup.getBoundingClientRect().height;
@@ -2285,55 +2396,66 @@ span[style*="opacity:0.001"] {
 
           if (!card) return;
 
-          const title = card.querySelector("h5");
-          const body = card.querySelector("p");
-          if (title) title.textContent = SMART_MONEY_TITLE;
-          if (body) body.textContent = SMART_MONEY_SUBTITLE;
-
-          const mediaSlot = card.querySelector(".framer-15jw2q");
-          if (!mediaSlot) return;
-
-          mediaSlot.querySelectorAll(":scope > *").forEach((child) => {
-            if (!(child instanceof HTMLElement)) return;
-            if (child.classList.contains("odds-smart-money-media")) return;
-            child.style.display = "none";
-            child.setAttribute("aria-hidden", "true");
+          // Patch ALL h5/h6/p across SSR variants (desktop + mobile)
+          card.querySelectorAll("h5, h6").forEach((h) => {
+            const t = (h.textContent || "").trim();
+            if (t === "API Integration" || t === "Smart Money" || t === SMART_MONEY_TITLE || t === "Wallet Tracker") {
+              h.textContent = SMART_MONEY_TITLE;
+            }
+          });
+          card.querySelectorAll("p").forEach((p) => {
+            const t = (p.textContent || "").trim();
+            if (t.includes("Scale your trading infrastructure") || t.includes("Track active positions")) {
+              p.textContent = SMART_MONEY_SUBTITLE;
+            }
           });
 
-          let root = mediaSlot.querySelector(".odds-smart-money-media");
-          if (!root) {
-            root = document.createElement("div");
-            root.className = "odds-smart-money-media";
-            root.setAttribute("aria-hidden", "true");
-            root.innerHTML = `
-              <div class="odds-smart-money-noise"></div>
-              <div class="odds-smart-money-viewport">
-                <div class="odds-smart-money-track">
-                  <div class="odds-smart-money-group">${createSmartMoneyGroupMarkup()}</div>
-                  <div class="odds-smart-money-group" aria-hidden="true">${createSmartMoneyGroupMarkup()}</div>
+          // Inject custom media into ALL .framer-15jw2q slots (desktop + mobile SSR variants)
+          card.querySelectorAll(".framer-15jw2q").forEach((mediaSlot) => {
+            if (!(mediaSlot instanceof HTMLElement)) return;
+
+            mediaSlot.querySelectorAll(":scope > *").forEach((child) => {
+              if (!(child instanceof HTMLElement)) return;
+              if (child.classList.contains("odds-smart-money-media")) return;
+              child.style.display = "none";
+              child.setAttribute("aria-hidden", "true");
+            });
+
+            let root = mediaSlot.querySelector(".odds-smart-money-media");
+            if (!root) {
+              root = document.createElement("div");
+              root.className = "odds-smart-money-media";
+              root.setAttribute("aria-hidden", "true");
+              root.innerHTML = `
+                <div class="odds-smart-money-noise"></div>
+                <div class="odds-smart-money-viewport">
+                  <div class="odds-smart-money-track">
+                    <div class="odds-smart-money-group">${createSmartMoneyGroupMarkup()}</div>
+                    <div class="odds-smart-money-group" aria-hidden="true">${createSmartMoneyGroupMarkup()}</div>
+                  </div>
                 </div>
-              </div>
-            `;
-            mediaSlot.appendChild(root);
-          }
+              `;
+              mediaSlot.appendChild(root);
+            }
 
-          const tradeCard = cards.find((node) =>
-            (node.textContent || "").includes("Real-Time Trade Tracking")
-          );
-          const tradeMedia = tradeCard?.querySelector(".odds-trade-tracking-media");
-          const targetHeight = Math.round(tradeMedia?.offsetHeight || 340);
+            const tradeCard = cards.find((node) =>
+              (node.textContent || "").includes("Real-Time Trade Tracking")
+            );
+            const tradeMedia = tradeCard?.querySelector(".odds-trade-tracking-media");
+            const targetHeight = Math.round(tradeMedia?.offsetHeight || 340);
 
-          mediaSlot.style.setProperty("height", `${targetHeight}px`, "important");
-          mediaSlot.style.setProperty("min-height", `${targetHeight}px`, "important");
-          root.style.setProperty("height", `${targetHeight}px`, "important");
-          root.style.setProperty("min-height", `${targetHeight}px`, "important");
+            mediaSlot.style.setProperty("height", `${targetHeight}px`, "important");
+            mediaSlot.style.setProperty("min-height", `${targetHeight}px`, "important");
+            root.style.setProperty("height", `${targetHeight}px`, "important");
+            root.style.setProperty("min-height", `${targetHeight}px`, "important");
 
-          const firstGroup = root.querySelector(".odds-smart-money-group");
-          if (!firstGroup) return;
-          const loopHeight = firstGroup.getBoundingClientRect().height;
-          if (loopHeight > 0) {
-            root.style.setProperty("--odds-smart-money-loop-height", `${loopHeight}px`);
-          }
+            const firstGroup = root.querySelector(".odds-smart-money-group");
+            if (!firstGroup) return;
+            const loopHeight = firstGroup.getBoundingClientRect().height;
+            if (loopHeight > 0) {
+              root.style.setProperty("--odds-smart-money-loop-height", `${loopHeight}px`);
+            }
+          });
         }
 
         let lastCompact = false;
@@ -2546,6 +2668,7 @@ span[style*="opacity:0.001"] {
           patchOverviewSectionSpacing();
           patchArbitrageCard();
           patchTradeTrackingCard();
+          patchMobileFooter();
           requestAnimationFrame(patchOverviewText);
           requestAnimationFrame(patchRemoveUnusedSections);
           requestAnimationFrame(patchFaqSection);
@@ -2570,6 +2693,7 @@ span[style*="opacity:0.001"] {
           setTimeout(patchSmartMoneyCard, 300);
           setTimeout(patchArbitrageCard, 300);
           setTimeout(patchTradeTrackingCard, 300);
+          setTimeout(patchMobileFooter, 300);
           setTimeout(patchOverviewText, 1000);
           setTimeout(patchRemoveUnusedSections, 1000);
           setTimeout(patchFaqSection, 1000);
@@ -2583,6 +2707,7 @@ span[style*="opacity:0.001"] {
           setTimeout(patchSmartMoneyCard, 1000);
           setTimeout(patchArbitrageCard, 1000);
           setTimeout(patchTradeTrackingCard, 1000);
+          setTimeout(patchMobileFooter, 1000);
 
           ensureLogoLayer();
           scheduleLogoStateUpdate();

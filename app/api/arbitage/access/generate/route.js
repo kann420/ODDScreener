@@ -6,8 +6,6 @@ import { NextResponse } from "next/server";
 import { generateAccessCode, generateMultipleCodes, listAllCodes, getCodeStats, revokeCode } from "@/lib/accessCodeDb";
 import crypto from "crypto";
 
-const IS_DEV = process.env.NODE_ENV !== "production";
-
 // Admin secret - MUST be set in environment variable, no fallback for security
 const ADMIN_SECRET = process.env.ADMIN_SECRET;
 
@@ -33,70 +31,12 @@ function checkAdminAuth(request) {
   return checkAdminSecret(authHeader);
 }
 
-// ─── GET handler (browser-friendly, DEV ONLY) ───
-export async function GET(request) {
-  // Block in production — secret in URL gets logged by servers/CDNs
-  if (!IS_DEV) {
-    return NextResponse.json({ error: "GET disabled in production. Use POST with x-admin-secret header." }, { status: 405 });
-  }
-
-  try {
-    const { searchParams } = new URL(request.url);
-    const secret = searchParams.get("secret") || "";
-    const action = searchParams.get("action") || "generate";
-
-    if (!checkAdminSecret(secret)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    switch (action) {
-      case "generate": {
-        const durationHours = Math.max(1, Number(searchParams.get("hours")) || 24);
-        const count = Math.max(1, Math.min(50, Number(searchParams.get("count")) || 1));
-        const note = searchParams.get("note") || "";
-
-        if (count === 1) {
-          const newCode = await generateAccessCode(durationHours, note);
-          return NextResponse.json({ success: true, code: newCode, durationHours });
-        } else {
-          const codes = await generateMultipleCodes(count, durationHours, note);
-          return NextResponse.json({ success: true, codes, count: codes.length, durationHours });
-        }
-      }
-
-      case "revoke": {
-        const code = searchParams.get("code");
-        if (!code) {
-          return NextResponse.json({ error: "code param required" }, { status: 400 });
-        }
-        const success = await revokeCode(code);
-        return NextResponse.json({ success, code });
-      }
-
-      case "list": {
-        const limit = Math.max(1, Number(searchParams.get("limit")) || 100);
-        const offset = Math.max(0, Number(searchParams.get("offset")) || 0);
-        const includeExpired = searchParams.get("includeExpired") !== "false";
-        const codes = await listAllCodes({ limit, offset, includeExpired });
-        const stats = await getCodeStats();
-        return NextResponse.json({ codes, stats });
-      }
-
-      case "stats": {
-        const stats = await getCodeStats();
-        return NextResponse.json(stats);
-      }
-
-      default:
-        return NextResponse.json(
-          { error: "Invalid action. Use: generate, revoke, list, stats" },
-          { status: 400 }
-        );
-    }
-  } catch (error) {
-    console.error("[Access Generate GET] Error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
+// GET is disabled to avoid putting secrets in URLs, logs, browser history, or CDN traces.
+export async function GET() {
+  return NextResponse.json(
+    { error: "GET disabled. Use POST with x-admin-secret header." },
+    { status: 405 }
+  );
 }
 
 // ─── POST handler (programmatic, uses x-admin-secret header) ───

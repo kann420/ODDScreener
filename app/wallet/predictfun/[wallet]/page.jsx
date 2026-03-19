@@ -21,6 +21,7 @@ import {
   formatCents,
   formatShares,
   formatPercentSigned,
+  formatCompact,
   timeAgo,
   num,
 } from "@/lib/walletTracker/format";
@@ -534,6 +535,20 @@ function PFWalletHeader({ wallet, account, stats, trades, isLoading }) {
               {isLoading ? <Skeleton width={70} height={24} /> : formatUSD(weeklyVolume)}
             </div>
           </div>
+          <div className="pf-hstat-right pf-hstat-points">
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 4 }}>Points</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: "#fff" }}>
+              {isLoading ? (
+                <Skeleton width={70} height={24} />
+              ) : (
+                Math.abs(stats?.points || 0) >= 10000
+                  ? formatCompact(stats?.points || 0)
+                  : Number(stats?.points || 0).toLocaleString("en-US", {
+                      maximumFractionDigits: 2,
+                    })
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -551,13 +566,14 @@ function PFWalletHeader({ wallet, account, stats, trades, isLoading }) {
           .pf-hstat-right {
             padding-left: 28px;
           }
-          /* Explicit order: row1=1,2 | row2=3,4 | row3=5,6 */
+          /* Explicit order: row1=1,2 | row2=3,4 | row3=5,6 | row4=7 */
           .pf-hstat-posval    { order: 1; }
           .pf-hstat-right:not(.pf-hstat-feepaid):not(.pf-hstat-weeklyvol) { order: 2; }
           .pf-hstat-totvol    { order: 3; }
           .pf-hstat-weeklyvol { order: 4; }
           .pf-hstat-positions { order: 5; }
           .pf-hstat-feepaid   { order: 6; }
+          .pf-hstat-points    { order: 7; }
           :global(.pf-hstat-right > div:last-child) {
             font-size: 22px !important;
           }
@@ -1072,6 +1088,7 @@ export default function PredictFunWalletPage() {
       volume: gql.volumeUsd ?? null,
       positionsCount: positions.length,
       tradesCount: trades.length,
+      points: Number(account?.points ?? account?.leaderboard?.totalPoints ?? 0),
     };
   }, [positions, trades, account]);
 
