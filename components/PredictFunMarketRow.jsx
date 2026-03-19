@@ -43,6 +43,7 @@ function fmtExpires(isoOrMs) {
 
 function PredictFunMarketRow({
   market,
+  initialData = null,
   volMode = "24h",
   isBoost = false,
   priority = false,
@@ -57,10 +58,20 @@ function PredictFunMarketRow({
   const rowRef = useRef(null);
   const inView = useInView(rowRef, { root: null, rootMargin: "220px", threshold: 0.01 });
 
-  const [mid, setMid] = useState(0);
+  const [mid, setMid] = useState(initialData?.mid ?? 0);
   const [loading, setLoading] = useState(false);
-  const [obLiquidity, setObLiquidity] = useState(null);
-  const [sparkPts, setSparkPts] = useState([]);
+  const [obLiquidity, setObLiquidity] = useState(initialData?.totalLiquidity ?? null);
+  const [sparkPts, setSparkPts] = useState(
+    Array.isArray(initialData?.sparkPts) ? initialData.sparkPts : []
+  );
+
+  useEffect(() => {
+    if (initialData?.mid > 0) setMid(initialData.mid);
+    if (initialData?.totalLiquidity != null) setObLiquidity(initialData.totalLiquidity);
+    if (Array.isArray(initialData?.sparkPts) && initialData.sparkPts.length > 0) {
+      setSparkPts(initialData.sparkPts);
+    }
+  }, [initialData]);
 
   // Fetch chance (mid price) + price history lazily when in view
   useEffect(() => {
@@ -72,13 +83,25 @@ function PredictFunMarketRow({
     const chartCacheKey = `pf-chart:${market.id}`;
     const cached = clientGet(cacheKey);
     const cachedChart = clientGet(chartCacheKey);
+    const hasInitialMetric = initialData?.mid > 0 || initialData?.totalLiquidity != null;
+    const hasInitialChart = Array.isArray(initialData?.sparkPts) && initialData.sparkPts.length > 0;
     if (cached) {
       setMid(cached.mid || 0);
       if (cached.totalLiquidity != null) setObLiquidity(cached.totalLiquidity);
-      if (cachedChart) setSparkPts(cachedChart);
-      else fetchChart();
-      return;
+    } else if (hasInitialMetric) {
+      if (initialData?.mid > 0) setMid(initialData.mid);
+      if (initialData?.totalLiquidity != null) setObLiquidity(initialData.totalLiquidity);
     }
+
+    if (cachedChart) {
+      setSparkPts(cachedChart);
+    } else if (hasInitialChart) {
+      setSparkPts(initialData.sparkPts);
+    }
+
+    const needsMetricFetch = !cached && !hasInitialMetric;
+    const needsChartFetch = !cachedChart && !hasInitialChart;
+    if (!needsMetricFetch && !needsChartFetch) return;
 
     setLoading(true);
 
@@ -94,31 +117,41 @@ function PredictFunMarketRow({
         .catch(() => {});
     }
 
-    (async () => {
-      try {
-        const res = await fetch(`/api/predictfun/market/${market.id}/last-sale`, { cache: "no-store" });
-        if (!alive || !res.ok) return;
-        const json = await res.json();
-        if (!alive) return;
+    const tasks = [];
 
-        const m = json.mid || 0;
-        setMid(m);
-        if (json.totalLiquidity != null) setObLiquidity(json.totalLiquidity);
+    if (needsMetricFetch) {
+      tasks.push(
+        (async () => {
+          try {
+            const res = await fetch(`/api/predictfun/market/${market.id}/last-sale`, { cache: "no-store" });
+            if (!alive || !res.ok) return;
+            const json = await res.json();
+            if (!alive) return;
 
-        clientSet(cacheKey, json, 30_000);
-        if (m > 0 && onChanceLoaded) onChanceLoaded(market.id, m);
-        if (json.totalLiquidity > 0 && onLiquidityLoaded) onLiquidityLoaded(market.id, json.totalLiquidity);
-      } catch {
-        // ignore
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
+            const m = json.mid || 0;
+            setMid(m);
+            if (json.totalLiquidity != null) setObLiquidity(json.totalLiquidity);
 
-    fetchChart();
+            clientSet(cacheKey, json, 30_000);
+            if (m > 0 && onChanceLoaded) onChanceLoaded(market.id, m);
+            if (json.totalLiquidity > 0 && onLiquidityLoaded) onLiquidityLoaded(market.id, json.totalLiquidity);
+          } catch {
+            // ignore
+          }
+        })()
+      );
+    }
+
+    if (needsChartFetch) {
+      tasks.push(fetchChart());
+    }
+
+    Promise.allSettled(tasks).finally(() => {
+      if (alive) setLoading(false);
+    });
 
     return () => { alive = false; };
-  }, [inView, priority, market?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [inView, priority, market?.id, initialData, onChanceLoaded, onLiquidityLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const chanceText = mid > 0 ? fmtChanceFromPrice01(mid) : "—";
 
@@ -324,6 +357,7 @@ function PredictFunMarketRow({
 export default memo(PredictFunMarketRow, (prevProps, nextProps) => {
   return (
     prevProps.market?.id === nextProps.market?.id &&
+    prevProps.initialData === nextProps.initialData &&
     prevProps.volMode === nextProps.volMode &&
     prevProps.isBoost === nextProps.isBoost &&
     prevProps.priority === nextProps.priority &&

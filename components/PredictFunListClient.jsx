@@ -4,10 +4,12 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import PredictFunMarketRow from "@/components/PredictFunMarketRow";
 import { getPredictFunDisplayTitleText } from "@/lib/predictfunDisplay";
+import { clientGet, clientSet } from "@/lib/clientCache";
 
 const SCROLL_BATCH = 20;
 const TRENDING_COUNT = 10;
 const NEW_LIMIT = 100;
+const INITIAL_ROW_METRICS_BATCH = 12;
 
 function num(v) {
   const n = Number(v);
@@ -45,6 +47,8 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
   const [chanceMap, setChanceMap] = useState({});
   const [liquidityMap, setLiquidityMap] = useState({});
   const [search, setSearch] = useState("");
+  const [rowMetricsMap, setRowMetricsMap] = useState({});
+  const requestedMetricIdsRef = useRef(new Set());
 
   // Progressive loading: poll for full dataset when SSR sent partial
   useEffect(() => {
@@ -232,6 +236,107 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
     if (activeTab === "trending") return sortedMarkets;
     return sortedMarkets.slice(0, visibleCount);
   }, [activeTab, sortedMarkets, visibleCount]);
+
+  useEffect(() => {
+    const visibleIds = displayList
+      .slice(0, INITIAL_ROW_METRICS_BATCH)
+      .map((market) => String(market?.id || "").trim())
+      .filter(Boolean);
+
+    if (!visibleIds.length) return;
+
+    const missingIds = [];
+    const cachedMetrics = {};
+
+    for (const marketId of visibleIds) {
+      if (rowMetricsMap[marketId]) continue;
+
+      const cachedMetric = clientGet(`pf-mid:${marketId}`);
+      const cachedChart = clientGet(`pf-chart:${marketId}`);
+      if (cachedMetric || cachedChart) {
+        cachedMetrics[marketId] = {
+          marketId,
+          mid: cachedMetric?.mid ?? 0,
+          totalLiquidity: cachedMetric?.totalLiquidity ?? null,
+          sparkPts: Array.isArray(cachedChart) ? cachedChart : [],
+        };
+        continue;
+      }
+
+      if (requestedMetricIdsRef.current.has(marketId)) continue;
+      missingIds.push(marketId);
+      requestedMetricIdsRef.current.add(marketId);
+    }
+
+    if (Object.keys(cachedMetrics).length > 0) {
+      setRowMetricsMap((prev) => ({ ...prev, ...cachedMetrics }));
+      setChanceMap((prev) => {
+        const next = { ...prev };
+        for (const [marketId, metric] of Object.entries(cachedMetrics)) {
+          if (metric.mid > 0) next[marketId] = metric.mid;
+        }
+        return next;
+      });
+      setLiquidityMap((prev) => {
+        const next = { ...prev };
+        for (const [marketId, metric] of Object.entries(cachedMetrics)) {
+          if (Number.isFinite(metric.totalLiquidity) && metric.totalLiquidity > 0) {
+            next[marketId] = metric.totalLiquidity;
+          }
+        }
+        return next;
+      });
+    }
+
+    if (!missingIds.length) return;
+
+    let cancelled = false;
+
+    fetch(`/api/predictfun/discover/row-metrics?ids=${encodeURIComponent(missingIds.join(","))}`, {
+      cache: "no-store",
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (cancelled || !json?.rows) return;
+
+        const rows = json.rows;
+        setRowMetricsMap((prev) => ({ ...prev, ...rows }));
+        setChanceMap((prev) => {
+          const next = { ...prev };
+          for (const [marketId, metric] of Object.entries(rows)) {
+            if (metric?.mid > 0) next[marketId] = metric.mid;
+          }
+          return next;
+        });
+        setLiquidityMap((prev) => {
+          const next = { ...prev };
+          for (const [marketId, metric] of Object.entries(rows)) {
+            if (Number.isFinite(metric?.totalLiquidity) && metric.totalLiquidity > 0) {
+              next[marketId] = metric.totalLiquidity;
+            }
+          }
+          return next;
+        });
+
+        for (const [marketId, metric] of Object.entries(rows)) {
+          clientSet(`pf-mid:${marketId}`, metric, 30_000);
+          if (Array.isArray(metric?.sparkPts) && metric.sparkPts.length > 0) {
+            clientSet(`pf-chart:${marketId}`, metric.sparkPts, 60_000);
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (cancelled) return;
+        for (const marketId of missingIds) {
+          requestedMetricIdsRef.current.delete(marketId);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [displayList, rowMetricsMap]);
 
   const hasMore = activeTab !== "trending" && visibleCount < sortedMarkets.length;
 
@@ -526,6 +631,7 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
           <PredictFunMarketRow
             key={market.id ?? i}
             market={market}
+            initialData={rowMetricsMap[String(market.id)] ?? null}
             volMode={displayVolMode}
             isBoost={activeTab === "boost"}
             priority={i < 3}

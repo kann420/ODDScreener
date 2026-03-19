@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { DiscoverPageSkeleton } from "@/components/SkeletonLoader";
+import PredictFunDiscoverWarmup from "@/components/PredictFunDiscoverWarmup";
 import { MarketsContent } from "./MarketsContent";
 
 // ===== Enable Streaming SSR =====
@@ -16,6 +17,7 @@ export const dynamic = "force-dynamic";
 export default function Home() {
   return (
     <div className="col" style={{ gap: 12, paddingBottom: 72 }}>
+      <PredictFunDiscoverWarmup />
       {/* 
         Suspense boundary with skeleton fallback
         - DiscoverPageSkeleton renders INSTANTLY

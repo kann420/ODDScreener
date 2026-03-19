@@ -99,6 +99,29 @@ function getMarketHref(row) {
   return row?.marketId ? `/market/${row.marketId}` : "#";
 }
 
+function getPredictFunTraderAddress(row) {
+  if (String(row?.platform || "").toLowerCase() !== "predictfun") return "";
+  const signer = String(row?.signer || "").trim();
+  return /^0x[a-fA-F0-9]{40}$/.test(signer) ? signer : "";
+}
+
+function getPredictFunTraderHref(row) {
+  const traderAddress = getPredictFunTraderAddress(row);
+  return traderAddress ? `/wallet/predictfun/${encodeURIComponent(traderAddress)}` : "";
+}
+
+function formatPredictFunTraderAddress(address) {
+  if (!address) return "-";
+  if (address.length <= 13) return address;
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+function getPredictFunTraderLabel(row) {
+  const accountName = String(row?.accountName || "").trim();
+  if (accountName) return accountName;
+  return formatPredictFunTraderAddress(getPredictFunTraderAddress(row));
+}
+
 function getThumbUrl(row, thumbById) {
   return (
     row?.marketImageUrl ||
@@ -190,6 +213,28 @@ function PagerButton({ children, onClick, disabled, active }) {
     >
       {children}
     </button>
+  );
+}
+
+function OpenInNewIcon({ size = 14, opacity = 0.75 }) {
+  return (
+    <svg
+      aria-hidden
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ flex: "0 0 auto", opacity }}
+    >
+      <path d="M14 3h7v7" />
+      <path d="M10 14L21 3" />
+      <path d="M21 14v7h-7" />
+      <path d="M3 10V3h7" />
+    </svg>
   );
 }
 
@@ -359,6 +404,27 @@ export default function SmartMoneyPage() {
     platform === "predictfun"
       ? "Note: Last 24h trades only. Tracking recent smart flow (refreshed hourly)."
       : "Note: Last 24h trades only. Tracking recent smart flow (refreshed hourly).";
+  const desktopGridColumns =
+    platform === "predictfun"
+      ? "var(--smart-money-desktop-grid-columns-predictfun, 120px 140px minmax(280px, 1.45fr) minmax(220px, 0.95fr) 110px 90px)"
+      : "var(--smart-money-desktop-grid-columns, 120px 140px minmax(0, 1fr) 140px 90px)";
+  const desktopColumns =
+    platform === "predictfun"
+      ? [
+          { key: "trade", label: "Trade", sortable: true },
+          { key: "amount", label: "Amount", sortable: true },
+          { key: "market", label: "Market", sortable: false },
+          { key: "trader", label: "Trader", sortable: false },
+          { key: "outcome", label: "Outcome", sortable: true },
+          { key: "price", label: "Price", sortable: false },
+        ]
+      : [
+          { key: "trade", label: "Trade", sortable: true },
+          { key: "amount", label: "Amount", sortable: true },
+          { key: "market", label: "Market", sortable: false },
+          { key: "outcome", label: "Outcome", sortable: true },
+          { key: "price", label: "Price", sortable: false },
+        ];
 
   return (
     <div style={{ padding: 18 }} className="smart-money-page">
@@ -569,7 +635,7 @@ export default function SmartMoneyPage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "var(--smart-money-desktop-grid-columns, 120px 140px minmax(0, 1fr) 140px 90px)",
+            gridTemplateColumns: desktopGridColumns,
             padding: "10px 12px",
             background: "rgba(255,255,255,.08)",
             fontSize: 12,
@@ -577,13 +643,7 @@ export default function SmartMoneyPage() {
             fontWeight: 700,
           }}
         >
-          {[
-            { key: "trade", label: "Trade", sortable: true },
-            { key: "amount", label: "Amount", sortable: true },
-            { key: "market", label: "Market", sortable: false },
-            { key: "outcome", label: "Outcome", sortable: true },
-            { key: "price", label: "Price", sortable: false },
-          ].map((column) => {
+          {desktopColumns.map((column) => {
             if (!column.sortable) return <div key={column.key}>{column.label}</div>;
             const active = sort.key === column.key;
             return (
@@ -617,6 +677,9 @@ export default function SmartMoneyPage() {
             const thumbUrl = getThumbUrl(row, thumbById);
             const marketHref = getMarketHref(row);
             const displayMarketTitle = sanitizePredictFunMarketTitle(row.marketTitle, row.platform);
+            const traderAddress = getPredictFunTraderAddress(row);
+            const traderHref = getPredictFunTraderHref(row);
+            const traderLabel = getPredictFunTraderLabel(row);
 
             return (
               <div
@@ -624,7 +687,7 @@ export default function SmartMoneyPage() {
                 className={`sm-row-desktop ${String(row.platform || "").toLowerCase() === "predictfun" ? "sm-row-predictfun" : ""}`}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "var(--smart-money-desktop-grid-columns, 120px 140px minmax(0, 1fr) 140px 90px)",
+                  gridTemplateColumns: desktopGridColumns,
                   padding: "10px 12px",
                   borderTop: "1px solid rgba(255,255,255,.12)",
                   alignItems: "center",
@@ -672,25 +735,47 @@ export default function SmartMoneyPage() {
                         <img src="/logo-opinion.svg" alt="Opinion" width="14" height="14" style={{ display: "block" }} />
                       )}
                     </span>
-                    <svg
-                      aria-hidden
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      style={{ flex: "0 0 auto", opacity: 0.75 }}
-                    >
-                      <path d="M14 3h7v7" />
-                      <path d="M10 14L21 3" />
-                      <path d="M21 14v7h-7" />
-                      <path d="M3 10V3h7" />
-                    </svg>
+                    <OpenInNewIcon size={14} opacity={0.75} />
                   </a>
                 </div>
+
+                {platform === "predictfun" ? (
+                  <div style={{ minWidth: 0 }}>
+                    {traderHref ? (
+                      <a
+                        href={traderHref}
+                        title={traderAddress ? `${traderLabel} (${traderAddress})` : traderLabel}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          minWidth: 0,
+                          maxWidth: "100%",
+                          textDecoration: "none",
+                          color: "rgba(255,255,255,0.96)",
+                          fontSize: 13,
+                          fontWeight: 800,
+                        }}
+                      >
+                        <span
+                          style={{
+                            minWidth: 0,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {traderLabel}
+                        </span>
+                        <OpenInNewIcon size={13} opacity={0.7} />
+                      </a>
+                    ) : (
+                      <span style={{ color: "rgba(255,255,255,0.42)", fontSize: 12, fontWeight: 700 }}>-</span>
+                    )}
+                  </div>
+                ) : null}
 
                 <div>
                   <span

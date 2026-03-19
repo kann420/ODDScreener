@@ -74,10 +74,10 @@ function fmtQty(value) {
   });
 }
 
-function fmtCents01(value) {
+function fmtCents01(value, symbol = "c") {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 0) return "-";
-  return `${(n * 100).toFixed(1).replace(/\.0$/, "")}c`;
+  return `${(n * 100).toFixed(1).replace(/\.0$/, "")}${symbol}`;
 }
 
 function ExternalProfileIcon({ size = 13 }) {
@@ -401,12 +401,18 @@ function PredictFunChartPanel({
 }
 
 function PredictFunOrderbookPanel({ outcome, onOutcomeChange, yesLabel, noLabel, sideData, loading }) {
+  const asksScrollRef = useRef(null);
   const asks = Array.isArray(sideData?.asks) ? sideData.asks : [];
   const bids = Array.isArray(sideData?.bids) ? sideData.bids : [];
   const asksDepth = buildAsksDepth(asks);
   const bidsDepth = buildBidsDepth(bids);
   const outcomeLabel = outcome === "YES" ? yesLabel : noLabel;
   const spread = bids[0] && asks[0] ? num(asks[0].price) - num(bids[0].price) : null;
+
+  useEffect(() => {
+    if (!asksScrollRef.current || asksDepth.length === 0) return;
+    asksScrollRef.current.scrollTop = asksScrollRef.current.scrollHeight;
+  }, [asksDepth, outcome]);
 
   return (
     <div className="panel orderbook-panel">
@@ -440,7 +446,7 @@ function PredictFunOrderbookPanel({ outcome, onOutcomeChange, yesLabel, noLabel,
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
           <span className="pill" style={{ color: "#fff", background: "rgba(239,68,68,0.18)" }}>Asks ({outcomeLabel})</span>
         </div>
-        <div className="orderbook-scroll" style={{ maxHeight: 5 * 56, overflowY: "auto" }}>
+        <div ref={asksScrollRef} className="orderbook-scroll" style={{ maxHeight: 5 * 56, overflowY: "auto" }}>
           {loading && asks.length === 0 ? (
             Array.from({ length: 5 }).map((_, i) => (
               <div key={`ask-skel-${i}`} style={{ marginTop: 6 }}>
@@ -462,7 +468,7 @@ function PredictFunOrderbookPanel({ outcome, onOutcomeChange, yesLabel, noLabel,
                   <div className="orderbook-row-content">
                     <div className="red orderbook-price">{fmtCents01(row.price)}</div>
                     <div className="muted orderbook-shares" style={{ fontFamily: "inherit", fontWeight: 500 }}>{fmtQty(row.shares)}</div>
-                    <div className="orderbook-total" style={{ fontFamily: "inherit", fontWeight: 600 }}>{fmtUsdFull(row.total)}</div>
+                    <div className="orderbook-total" style={{ fontFamily: "inherit", fontWeight: 600 }}>{fmtUsdFull(row.cumTotal)}</div>
                   </div>
                 </div>
               );
@@ -504,7 +510,7 @@ function PredictFunOrderbookPanel({ outcome, onOutcomeChange, yesLabel, noLabel,
                   <div className="orderbook-row-content">
                     <div className="orderbook-price" style={{ color: SIDE_COLORS.YES }}>{fmtCents01(row.price)}</div>
                     <div className="muted orderbook-shares" style={{ fontFamily: "inherit", fontWeight: 500 }}>{fmtQty(row.shares)}</div>
-                    <div className="orderbook-total" style={{ fontFamily: "inherit", fontWeight: 600 }}>{fmtUsdFull(row.total)}</div>
+                    <div className="orderbook-total" style={{ fontFamily: "inherit", fontWeight: 600 }}>{fmtUsdFull(row.cumTotal)}</div>
                   </div>
                 </div>
               );
@@ -720,7 +726,7 @@ function PredictFunBottomPanel({
                         <td style={{ padding: "12px" }}>
                           <span style={{ color: typeMeta.color, fontWeight: 700, fontSize: 13 }}>{typeMeta.label}</span>
                         </td>
-                        <td style={{ padding: "12px", fontWeight: 500, fontSize: 13 }}>{fmtCents01(trade.outcomePrice)}</td>
+                        <td style={{ padding: "12px", fontWeight: 500, fontSize: 13 }}>{fmtCents01(trade.outcomePrice, "¢")}</td>
                         <td style={{ padding: "12px", fontWeight: 500, fontSize: 13 }}>{fmtQty(trade.size)}</td>
                         <td style={{ padding: "12px", color: typeMeta.color, fontWeight: 600, fontSize: 13 }}>{fmtUsdFull(trade.notionalUsd)}</td>
                         <td style={{ padding: "12px", fontSize: 13 }}>
