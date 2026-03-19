@@ -5,6 +5,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req) {
+  if (process.env.NODE_ENV !== "development") {
+    return Response.json({ error: "Not available" }, { status: 404 });
+  }
+
   const { searchParams } = new URL(req.url);
   const platform = normalizeSmartMoneyPlatform(searchParams.get("platform"));
   const adapter = getSmartMoneyPlatformAdapter(platform);

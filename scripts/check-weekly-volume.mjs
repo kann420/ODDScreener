@@ -4,7 +4,11 @@
 
 const GRAPHQL_URL = "https://graphql.predict.fun/graphql";
 const REST_BASE = "https://api.predict.fun";
-const API_KEY = "bcc4b72b-0e20-4803-82be-21a4a125ab9e";
+const API_KEY = process.env.PREDICTFUN_API_KEY;
+if (!API_KEY) {
+  console.error("Missing PREDICTFUN_API_KEY env variable");
+  process.exit(1);
+}
 
 const START = new Date("2026-03-09T00:00:00.000Z");
 const END   = new Date("2026-03-16T00:00:00.000Z"); // exclusive

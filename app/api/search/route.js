@@ -40,7 +40,7 @@ export async function GET(req) {
     }
   } catch (err) {
     console.error("[search] Error:", err.message);
-    return NextResponse.json({ results: [], total: 0, error: err.message });
+    return NextResponse.json({ results: [], total: 0, error: "Search failed" });
   }
 }
 

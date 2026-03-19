@@ -114,7 +114,7 @@ export async function GET() {
     });
   } catch (err) {
     console.error("[PF Discover API] Error:", err);
-    return NextResponse.json({ status: "error", markets: [], error: err?.message }, { status: 500 });
+    return NextResponse.json({ status: "error", markets: [], error: "Internal server error" }, { status: 500 });
   }
 }
 
