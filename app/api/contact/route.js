@@ -135,7 +135,7 @@ export async function POST(request) {
     }
 
     return Response.json(
-      { ok: false, message: error instanceof Error ? error.message : "Unknown contact error." },
+      { ok: false, message: "Failed to send message. Please try again later." },
       { status: 500 },
     );
   }

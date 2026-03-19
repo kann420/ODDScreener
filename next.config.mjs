@@ -73,6 +73,32 @@ const nextConfig = {
   async headers() {
     return [
       {
+        // Security headers for all routes (except embeds)
+        source: '/((?!embed).*)',
+        headers: [
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          {
+            key: 'X-XSS-Protection',
+            value: '1; mode=block',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=()',
+          },
+        ],
+      },
+      {
         // Cache static assets (images, fonts, etc.) for 1 year
         source: '/:all*(svg|jpg|jpeg|png|gif|ico|webp|woff|woff2)',
         headers: [
