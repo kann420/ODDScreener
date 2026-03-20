@@ -269,7 +269,7 @@ function isMarchMadnessRow(row) {
 function isLiveRow(row) {
   // A market is "live" when:
   // 1. It's a sports/esports match (sports_team_match or sports_match variant)
-  // 2. The game has started (now >= startDate) and hasn't ended (now < endDate)
+  // 2. The game ends within the next 24 hours (happening today/soon)
   const now = Date.now();
 
   // Check if it's a sports match variant
@@ -281,14 +281,12 @@ function isLiveRow(row) {
 
   if (!isSportsMatch) return false;
 
-  // Check time window: game must have started and not ended
-  const startMs = row?.startDate ? Date.parse(row.startDate) : null;
+  // Check time window: game must end within 24h and not have ended yet
   const endMs = row?.endDate ? Date.parse(row.endDate) : null;
-
-  // Must have startDate to confirm it's started
-  if (!startMs || now < startMs) return false;
-  // If we have endDate, check game hasn't ended
-  if (endMs && now >= endMs) return false;
+  if (!endMs) return false;
+  if (now >= endMs) return false;
+  const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+  if (endMs - now > TWENTY_FOUR_HOURS) return false;
 
   return true;
 }
