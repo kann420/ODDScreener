@@ -267,58 +267,30 @@ function isMarchMadnessRow(row) {
 }
 
 function isLiveRow(row) {
-  // Detect live sports/esports markets by checking category slugs, titles, and market variant
-  const categorySlugs = [
-    row?.predictfunCategorySlug,
-    row?.predictfunCategorySlugA,
-    row?.predictfunCategorySlugB,
-    row?._predictfunMarketA?.categorySlug,
-    row?._predictfunMarketB?.categorySlug,
-    row?._predictfunMarketA?._categorySlug,
-    row?._predictfunMarketB?._categorySlug,
-    row?._predictfunMarketA?._predictfunRaw?.categorySlug,
-    row?._predictfunMarketB?._predictfunRaw?.categorySlug,
-  ]
-    .filter(Boolean)
-    .map((v) => String(v).toLowerCase());
+  // A market is "live" when:
+  // 1. It's a sports/esports match (sports_team_match or sports_match variant)
+  // 2. The game has started (now >= startDate) and hasn't ended (now < endDate)
+  const now = Date.now();
 
-  const sportSlugs = ["cs2", "csgo", "counter-strike", "valorant", "lol", "league-of-legends",
-    "dota", "dota2", "lec", "lpl", "lck", "lcs", "vct", "cblol", "kpl",
-    "nba", "nfl", "nhl", "mlb", "mls", "epl", "soccer", "football", "basketball",
-    "baseball", "hockey", "tennis", "mma", "ufc", "boxing",
-    "blast", "dreamleague", "pgl", "esl", "iem"];
+  // Check if it's a sports match variant
+  const variant = String(
+    row?.pfCategoryMarketVariant || ""
+  ).toLowerCase();
+  const isSportsMatch =
+    variant === "sports_team_match" || variant === "sports_match";
 
-  if (categorySlugs.some((slug) => sportSlugs.some((s) => slug.includes(s)))) {
-    return true;
-  }
+  if (!isSportsMatch) return false;
 
-  // Check market variant
-  const variants = [
-    row?._predictfunMarketA?.marketVariant,
-    row?._predictfunMarketB?.marketVariant,
-    row?._predictfunMarketA?._predictfunRaw?.marketVariant,
-    row?._predictfunMarketB?._predictfunRaw?.marketVariant,
-  ].filter(Boolean).map((v) => String(v).toLowerCase());
+  // Check time window: game must have started and not ended
+  const startMs = row?.startDate ? Date.parse(row.startDate) : null;
+  const endMs = row?.endDate ? Date.parse(row.endDate) : null;
 
-  if (variants.some((v) => v === "sports_team_match" || v === "sports_match")) {
-    return true;
-  }
+  // Must have startDate to confirm it's started
+  if (!startMs || now < startMs) return false;
+  // If we have endDate, check game hasn't ended
+  if (endMs && now >= endMs) return false;
 
-  const haystack = [
-    row?.title, row?.opinionTitle, row?.polyTitle,
-    row?.parentTitle, row?.outcome,
-    row?.sideA?.title, row?.sideB?.title,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  return (
-    haystack.includes(" vs ") || haystack.includes(" vs. ") ||
-    haystack.includes("esport") || haystack.includes("counter-strike") ||
-    haystack.includes("valorant") || haystack.includes("league of legends") ||
-    haystack.includes("dota")
-  );
+  return true;
 }
 
 // Get cache from sessionStorage (persists across page navigation)
