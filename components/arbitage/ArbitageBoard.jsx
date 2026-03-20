@@ -266,6 +266,61 @@ function isMarchMadnessRow(row) {
   );
 }
 
+function isLiveRow(row) {
+  // Detect live sports/esports markets by checking category slugs, titles, and market variant
+  const categorySlugs = [
+    row?.predictfunCategorySlug,
+    row?.predictfunCategorySlugA,
+    row?.predictfunCategorySlugB,
+    row?._predictfunMarketA?.categorySlug,
+    row?._predictfunMarketB?.categorySlug,
+    row?._predictfunMarketA?._categorySlug,
+    row?._predictfunMarketB?._categorySlug,
+    row?._predictfunMarketA?._predictfunRaw?.categorySlug,
+    row?._predictfunMarketB?._predictfunRaw?.categorySlug,
+  ]
+    .filter(Boolean)
+    .map((v) => String(v).toLowerCase());
+
+  const sportSlugs = ["cs2", "csgo", "counter-strike", "valorant", "lol", "league-of-legends",
+    "dota", "dota2", "lec", "lpl", "lck", "lcs", "vct", "cblol", "kpl",
+    "nba", "nfl", "nhl", "mlb", "mls", "epl", "soccer", "football", "basketball",
+    "baseball", "hockey", "tennis", "mma", "ufc", "boxing",
+    "blast", "dreamleague", "pgl", "esl", "iem"];
+
+  if (categorySlugs.some((slug) => sportSlugs.some((s) => slug.includes(s)))) {
+    return true;
+  }
+
+  // Check market variant
+  const variants = [
+    row?._predictfunMarketA?.marketVariant,
+    row?._predictfunMarketB?.marketVariant,
+    row?._predictfunMarketA?._predictfunRaw?.marketVariant,
+    row?._predictfunMarketB?._predictfunRaw?.marketVariant,
+  ].filter(Boolean).map((v) => String(v).toLowerCase());
+
+  if (variants.some((v) => v === "sports_team_match" || v === "sports_match")) {
+    return true;
+  }
+
+  const haystack = [
+    row?.title, row?.opinionTitle, row?.polyTitle,
+    row?.parentTitle, row?.outcome,
+    row?.sideA?.title, row?.sideB?.title,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    haystack.includes(" vs ") || haystack.includes(" vs. ") ||
+    haystack.includes("esport") || haystack.includes("counter-strike") ||
+    haystack.includes("valorant") || haystack.includes("league of legends") ||
+    haystack.includes("dota")
+  );
+}
+
 // Get cache from sessionStorage (persists across page navigation)
 function getCache(pA, pB, eventFilterKey = "") {
   if (typeof window === "undefined") {
@@ -492,7 +547,10 @@ export default function ArbitageBoard() {
   // Predict.fun boosted filter
   const [boostedPredictFunOnly, setBoostedPredictFunOnly] = useState(false);
   const [marchMadnessOnly, setMarchMadnessOnly] = useState(false);
-  const ignoreMinArbPct = marchMadnessOnly;
+  const [liveOnly, setLiveOnly] = useState(false);
+  const [autoScanEnabled, setAutoScanEnabled] = useState(false);
+  const autoScanIntervalRef = useRef(null);
+  const ignoreMinArbPct = marchMadnessOnly || liveOnly;
 
   // Update "X ago" display every 30 seconds
   useEffect(() => {
@@ -730,7 +788,8 @@ export default function ArbitageBoard() {
 
     const streamLimit =
       scanMode === "full" ? 500 : scanMode === "med" ? 140 : 80;
-    const url = `/api/arbitage/stream?priceMode=${encodeURIComponent(priceMode)}&minArbPct=${encodeURIComponent(minArbPct)}&limit=${streamLimit}&scanMode=${encodeURIComponent(scanMode)}&platformA=${encodeURIComponent(platformA)}&platformB=${encodeURIComponent(platformB)}`;
+    const eventFilter = liveOnly ? "live" : marchMadnessOnly ? "march-madness" : "";
+    const url = `/api/arbitage/stream?priceMode=${encodeURIComponent(priceMode)}&minArbPct=${encodeURIComponent(minArbPct)}&limit=${streamLimit}&scanMode=${encodeURIComponent(scanMode)}&platformA=${encodeURIComponent(platformA)}&platformB=${encodeURIComponent(platformB)}${eventFilter ? `&predictFunEvent=${encodeURIComponent(eventFilter)}` : ""}`;
     const es = new EventSource(url);
     eventSourceRef.current = es;
 
@@ -865,7 +924,40 @@ export default function ArbitageBoard() {
       setLoading(false);
       setProgress(null);
     };
-  }, [priceMode, minArbPct, scanMode, platformA, platformB]);
+  }, [priceMode, minArbPct, scanMode, platformA, platformB, liveOnly, marchMadnessOnly]);
+
+  // Auto Scan: continuously re-scan when Live filter + autoScan enabled
+  useEffect(() => {
+    // Clear any existing interval
+    if (autoScanIntervalRef.current) {
+      clearInterval(autoScanIntervalRef.current);
+      autoScanIntervalRef.current = null;
+    }
+
+    if (!autoScanEnabled || !liveOnly) return;
+
+    // Auto scan every 15 seconds
+    autoScanIntervalRef.current = setInterval(() => {
+      if (!loading) {
+        console.log("[Auto-Scan] Re-scanning live markets...");
+        loadDataStreaming();
+      }
+    }, 15000);
+
+    return () => {
+      if (autoScanIntervalRef.current) {
+        clearInterval(autoScanIntervalRef.current);
+        autoScanIntervalRef.current = null;
+      }
+    };
+  }, [autoScanEnabled, liveOnly, loading, loadDataStreaming]);
+
+  // Disable auto scan when live filter is turned off
+  useEffect(() => {
+    if (!liveOnly) {
+      setAutoScanEnabled(false);
+    }
+  }, [liveOnly]);
 
   // Fallback: use regular fetch if SSE fails
   const loadDataFallback = useCallback(async () => {
@@ -980,6 +1072,7 @@ export default function ArbitageBoard() {
     });
     return arr.filter((r) => {
       if (marchMadnessOnly && !isMarchMadnessRow(r)) return false;
+      if (liveOnly && !isLiveRow(r)) return false;
 
       // Filter by min arb %
       if (!ignoreMinArbPct && (r.arbPct ?? 0) < minArbPct) return false;
@@ -1036,6 +1129,7 @@ export default function ArbitageBoard() {
     platformB,
     ignoreMinArbPct,
     marchMadnessOnly,
+    liveOnly,
   ]);
 
   // Apply bonus filter
@@ -1192,10 +1286,10 @@ export default function ArbitageBoard() {
 
   // Count to display in TITLE badge: filtered count when searching, total when not
   const titleBadgeCount =
-    searchQuery.trim() || marchMadnessOnly
+    searchQuery.trim() || marchMadnessOnly || liveOnly
       ? searchFilteredRows.length
       : (matchedMarketCount ?? rows.length);
-  const headerMatchedCount = marchMadnessOnly
+  const headerMatchedCount = marchMadnessOnly || liveOnly
     ? searchFilteredRows.length
     : (matchedMarketCount ?? rows.length);
   // Show badge when searching (always), or when we have loaded rows (any scan mode)
@@ -2187,6 +2281,91 @@ export default function ArbitageBoard() {
                 </div>
               )}
 
+              {/* Live Filter - Poly + Predict.fun only */}
+              {isPolyPredictFunPair && (
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
+                >
+                  <label
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: "rgba(233,238,245,0.6)",
+                      height: 13,
+                    }}
+                  >
+                    LIVE
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setLiveOnly((v) => !v)}
+                    style={{
+                      height: 38,
+                      padding: "0 14px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      background: liveOnly
+                        ? "rgba(9,24,18,0.96)"
+                        : "rgba(0,0,0,0.2)",
+                      border: liveOnly
+                        ? "1px solid rgba(52,211,153,0.8)"
+                        : "1px solid rgba(255,255,255,0.1)",
+                      boxShadow: liveOnly
+                        ? "0 0 0 1px rgba(52,211,153,0.08) inset"
+                        : "0 0 0 1px rgba(0,0,0,0.18) inset",
+                      color: liveOnly
+                        ? "rgba(52,211,153,1)"
+                        : "rgba(233,238,245,0.7)",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      aria-hidden="true"
+                      style={{
+                        flexShrink: 0,
+                        opacity: liveOnly ? 1 : 0.55,
+                      }}
+                    >
+                      <circle cx="12" cy="12" r="4" fill="currentColor" />
+                      <path
+                        d="M8 5.5a8 8 0 0 0 0 13"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M16 5.5a8 8 0 0 1 0 13"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M5.5 3a11.5 11.5 0 0 0 0 18"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M18.5 3a11.5 11.5 0 0 1 0 18"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <span>Live</span>
+                  </button>
+                </div>
+              )}
+
               {/* Min Platform A Volume */}
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <label
@@ -2402,47 +2581,110 @@ export default function ArbitageBoard() {
 
       {/* Search Bar */}
       <div className="panel" style={{ padding: 16 }}>
-        <div style={{ position: "relative" }}>
-          {/* Search Icon */}
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{
-              position: "absolute",
-              left: 12,
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: "rgba(255,255,255,0.4)",
-              pointerEvents: "none",
-            }}
-          >
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Search arbitrage opportunities..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "10px 16px 10px 40px",
-              borderRadius: 8,
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.04)",
-              color: "#fff",
-              outline: "none",
-              fontSize: 14,
-              fontWeight: 500,
-              boxSizing: "border-box",
-            }}
-          />
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ position: "relative", flex: 1 }}>
+            {/* Search Icon */}
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{
+                position: "absolute",
+                left: 12,
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: "rgba(255,255,255,0.4)",
+                pointerEvents: "none",
+              }}
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search arbitrage opportunities..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 16px 10px 40px",
+                borderRadius: 8,
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(255,255,255,0.04)",
+                color: "#fff",
+                outline: "none",
+                fontSize: 14,
+                fontWeight: 500,
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+          {/* Auto Scan toggle - only visible when Live filter is active */}
+          {liveOnly && (
+            <button
+              type="button"
+              onClick={() => setAutoScanEnabled((v) => !v)}
+              style={{
+                height: 38,
+                padding: "0 16px",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                borderRadius: 8,
+                cursor: "pointer",
+                background: autoScanEnabled
+                  ? "rgba(9,24,18,0.96)"
+                  : "rgba(0,0,0,0.2)",
+                border: autoScanEnabled
+                  ? "1px solid rgba(52,211,153,0.8)"
+                  : "1px solid rgba(255,255,255,0.12)",
+                boxShadow: autoScanEnabled
+                  ? "0 0 8px rgba(52,211,153,0.25)"
+                  : "none",
+                color: autoScanEnabled
+                  ? "rgba(52,211,153,1)"
+                  : "rgba(233,238,245,0.7)",
+                fontSize: 13,
+                fontWeight: 700,
+                whiteSpace: "nowrap",
+                transition: "all 0.2s",
+                flexShrink: 0,
+              }}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ opacity: autoScanEnabled ? 1 : 0.55 }}
+              >
+                <path d="M21 12a9 9 0 1 1-6.2-8.6" />
+                <polyline points="21 3 21 9 15 9" />
+              </svg>
+              <span>Auto Scan</span>
+              {autoScanEnabled && (
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: "rgba(52,211,153,1)",
+                    boxShadow: "0 0 6px rgba(52,211,153,0.6)",
+                    animation: "pulse 1.5s ease-in-out infinite",
+                  }}
+                />
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -2755,6 +2997,7 @@ export default function ArbitageBoard() {
                 r={r}
                 priceMode={priceMode}
                 marchMadnessOnly={marchMadnessOnly}
+                liveOnly={liveOnly}
                 displayPlatformA={platformA}
                 displayPlatformB={platformB}
                 isBonus={bonusSet.has(String(r.opinionMarketId || ""))}
@@ -3439,6 +3682,7 @@ function Row({
   r,
   priceMode,
   marchMadnessOnly,
+  liveOnly,
   displayPlatformA,
   displayPlatformB,
   isBonus,
@@ -3954,7 +4198,7 @@ function Row({
               color:
                 (r.arbPct ?? 0) > 0
                   ? "rgba(80,200,120,1)"
-                  : (r.arbPct ?? 0) < 0 && marchMadnessOnly
+                  : (r.arbPct ?? 0) < 0 && (marchMadnessOnly || liveOnly)
                     ? "rgba(248,113,113,1)"
                     : "rgba(233,238,245,0.85)",
             }}
