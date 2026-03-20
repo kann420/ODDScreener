@@ -45,8 +45,9 @@ export async function GET(req) {
     const wantDebug = process.env.NODE_ENV === "development" && (searchParams.get("debug") === "1" || searchParams.get("debug") === "true");
     const platformA = searchParams.get("platformA") || "polymarket";
     const platformB = searchParams.get("platformB") || "opinion";
+    const predictFunEvent = searchParams.get("predictFunEvent") || "";
 
-    const result = await scanArbitageOpportunities({ minArbPct, minSimilarity, limit, scanMode, platformA, platformB });
+    const result = await scanArbitageOpportunities({ minArbPct, minSimilarity, limit, scanMode, platformA, platformB, predictFunEvent });
 
     const rows = Array.isArray(result?.rows) ? result.rows : [];
     const debug = Array.isArray(result?.debug) ? result.debug : [];

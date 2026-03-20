@@ -45,7 +45,7 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
   const [isLoadingFull, setIsLoadingFull] = useState(needsFullFetch);
   const markets = fullMarkets ?? (initialMarkets || []);
 
-  const [activeTab, setActiveTab] = useState("boost");
+  const [activeTab, setActiveTab] = useState("marchmadness");
   const [volMode, setVolMode] = useState("24h");
   const [visibleCount, setVisibleCount] = useState(SCROLL_BATCH);
   const [sortConfig, setSortConfig] = useState({ key: "volume", direction: "desc" });
@@ -112,7 +112,7 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
     setActiveTab(tab);
     setVisibleCount(SCROLL_BATCH);
     setSearch("");
-    if (tab === "trending" || tab === "all") {
+    if (tab === "trending" || tab === "all" || tab === "marchmadness") {
       setSortConfig({ key: "volume", direction: "desc" });
     } else if (tab === "new") {
       setSortConfig({ key: null, direction: null });
@@ -168,6 +168,20 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
       });
   }, [markets]);
 
+  // MARCH MADNESS: NCAA basketball markets
+  const marchMadnessMarkets = useMemo(() => {
+    if (!markets.length) return [];
+    const NCAA_KEYWORDS = ["cbb", "ncaa", "march madness", "march-madness"];
+    return [...markets]
+      .filter((m) => {
+        const title = getPredictFunDisplayTitleText(m).toLowerCase();
+        const catTitle = String(m?._categoryTitle ?? "").toLowerCase();
+        const slug = String(m?.categorySlug ?? "").toLowerCase();
+        return NCAA_KEYWORDS.some((kw) => title.includes(kw) || catTitle.includes(kw) || slug.includes(kw));
+      })
+      .sort((a, b) => getVolume24h(b) - getVolume24h(a));
+  }, [markets]);
+
   // ALL: everything sorted by volume
   const allMarkets = useMemo(() => {
     if (!markets.length) return [];
@@ -178,6 +192,7 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
     if (activeTab === "new") return newMarkets;
     if (activeTab === "trending") return trendingMarkets;
     if (activeTab === "boost") return boostMarkets;
+    if (activeTab === "marchmadness") return marchMadnessMarkets;
     return allMarkets;
   }, [activeTab, newMarkets, trendingMarkets, boostMarkets, allMarkets]);
 
@@ -511,6 +526,31 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
 
           <button
             type="button"
+            onClick={() => handleTabChange("marchmadness")}
+            aria-pressed={activeTab === "marchmadness"}
+            style={{
+              padding: "10px 16px",
+              borderRadius: 8,
+              border: "1px solid",
+              borderColor: activeTab === "marchmadness" ? "rgba(255, 120, 0, 0.55)" : "rgba(255,255,255,0.12)",
+              background: activeTab === "marchmadness" ? "rgba(255, 120, 0, 0.15)" : "transparent",
+              color: activeTab === "marchmadness" ? "#ff8c00" : "#fff",
+              cursor: "pointer",
+              fontSize: 14,
+              fontWeight: 700,
+              lineHeight: 1.2,
+              transition: "all 0.2s",
+              touchAction: "manipulation",
+              position: "relative",
+              zIndex: 2,
+              whiteSpace: "nowrap",
+            }}
+          >
+            🏀 March Madness
+          </button>
+
+          <button
+            type="button"
             onClick={() => handleTabChange("all")}
             aria-pressed={activeTab === "all"}
             style={{
@@ -545,7 +585,7 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
           </svg>
           <input
             type="text"
-            placeholder={`Search in ${activeTab === "new" ? "New" : activeTab === "trending" ? "Trending" : activeTab === "boost" ? "Boost" : "All"} Markets...`}
+            placeholder={`Search in ${activeTab === "new" ? "New" : activeTab === "trending" ? "Trending" : activeTab === "boost" ? "Boost" : activeTab === "marchmadness" ? "March Madness" : "All"} Markets...`}
             value={search}
             onChange={(e) => { setSearch(e.target.value); setVisibleCount(SCROLL_BATCH); }}
             style={{
@@ -637,7 +677,7 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
       <div>
         {displayList.length === 0 && !isLoadingFull ? (
           <div style={{ padding: "24px 12px", textAlign: "center", color: "rgba(255,255,255,0.4)" }}>
-            {search ? "No markets found" : activeTab === "boost" ? "No boosted markets currently" : "No markets available"}
+            {search ? "No markets found" : activeTab === "boost" ? "No boosted markets currently" : activeTab === "marchmadness" ? "No March Madness markets currently" : "No markets available"}
           </div>
         ) : null}
 
@@ -672,6 +712,7 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
         {activeTab === "new" && "Top 100 newest active markets"}
         {activeTab === "trending" && "Top 10 markets by 24h volume"}
         {activeTab === "boost" && `${sortedMarkets.length} Boost Point market${sortedMarkets.length !== 1 ? "s" : ""}`}
+        {activeTab === "marchmadness" && `${sortedMarkets.length} March Madness market${sortedMarkets.length !== 1 ? "s" : ""}`}
         {activeTab === "all" && sortedMarkets.length > 0 && `${sortedMarkets.length} markets total`}
       </div>
     </div>

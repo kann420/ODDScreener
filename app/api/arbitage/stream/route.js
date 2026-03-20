@@ -36,6 +36,7 @@ export async function GET(req) {
   const scanMode = searchParams.get("scanMode") || "quick"; // "quick" = 100 markets, "full" = unlimited
   const platformA = searchParams.get("platformA") || "polymarket";
   const platformB = searchParams.get("platformB") || "opinion";
+  const predictFunEvent = searchParams.get("predictFunEvent") || "";
 
   // AbortController to propagate client disconnect into the scan engine
   const scanAbort = new AbortController();
@@ -88,6 +89,7 @@ export async function GET(req) {
           scanMode,
           platformA,
           platformB,
+          predictFunEvent,
           signal: scanAbort.signal,
           onProgress: (progress) => {
             // Progress update: { phase, current, total, message }
