@@ -268,25 +268,27 @@ function isMarchMadnessRow(row) {
 
 function isLiveRow(row) {
   // A market is "live" when:
-  // 1. It's a sports/esports match (sports_team_match or sports_match variant)
-  // 2. The game ends within the next 24 hours (happening today/soon)
+  // 1. Category status is OPEN and visible
+  // 2. now >= startsAt && now < endsAt
+  // 3. Market is visible, tradingStatus OPEN, not resolved
   const now = Date.now();
 
-  // Check if it's a sports match variant
-  const variant = String(
-    row?.pfCategoryMarketVariant || ""
-  ).toLowerCase();
-  const isSportsMatch =
-    variant === "sports_team_match" || variant === "sports_match";
+  // Category checks
+  const catStatus = String(row?.pfCategoryStatus || "").toUpperCase();
+  if (catStatus !== "OPEN") return false;
+  if (row?.pfCategoryIsVisible === false) return false;
 
-  if (!isSportsMatch) return false;
-
-  // Check time window: game must end within 24h and not have ended yet
+  // Time window: must have started and not ended
+  const startMs = row?.startDate ? Date.parse(row.startDate) : null;
   const endMs = row?.endDate ? Date.parse(row.endDate) : null;
-  if (!endMs) return false;
-  if (now >= endMs) return false;
-  const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
-  if (endMs - now > TWENTY_FOUR_HOURS) return false;
+  if (!startMs || now < startMs) return false;
+  if (!endMs || now >= endMs) return false;
+
+  // Market checks
+  if (row?.pfMarketIsVisible === false) return false;
+  const tradingStatus = String(row?.pfMarketTradingStatus || "").toUpperCase();
+  if (tradingStatus && tradingStatus !== "OPEN") return false;
+  if (row?.pfMarketResolution != null) return false;
 
   return true;
 }
