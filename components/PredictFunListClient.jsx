@@ -451,7 +451,7 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
       {/* Top Bar: Tabs + Search + Volume Mode */}
       <div className="market-topbar">
         {/* Tabs */}
-        <div className="market-tabs">
+        <div className="market-tabs predictfun-discover-tabs" aria-label="Predict.fun discover tabs">
           <button
             type="button"
             onClick={() => handleTabChange("new")}
@@ -528,6 +528,7 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
             type="button"
             onClick={() => handleTabChange("marchmadness")}
             aria-pressed={activeTab === "marchmadness"}
+            className="predictfun-discover-tab-march"
             style={{
               padding: "10px 16px",
               borderRadius: 8,
@@ -546,7 +547,8 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
               whiteSpace: "nowrap",
             }}
           >
-            🏀 March Madness
+            <span className="predictfun-discover-tab-label-full">March Madness</span>
+            <span className="predictfun-discover-tab-label-short">M.Madness</span>
           </button>
 
           <button

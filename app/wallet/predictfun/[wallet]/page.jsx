@@ -308,19 +308,21 @@ function PeriodButton({ label, active, onClick }) {
 }
 
 /* ─── Weekly Volume helper (Tue 14:00 UTC cycle) ─── */
-function computeWeeklyVolume(trades) {
-  if (!trades || !trades.length) return 0;
-  const now = new Date();
-  // Find most recent Tuesday 14:00 UTC
-  const d = new Date(now);
+function getWeekBoundary(date) {
+  const d = new Date(date);
   d.setUTCHours(14, 0, 0, 0);
-  // Walk back to the most recent Tuesday at or before now
-  while (d.getUTCDay() !== 2 || d > now) {
+  while (d.getUTCDay() !== 2 || d > date) {
     d.setUTCDate(d.getUTCDate() - 1);
     d.setUTCHours(14, 0, 0, 0);
   }
-  const weekStart = d.getTime(); // Most recent Tuesday 14:00 UTC (start of current cycle)
-  const weekEnd = weekStart + 7 * 24 * 60 * 60 * 1000; // Next Tuesday 14:00 UTC (end of current cycle)
+  return d.getTime();
+}
+
+function computeWeeklyVolume(trades) {
+  if (!trades || !trades.length) return 0;
+  const now = new Date();
+  const weekStart = getWeekBoundary(now);
+  const weekEnd = weekStart + 7 * 24 * 60 * 60 * 1000;
 
   let vol = 0;
   for (const t of trades) {
@@ -330,6 +332,25 @@ function computeWeeklyVolume(trades) {
     }
   }
   return vol;
+}
+
+/* ─── Distribute a GraphQL total proportionally by weekly points share ───
+ * Points on Predict.fun are derived from volume, so points proportion
+ * is the best available proxy for volume share per week.
+ * Works for all weeks regardless of how many trades the client fetched.
+ */
+function distributeByPointsShare(weeklyPointsHistory, totalValue) {
+  if (!weeklyPointsHistory || !weeklyPointsHistory.length || totalValue == null) return {};
+  const totalPts = weeklyPointsHistory.reduce((s, w) => s + Number(w.totalPoints || 0), 0);
+  if (!totalPts) return {};
+  const result = {};
+  for (const w of weeklyPointsHistory) {
+    const pts = Number(w.totalPoints || 0);
+    if (pts > 0) {
+      result[w.week] = (pts / totalPts) * totalValue;
+    }
+  }
+  return result;
 }
 
 /* ─── Compute total fees paid ─── */
@@ -983,6 +1004,12 @@ export default function PredictFunWalletPage() {
   const [tradesLoading, setTradesLoading] = useState(true);
   const [tradesError, setTradesError] = useState(null);
 
+  // Points state
+  const [weeklyPoints, setWeeklyPoints] = useState([]);
+  const [pointsLoading, setPointsLoading] = useState(false);
+  const [pointsError, setPointsError] = useState(null);
+  const [pointsFetched, setPointsFetched] = useState(false);
+
   // Account info from PredictFun
   const [account, setAccount] = useState(null);
 
@@ -1064,6 +1091,25 @@ export default function PredictFunWalletPage() {
     }
   }, [wallet]);
 
+  // Fetch points
+  const fetchPoints = useCallback(async () => {
+    if (!isValidWalletAddress(wallet)) return;
+    setPointsLoading(true);
+    setPointsError(null);
+    try {
+      const res = await fetch(`/api/predictfun/wallet/${wallet}/points`);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Failed to fetch points");
+      setWeeklyPoints(data.weeklyPointsHistory || []);
+      setPointsFetched(true);
+    } catch (err) {
+      console.error("[PFWallet] Points error:", err);
+      setPointsError(err.message);
+    } finally {
+      setPointsLoading(false);
+    }
+  }, [wallet]);
+
   // Initial load
   useEffect(() => {
     if (isValidWalletAddress(wallet)) {
@@ -1071,6 +1117,13 @@ export default function PredictFunWalletPage() {
       fetchTrades();
     }
   }, [wallet, fetchPositions, fetchTrades]);
+
+  // Fetch points when tab is first opened
+  useEffect(() => {
+    if (activeTab === "points" && !pointsFetched && !pointsLoading) {
+      fetchPoints();
+    }
+  }, [activeTab, pointsFetched, pointsLoading, fetchPoints]);
 
   // Stats – merge client-side position data with GraphQL account statistics
   const stats = useMemo(() => {
@@ -1125,15 +1178,45 @@ export default function PredictFunWalletPage() {
     router.replace("/wallet?tab=predictfun");
   }, [router]);
 
+  // Weekly volumes & PnL for points tab (distributed by points share from GraphQL)
+  const weeklyVolumes = useMemo(
+    () => distributeByPointsShare(weeklyPoints, stats?.volume),
+    [weeklyPoints, stats?.volume]
+  );
+  const weeklyPnLs = useMemo(
+    () => distributeByPointsShare(weeklyPoints, stats?.realizedPnl),
+    [weeklyPoints, stats?.realizedPnl]
+  );
+
+  // Merged points + volume + pnl rows, sorted desc by week
+  const pointsRows = useMemo(() => {
+    if (!weeklyPoints || !weeklyPoints.length) return [];
+    return [...weeklyPoints]
+      .sort((a, b) => (b.week || 0) - (a.week || 0))
+      .map((wp) => ({
+        week: wp.week,
+        points: Number(wp.totalPoints || 0),
+        referralPoints: Number(wp.referralPoints || 0),
+        volume: weeklyVolumes[wp.week] || 0,
+        pnl: weeklyPnLs[wp.week] || 0,
+        calculated: wp.calculated,
+      }));
+  }, [weeklyPoints, weeklyVolumes, weeklyPnLs]);
+
   const handleRefresh = useCallback(async () => {
     if (isRefreshing) return;
     setIsRefreshing(true);
     try {
-      await Promise.all([fetchPositions(), fetchTrades()]);
+      const tasks = [fetchPositions(), fetchTrades()];
+      if (pointsFetched) {
+        setPointsFetched(false);
+        tasks.push(fetchPoints());
+      }
+      await Promise.all(tasks);
     } finally {
       setIsRefreshing(false);
     }
-  }, [isRefreshing, fetchPositions, fetchTrades]);
+  }, [isRefreshing, fetchPositions, fetchTrades, fetchPoints, pointsFetched]);
 
   if (!isValidWalletAddress(wallet)) {
     return (
@@ -1183,17 +1266,25 @@ export default function PredictFunWalletPage() {
             >
               Activity ({trades.length})
             </TabButton>
+            <TabButton
+              active={activeTab === "points"}
+              onClick={() => setActiveTab("points")}
+            >
+              Points
+            </TabButton>
           </div>
         </div>
 
-        {/* Search */}
-        <div style={{ marginBottom: 16 }}>
-          <SearchInput
-            value={searchQuery}
-            onChange={setSearchQuery}
-            placeholder="Search markets..."
-          />
-        </div>
+        {/* Search (hidden on points tab) */}
+        {activeTab !== "points" && (
+          <div style={{ marginBottom: 16 }}>
+            <SearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search markets..."
+            />
+          </div>
+        )}
 
         {/* Positions Tab */}
         {activeTab === "positions" && (
@@ -1378,10 +1469,181 @@ export default function PredictFunWalletPage() {
             )}
           </div>
         )}
+
+        {/* Points Tab */}
+        {activeTab === "points" && (
+          <div>
+            {pointsError ? (
+              <ErrorState message={pointsError} onRetry={fetchPoints} />
+            ) : (
+              <>
+                {/* Desktop */}
+                <div className="pf-table-desktop">
+                  <div className="pf-points-header">
+                    <div>WEEK</div>
+                    <div style={{ textAlign: "right" }}>PNL</div>
+                    <div style={{ textAlign: "right" }}>VOLUME</div>
+                    <div style={{ textAlign: "right" }}>POINTS</div>
+                  </div>
+                  <div className="pf-table-body">
+                    {pointsLoading ? (
+                      <>
+                        {[1, 2, 3, 4, 5].map((i) => (
+                          <div key={i} className="pf-points-row">
+                            <div style={{ width: 80, height: 16, borderRadius: 4, background: "rgba(255,255,255,0.06)" }} />
+                            <div style={{ width: 80, height: 16, borderRadius: 4, background: "rgba(255,255,255,0.06)", marginLeft: "auto" }} />
+                            <div style={{ width: 90, height: 16, borderRadius: 4, background: "rgba(255,255,255,0.06)", marginLeft: "auto" }} />
+                            <div style={{ width: 70, height: 16, borderRadius: 4, background: "rgba(255,255,255,0.06)", marginLeft: "auto" }} />
+                          </div>
+                        ))}
+                      </>
+                    ) : pointsRows.length > 0 ? (
+                      pointsRows.map((row) => (
+                        <div key={row.week} className="pf-points-row">
+                          <div className="pf-points-week">
+                            <span className="pf-points-week-label">Week {row.week}</span>
+                            {!row.calculated && (
+                              <span className="pf-points-pending">ongoing</span>
+                            )}
+                          </div>
+                          <div className={`pf-points-pnl ${row.pnl >= 0 ? "positive" : "negative"}`}>{formatUSDSigned(row.pnl)}</div>
+                          <div className="pf-points-volume">{formatUSD(row.volume)}</div>
+                          <div className="pf-points-value">
+                            {row.points >= 10000
+                              ? formatCompact(row.points)
+                              : Number(row.points).toLocaleString("en-US", { maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="pf-empty">No points history found</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Mobile */}
+                <div className="pf-mobile-list">
+                  {pointsLoading ? (
+                    <>
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="pf-card-mobile" style={{ padding: 14 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <div style={{ width: 80, height: 16, borderRadius: 4, background: "rgba(255,255,255,0.06)" }} />
+                            <div style={{ width: 70, height: 16, borderRadius: 4, background: "rgba(255,255,255,0.06)" }} />
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  ) : pointsRows.length > 0 ? (
+                    pointsRows.map((row) => (
+                      <div key={row.week} className="pf-card-mobile" style={{ padding: 14 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>
+                              Week {row.week}
+                              {!row.calculated && (
+                                <span style={{
+                                  fontSize: 10, fontWeight: 500, color: "#f59e0b",
+                                  background: "rgba(245,158,11,0.15)", padding: "2px 6px",
+                                  borderRadius: 4, marginLeft: 8,
+                                }}>ongoing</span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 4 }}>
+                              PnL: <span style={{ color: row.pnl >= 0 ? "#22c55e" : "#ef4444" }}>{formatUSDSigned(row.pnl)}</span>
+                              {" · "}
+                              Vol: {formatUSD(row.volume)}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: "right" }}>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: "#a78bfa" }}>
+                              {row.points >= 10000
+                                ? formatCompact(row.points)
+                                : Number(row.points).toLocaleString("en-US", { maximumFractionDigits: 2 })}
+                            </div>
+                            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>points</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="pf-empty">No points history found</div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       <style jsx>{`
         /* Desktop Table */
+        .pf-points-header {
+          display: grid;
+          grid-template-columns: 1fr 120px 140px 140px;
+          gap: 16px;
+          padding: 12px 20px;
+          background: rgba(0, 0, 0, 0.3);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+          font-size: 11px;
+          font-weight: 600;
+          color: rgba(255, 255, 255, 0.5);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        :global(.pf-points-row) {
+          display: grid;
+          grid-template-columns: 1fr 120px 140px 140px;
+          gap: 16px;
+          padding: 14px 20px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+          align-items: center;
+          transition: background 0.15s;
+        }
+        :global(.pf-points-row:hover) {
+          background: rgba(139, 92, 246, 0.04);
+        }
+        :global(.pf-points-week) {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        :global(.pf-points-week-label) {
+          font-size: 14px;
+          font-weight: 600;
+          color: #fff;
+        }
+        :global(.pf-points-pending) {
+          font-size: 10px;
+          font-weight: 500;
+          color: #f59e0b;
+          background: rgba(245, 158, 11, 0.15);
+          padding: 2px 6px;
+          border-radius: 4px;
+        }
+        :global(.pf-points-pnl) {
+          font-size: 14px;
+          font-weight: 600;
+          text-align: right;
+        }
+        :global(.pf-points-pnl.positive) {
+          color: #22c55e;
+        }
+        :global(.pf-points-pnl.negative) {
+          color: #ef4444;
+        }
+        :global(.pf-points-volume) {
+          font-size: 14px;
+          font-weight: 500;
+          color: rgba(255, 255, 255, 0.8);
+          text-align: right;
+        }
+        :global(.pf-points-value) {
+          font-size: 15px;
+          font-weight: 700;
+          color: #a78bfa;
+          text-align: right;
+        }
         .pf-table-desktop {
           background: rgba(255, 255, 255, 0.02);
           border: 1px solid rgba(139, 92, 246, 0.15);

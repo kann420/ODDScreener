@@ -1011,6 +1011,10 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
   transition: all 0.2s ease !important;
 }
 
+.predictfun-discover-tab-label-short {
+  display: none;
+}
+
 /* Active tab gets filled background */
 .market-tabs button[style*="background: rgba(0, 136, 255"] {
   background: #0088ff !important;
@@ -1054,12 +1058,40 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
     flex-shrink: 0;
     border-radius: 24px !important;
   }
+
+  .predictfun-discover-tabs {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    touch-action: pan-x manipulation;
+  }
+
+  .predictfun-discover-tabs button {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+  }
 }
 
 @media (max-width: 480px) {
   .market-tabs button {
     padding: 8px 14px !important;
     font-size: 12px !important;
+  }
+
+  .predictfun-discover-tab-label-full {
+    display: none;
+  }
+
+  .predictfun-discover-tab-label-short {
+    display: inline;
+  }
+
+  .predictfun-discover-tab-march {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
   }
 }
 
