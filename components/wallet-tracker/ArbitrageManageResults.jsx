@@ -165,9 +165,26 @@ function PolymarketIcon() {
 /** Opinion icon - uses actual logo image */
 function OpinionIcon() {
   return (
-    <img 
-      src="/2logo-opinion.webp" 
-      alt="Opinion" 
+    <img
+      src="/2logo-opinion.webp"
+      alt="Opinion"
+      style={{
+        width: 18,
+        height: 18,
+        borderRadius: 4,
+        objectFit: "cover",
+        flexShrink: 0,
+      }}
+    />
+  );
+}
+
+/** Predict.fun icon - uses actual logo image */
+function PredictFunIcon() {
+  return (
+    <img
+      src="/predictfun_logo.svg"
+      alt="Predict.fun"
       style={{
         width: 18,
         height: 18,
@@ -219,7 +236,9 @@ function calcNeededPct(totalCents) {
 }
 
 function getPlatformIcon(platform) {
-  return platform === "polymarket" ? <PolymarketIcon /> : <OpinionIcon />;
+  if (platform === "polymarket") return <PolymarketIcon />;
+  if (platform === "predictfun") return <PredictFunIcon />;
+  return <OpinionIcon />;
 }
 
 function getLeg(row, platform) {
@@ -391,10 +410,7 @@ function SideBadge({ side, sideLabel }) {
 }
 
 function ValueCell({ row }) {
-  const polyLeg = getLeg(row, "polymarket");
-  const opinionLeg = getLeg(row, "opinion");
-
-  const renderLegValue = (platform, leg) => {
+  const renderLegValue = (leg) => {
     const shares = Number(leg?.shares) || 0;
     const entryPriceCents = Number(leg?.entryPriceCents) || 0;
     const currentValue = Number(leg?.valueUsd) || 0;
@@ -404,7 +420,7 @@ function ValueCell({ row }) {
 
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", justifyContent: "center", whiteSpace: "nowrap" }}>
-        {getPlatformIcon(platform)}
+        {getPlatformIcon(leg.platform)}
         <span style={{ color: "#fff", fontSize: 14, fontWeight: 700, lineHeight: 1.25 }}>
           {formatUSDCompact(currentValue)}
         </span>
@@ -417,15 +433,12 @@ function ValueCell({ row }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-      {renderLegValue("polymarket", polyLeg)}
-      {renderLegValue("opinion", opinionLeg)}
+      {row.legs.map((leg, i) => <div key={i}>{renderLegValue(leg)}</div>)}
     </div>
   );
 }
 
 function CurrentPriceCell({ row }) {
-  const polyLeg = getLeg(row, "polymarket");
-  const opinionLeg = getLeg(row, "opinion");
   const rowStyle = {
     display: "grid",
     gridTemplateColumns: "18px 1fr",
@@ -437,22 +450,16 @@ function CurrentPriceCell({ row }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4, width: "fit-content", margin: "0 auto" }}>
-      <div style={rowStyle}>
-        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 18 }}>
-          <PolymarketIcon />
-        </span>
-        <span style={{ color: "#fff", fontSize: 14, fontWeight: 700, lineHeight: 1.25, whiteSpace: "nowrap" }}>
-          {formatCents(polyLeg?.entryPriceCents || 0)} {"->"} {formatCents(polyLeg?.currentPriceCents || 0)}
-        </span>
-      </div>
-      <div style={rowStyle}>
-        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 18 }}>
-          <OpinionIcon />
-        </span>
-        <span style={{ color: "#fff", fontSize: 14, fontWeight: 700, lineHeight: 1.25, whiteSpace: "nowrap" }}>
-          {formatCents(opinionLeg?.entryPriceCents || 0)} {"->"} {formatCents(opinionLeg?.currentPriceCents || 0)}
-        </span>
-      </div>
+      {row.legs.map((leg, i) => (
+        <div key={i} style={rowStyle}>
+          <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 18 }}>
+            {getPlatformIcon(leg.platform)}
+          </span>
+          <span style={{ color: "#fff", fontSize: 14, fontWeight: 700, lineHeight: 1.25, whiteSpace: "nowrap" }}>
+            {formatCents(leg?.entryPriceCents || 0)} {"->"} {formatCents(leg?.currentPriceCents || 0)}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -509,9 +516,6 @@ function PnlCell({ value, label }) {
 }
 
 function ArbRow({ row }) {
-  const polyLeg = getLeg(row, "polymarket");
-  const opinionLeg = getLeg(row, "opinion");
-
   return (
     <div className="arb-row">
       {/* Title Cell */}
@@ -528,42 +532,24 @@ function ArbRow({ row }) {
             )}
           </div>
           <div className="arb-legs-info">
-            {polyLeg && (
-              <span className="arb-leg">
-                <PolymarketIcon />
-                <span>{polyLeg.shares.toFixed(0)} shares <SideBadge side={polyLeg.side} sideLabel={polyLeg.sideLabel} /> at {formatCents(polyLeg.entryPriceCents)}</span>
-                {polyLeg.link && (
-                  <a 
-                    href={polyLeg.link} 
-                    target="_blank" 
+            {row.legs.map((leg, i) => (
+              <span key={i} className="arb-leg">
+                {getPlatformIcon(leg.platform)}
+                <span>{leg.shares.toFixed(0)} shares <SideBadge side={leg.side} sideLabel={leg.sideLabel} /> at {formatCents(leg.entryPriceCents)}</span>
+                {leg.link && (
+                  <a
+                    href={leg.link}
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="arb-leg-link"
-                    title="Open on Polymarket"
+                    title={`Open on ${leg.platform}`}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <ExternalLinkIcon />
                   </a>
                 )}
               </span>
-            )}
-            {opinionLeg && (
-              <span className="arb-leg">
-                <OpinionIcon />
-                <span>{opinionLeg.shares.toFixed(0)} shares <SideBadge side={opinionLeg.side} sideLabel={opinionLeg.sideLabel} /> at {formatCents(opinionLeg.entryPriceCents)}</span>
-                {opinionLeg.link && (
-                  <a 
-                    href={opinionLeg.link} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="arb-leg-link"
-                    title="Open on Opinion"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <ExternalLinkIcon />
-                  </a>
-                )}
-              </span>
-            )}
+            ))}
           </div>
         </div>
       </div>
@@ -603,8 +589,6 @@ function ArbRow({ row }) {
 
 /** Mobile card version of ArbRow */
 function ArbRowMobile({ row }) {
-  const polyLeg = getLeg(row, "polymarket");
-  const opinionLeg = getLeg(row, "opinion");
   const totalCents = row.currentTotalCents;
   const canSellNow = totalCents >= 100;
   const neededPct = calcNeededPct(totalCents);
@@ -641,54 +625,30 @@ function ArbRowMobile({ row }) {
 
       {/* Legs info */}
       <div className="arb-card-legs">
-        {polyLeg && (
-          <div className="arb-card-leg">
-            <PolymarketIcon />
-            <span>{polyLeg.shares.toFixed(0)} shares <SideBadge side={polyLeg.side} sideLabel={polyLeg.sideLabel} /> at {formatCents(polyLeg.entryPriceCents)}</span>
+        {row.legs.map((leg, i) => (
+          <div key={i} className="arb-card-leg">
+            {getPlatformIcon(leg.platform)}
+            <span>{leg.shares.toFixed(0)} shares <SideBadge side={leg.side} sideLabel={leg.sideLabel} /> at {formatCents(leg.entryPriceCents)}</span>
             <div className="arb-card-leg-value-wrap">
-              <span className="arb-card-leg-value">{formatUSD(polyLeg.valueUsd || 0)}</span>
-              <span className={`arb-card-leg-delta ${getLegDeltaUsd(polyLeg) >= 0 ? "positive" : "negative"}`}>
-                ({formatUSDDelta(getLegDeltaUsd(polyLeg))})
+              <span className="arb-card-leg-value">{formatUSD(leg.valueUsd || 0)}</span>
+              <span className={`arb-card-leg-delta ${getLegDeltaUsd(leg) >= 0 ? "positive" : "negative"}`}>
+                ({formatUSDDelta(getLegDeltaUsd(leg))})
               </span>
             </div>
-            {polyLeg.link && (
-              <a 
-                href={polyLeg.link} 
-                target="_blank" 
+            {leg.link && (
+              <a
+                href={leg.link}
+                target="_blank"
                 rel="noopener noreferrer"
                 className="arb-leg-link"
-                title="Open on Polymarket"
+                title={`Open on ${leg.platform}`}
                 onClick={(e) => e.stopPropagation()}
               >
                 <ExternalLinkIcon />
               </a>
             )}
           </div>
-        )}
-        {opinionLeg && (
-          <div className="arb-card-leg">
-            <OpinionIcon />
-            <span>{opinionLeg.shares.toFixed(0)} shares <SideBadge side={opinionLeg.side} sideLabel={opinionLeg.sideLabel} /> at {formatCents(opinionLeg.entryPriceCents)}</span>
-            <div className="arb-card-leg-value-wrap">
-              <span className="arb-card-leg-value">{formatUSD(opinionLeg.valueUsd || 0)}</span>
-              <span className={`arb-card-leg-delta ${getLegDeltaUsd(opinionLeg) >= 0 ? "positive" : "negative"}`}>
-                ({formatUSDDelta(getLegDeltaUsd(opinionLeg))})
-              </span>
-            </div>
-            {opinionLeg.link && (
-              <a 
-                href={opinionLeg.link} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="arb-leg-link"
-                title="Open on Opinion"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <ExternalLinkIcon />
-              </a>
-            )}
-          </div>
-        )}
+        ))}
       </div>
 
       {/* Stats row */}
@@ -724,15 +684,13 @@ function ArbRowMobile({ row }) {
 /** Desktop row for closed arbitrage position */
 function ClosedArbRow({ row }) {
   const [isHovered, setIsHovered] = useState(false);
-  const polyLeg = getLeg(row, "polymarket");
-  const opinionLeg = getLeg(row, "opinion");
   const pnl = row.closedPnl || row.realizedPnl || 0;
   const pnlPercent = row.closedPnlPercent || row.realizedPnlPercent || 0;
   const totalBet = row.totalBet || row.totalCost || 0;
   const isPositive = pnl >= 0;
 
   return (
-    <div 
+    <div
       className="closed-arb-row"
       style={{ background: isHovered ? "rgba(255,180,50,0.04)" : "transparent" }}
       onMouseEnter={() => setIsHovered(true)}
@@ -757,18 +715,12 @@ function ClosedArbRow({ row }) {
             )}
           </div>
           <div className="closed-arb-legs">
-            {polyLeg && (
-              <span className="closed-leg-mini">
-                <PolymarketIcon />
-                <span>{polyLeg.shares?.toFixed(0) || 0} <SideBadge side={polyLeg.side} sideLabel={polyLeg.sideLabel} /> @{formatCents(polyLeg.exitPriceCents ?? polyLeg.entryPriceCents ?? 0)}</span>
+            {row.legs?.map((leg, i) => (
+              <span key={i} className="closed-leg-mini">
+                {getPlatformIcon(leg.platform)}
+                <span>{leg.shares?.toFixed(0) || 0} <SideBadge side={leg.side} sideLabel={leg.sideLabel} /> @{formatCents(leg.exitPriceCents ?? leg.entryPriceCents ?? 0)}</span>
               </span>
-            )}
-            {opinionLeg && (
-              <span className="closed-leg-mini">
-                <OpinionIcon />
-                <span>{opinionLeg.shares?.toFixed(0) || 0} <SideBadge side={opinionLeg.side} sideLabel={opinionLeg.sideLabel} /> @{formatCents(opinionLeg.exitPriceCents ?? opinionLeg.entryPriceCents ?? 0)}</span>
-              </span>
-            )}
+            ))}
           </div>
         </div>
       </div>
@@ -803,8 +755,6 @@ function ClosedArbRow({ row }) {
 
 /** Mobile card for closed arbitrage position */
 function ClosedArbCardMobile({ row }) {
-  const polyLeg = getLeg(row, "polymarket");
-  const opinionLeg = getLeg(row, "opinion");
   const pnl = row.closedPnl || row.realizedPnl || 0;
   const pnlPercent = row.closedPnlPercent || row.realizedPnlPercent || 0;
   const totalBet = row.totalBet || row.totalCost || 0;
@@ -838,20 +788,14 @@ function ClosedArbCardMobile({ row }) {
           </div>
         </div>
       </div>
-      
+
       <div className="closed-arb-card-legs">
-        {polyLeg && (
-          <div className="closed-leg-mini">
-            <PolymarketIcon />
-            <span>{polyLeg.shares?.toFixed(0) || 0} shares <SideBadge side={polyLeg.side} sideLabel={polyLeg.sideLabel} /> @{formatCents(polyLeg.exitPriceCents ?? polyLeg.entryPriceCents ?? 0)}</span>
+        {row.legs?.map((leg, i) => (
+          <div key={i} className="closed-leg-mini">
+            {getPlatformIcon(leg.platform)}
+            <span>{leg.shares?.toFixed(0) || 0} shares <SideBadge side={leg.side} sideLabel={leg.sideLabel} /> @{formatCents(leg.exitPriceCents ?? leg.entryPriceCents ?? 0)}</span>
           </div>
-        )}
-        {opinionLeg && (
-          <div className="closed-leg-mini">
-            <OpinionIcon />
-            <span>{opinionLeg.shares?.toFixed(0) || 0} shares <SideBadge side={opinionLeg.side} sideLabel={opinionLeg.sideLabel} /> @{formatCents(opinionLeg.exitPriceCents ?? opinionLeg.entryPriceCents ?? 0)}</span>
-          </div>
-        )}
+        ))}
       </div>
 
       <div className="closed-arb-card-footer">
@@ -881,7 +825,9 @@ function formatDate(timestamp) {
 const TAB_ACTIVE = "active";
 const TAB_CLOSED = "closed";
 
-export default function ArbitrageManageResults({ polyWallet, opinionWallet }) {
+export default function ArbitrageManageResults({ polyWallet, opinionWallet, exchangeB = "opinion" }) {
+  const exchangeBLabel = exchangeB === "predictfun" ? "Predict.fun" : "Opinion";
+  const exchangeBPlatform = exchangeB === "predictfun" ? "predictfun" : "opinion";
   // Tab state
   const [activeTab, setActiveTab] = useState(TAB_ACTIVE);
   
@@ -912,6 +858,7 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet }) {
         const params = new URLSearchParams();
         if (polyWallet) params.set("polyWallet", polyWallet);
         if (opinionWallet) params.set("opinionWallet", opinionWallet);
+        if (exchangeB !== "opinion") params.set("exchangeB", exchangeB);
 
         const response = await fetch(`/api/arbitage/wallet-positions?${params}`);
         const data = await response.json();
@@ -936,7 +883,7 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet }) {
       setLoading(false);
       setArbRows([]);
     }
-  }, [polyWallet, opinionWallet]);
+  }, [polyWallet, opinionWallet, exchangeB]);
 
   // Fetch closed positions when tab changes to closed
   const fetchClosedPositions = useCallback(async () => {
@@ -952,8 +899,9 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet }) {
       const params = new URLSearchParams();
       if (polyWallet) params.set("polyWallet", polyWallet);
       if (opinionWallet) params.set("opinionWallet", opinionWallet);
+      if (exchangeB !== "opinion") params.set("exchangeB", exchangeB);
       params.set("type", "closed");
-      
+
       const response = await fetch(`/api/arbitage/wallet-positions?${params}`);
       const data = await response.json();
       
@@ -969,7 +917,7 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet }) {
     } finally {
       setClosedLoading(false);
     }
-  }, [polyWallet, opinionWallet]);
+  }, [polyWallet, opinionWallet, exchangeB]);
 
   // Fetch closed positions when tab changes
   useEffect(() => {
@@ -995,8 +943,8 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet }) {
 
         switch (sortConfig.key) {
           case "value":
-            aVal = (getLeg(a, "polymarket")?.valueUsd || 0) + (getLeg(a, "opinion")?.valueUsd || 0);
-            bVal = (getLeg(b, "polymarket")?.valueUsd || 0) + (getLeg(b, "opinion")?.valueUsd || 0);
+            aVal = (a.legs || []).reduce((s, l) => s + (l.valueUsd || 0), 0);
+            bVal = (b.legs || []).reduce((s, l) => s + (l.valueUsd || 0), 0);
             break;
           case "arbitragePct":
             aVal = a.arbitragePct;
@@ -1220,7 +1168,7 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet }) {
 
       {/* Summary note */}
       <div className="arb-scanning-note">
-        💡 Showing {filteredAndSortedRows.length} matched position{filteredAndSortedRows.length !== 1 ? 's' : ''} across Polymarket and Opinion
+        💡 Showing {filteredAndSortedRows.length} matched position{filteredAndSortedRows.length !== 1 ? 's' : ''} across Polymarket and {exchangeBLabel}
       </div>
         </>
       )}

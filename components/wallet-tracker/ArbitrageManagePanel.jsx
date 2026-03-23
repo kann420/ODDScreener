@@ -191,44 +191,241 @@ function SearchIcon() {
 // Main ArbitrageManagePanel Component
 // ============================================================================
 
+// ============================================================================
+// Exchange Pair Selector Component
+// ============================================================================
+
+const EXCHANGE_B_OPTIONS = [
+  { value: "opinion", label: "Opinion", logo: "/logo-opinion.svg" },
+  { value: "predictfun", label: "Predict.fun", logo: "/predictfun_logo.svg" },
+];
+
+function ExchangePairSelector({ exchangeB, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const current = EXCHANGE_B_OPTIONS.find((o) => o.value === exchangeB) || EXCHANGE_B_OPTIONS[0];
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  const isPredictFun = exchangeB === "predictfun";
+  const accentColor = isPredictFun ? "#8b5cf6" : "#f97316";
+
+  return (
+    <div className="exchange-pair-row">
+      <div className="exchange-pair-label">EXCHANGE A</div>
+      <div className="exchange-pair-label">EXCHANGE B</div>
+
+      {/* Exchange A: Polymarket (fixed) */}
+      <div className="exchange-select-fixed">
+        <img src="/polymarket_600.svg" alt="" width={15} height={15} style={{ objectFit: "contain", opacity: 0.85, flexShrink: 0 }} />
+        <span>Polymarket</span>
+      </div>
+
+      {/* Swap icon */}
+      <div className="exchange-swap-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: "rgba(255,255,255,0.4)" }}>
+          <path d="M7 16l-4-4 4-4" /><path d="M17 8l4 4-4 4" /><line x1="3" y1="12" x2="21" y2="12" />
+        </svg>
+      </div>
+
+      {/* Exchange B: dropdown */}
+      <div ref={ref} style={{ position: "relative" }}>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="exchange-select-btn"
+          style={{ borderColor: open ? accentColor : "rgba(255,255,255,0.13)" }}
+        >
+          <img src={current.logo} alt="" width={15} height={15} style={{ objectFit: "contain", opacity: 0.85, flexShrink: 0 }} />
+          <span style={{ flex: 1, textAlign: "left" }}>{current.label}</span>
+          <svg width="9" height="5" viewBox="0 0 10 6" fill="none" style={{ flexShrink: 0, opacity: 0.55, transition: "transform 0.15s", transform: open ? "rotate(180deg)" : "none" }}>
+            <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        {open && (
+          <div className="exchange-dropdown">
+            {EXCHANGE_B_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => { onChange(opt.value); setOpen(false); }}
+                className={`exchange-dropdown-item ${opt.value === exchangeB ? "selected" : ""}`}
+              >
+                <img src={opt.logo} alt="" width={15} height={15} style={{ objectFit: "contain", flexShrink: 0 }} />
+                <span>{opt.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <style jsx>{`
+        .exchange-pair-row {
+          display: grid;
+          grid-template-columns: 1fr auto 1fr;
+          grid-template-rows: auto auto;
+          gap: 4px 12px;
+          align-items: center;
+          margin-bottom: 20px;
+        }
+        .exchange-pair-label {
+          font-size: 11px;
+          font-weight: 600;
+          color: rgba(255,255,255,0.4);
+          letter-spacing: 0.5px;
+          text-transform: uppercase;
+        }
+        .exchange-pair-label:nth-child(2) {
+          grid-column: 3;
+        }
+        .exchange-select-fixed {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 7px 10px;
+          background: rgba(0,0,0,0.32);
+          border: 1px solid rgba(255,255,255,0.13);
+          border-radius: 8px;
+          color: #e9eef5;
+          font-size: 13px;
+          font-weight: 700;
+        }
+        .exchange-swap-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          grid-row: 2;
+          grid-column: 2;
+        }
+        .exchange-select-btn {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 7px 8px 7px 10px;
+          background: rgba(0,0,0,0.32);
+          border: 1px solid rgba(255,255,255,0.13);
+          border-radius: 8px;
+          color: #e9eef5;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+        .exchange-select-btn:hover {
+          background: rgba(255,255,255,0.04);
+        }
+        .exchange-dropdown {
+          position: absolute;
+          top: calc(100% + 4px);
+          left: 0;
+          right: 0;
+          background: rgba(13,17,27,0.97);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 8px;
+          z-index: 300;
+          padding: 3px;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.55);
+        }
+        .exchange-dropdown-item {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 7px 10px;
+          background: transparent;
+          border: none;
+          border-radius: 6px;
+          color: rgba(255,255,255,0.8);
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: background 0.1s;
+        }
+        .exchange-dropdown-item:hover {
+          background: rgba(255,255,255,0.06);
+        }
+        .exchange-dropdown-item.selected {
+          background: rgba(255,255,255,0.07);
+          color: #fff;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ============================================================================
+// Main ArbitrageManagePanel Component
+// ============================================================================
+
 export default function ArbitrageManagePanel() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
+
+  // -------------------------------------------------------------------------
+  // State: Exchange pair selection
+  // -------------------------------------------------------------------------
+  const [exchangeB, setExchangeB] = useState("predictfun");
+
   // -------------------------------------------------------------------------
   // State: Wallet inputs and checkbox
   // -------------------------------------------------------------------------
   const [polymarketWallet, setPolymarketWallet] = useState("");
   const [opinionWallet, setOpinionWallet] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
-  
+
   // State: Validation errors (shown after blur or submit attempt)
   const [polyError, setPolyError] = useState("");
   const [opinionError, setOpinionError] = useState("");
-  
+
   // State: Track if user has interacted (to show errors only after blur/submit)
   const [polyTouched, setPolyTouched] = useState(false);
   const [opinionTouched, setOpinionTouched] = useState(false);
-  
+
   // State: Submission status (shows results table when true)
   const [submitted, setSubmitted] = useState(false);
-  
+
+  // Derived: color scheme based on exchangeB
+  const isPredictFun = exchangeB === "predictfun";
+  const accentColor = isPredictFun ? "#8b5cf6" : "#f97316";
+  const accentGradient = isPredictFun
+    ? "linear-gradient(90deg, #a78bfa 0%, #8b5cf6 100%)"
+    : "linear-gradient(90deg, #ffaf89 0%, #f97316 100%)";
+  const accentShadow = isPredictFun
+    ? "rgba(139, 92, 246, 0.3)"
+    : "rgba(249, 115, 22, 0.3)";
+  const accentFocusShadow = isPredictFun
+    ? "0 0 0 2px rgba(139, 92, 246, 0.2)"
+    : "0 0 0 2px rgba(249, 115, 22, 0.2)";
+
   // -------------------------------------------------------------------------
   // Initialize state from URL query params on mount
   // -------------------------------------------------------------------------
   useEffect(() => {
     const polyParam = searchParams.get("poly") || "";
     const opinionParam = searchParams.get("opinion") || "";
-    
+    const exchangeBParam = searchParams.get("exchangeB") || "";
+
+    if (exchangeBParam === "predictfun") {
+      setExchangeB("predictfun");
+    }
+
     if (polyParam) {
       setPolymarketWallet(polyParam);
-      
+
       // If we have a valid poly wallet from URL, auto-show results
       if (isValidWalletAddress(polyParam)) {
         setSubmitted(true);
       }
     }
-    
+
     if (opinionParam) {
       setOpinionWallet(opinionParam);
     }
@@ -302,18 +499,19 @@ export default function ArbitrageManagePanel() {
   // -------------------------------------------------------------------------
   // Update URL query params (for persistence on refresh)
   // -------------------------------------------------------------------------
-  const updateQueryParams = useCallback((poly, opinion) => {
+  const updateQueryParams = useCallback((poly, opinion, exB) => {
     const params = new URLSearchParams();
-    
+
     if (poly) params.set("poly", poly);
     if (opinion) params.set("opinion", opinion);
-    
+    if (exB && exB !== "opinion") params.set("exchangeB", exB);
+
     // Add "tab" param to keep the current tab selected
     params.set("tab", "arbitrage");
-    
+
     const queryString = params.toString();
     const newUrl = queryString ? `?${queryString}` : "";
-    
+
     // Replace current URL without navigation (keeps state on refresh)
     window.history.replaceState(null, "", `/wallet${newUrl}`);
   }, []);
@@ -344,7 +542,7 @@ export default function ArbitrageManagePanel() {
     // Save to URL query params for refresh persistence
     const finalPoly = polymarketWallet.trim();
     const finalOpinion = opinionWallet.trim();
-    updateQueryParams(finalPoly, finalOpinion);
+    updateQueryParams(finalPoly, finalOpinion, exchangeB);
     
     // Save wallets to localStorage for future use
     saveWalletAddress(finalPoly);
@@ -358,7 +556,8 @@ export default function ArbitrageManagePanel() {
   // -------------------------------------------------------------------------
   // Tooltip text
   // -------------------------------------------------------------------------
-  const tooltipText = "Track and manage arbitrage positions across Opinion and Polymarket in one place. View matched markets, arbitrage %, current & potential PnL, and exit status.";
+  const exchangeBLabel = isPredictFun ? "Predict.fun" : "Opinion";
+  const tooltipText = `Track and manage arbitrage positions across ${exchangeBLabel} and Polymarket in one place. View matched markets, arbitrage %, current & potential PnL, and exit status.`;
   
   // -------------------------------------------------------------------------
   // Handle "Edit Wallets" to go back to input form
@@ -438,9 +637,10 @@ export default function ArbitrageManagePanel() {
         </div>
         
         {/* Results Table */}
-        <ArbitrageManageResults 
-          polyWallet={polyWallet} 
-          opinionWallet={opWallet} 
+        <ArbitrageManageResults
+          polyWallet={polyWallet}
+          opinionWallet={opWallet}
+          exchangeB={exchangeB}
         />
         
         <style jsx>{`
@@ -590,8 +790,11 @@ export default function ArbitrageManagePanel() {
         <InfoTooltip text={tooltipText} />
       </div>
       
+      {/* Exchange Pair Selector */}
+      <ExchangePairSelector exchangeB={exchangeB} onChange={(v) => { setExchangeB(v); if (submitted) setSubmitted(false); }} />
+
       {/* Wallet Input Card */}
-      <div className="arb-card">
+      <div className={`arb-card ${isPredictFun ? "arb-card-pf" : ""}`} style={{ borderColor: accentColor }}>
         {/* Polymarket Wallet Section */}
         <div className="arb-input-section">
           <label className="arb-input-label">Polymarket Wallet <span className="arb-label-note">(Proxy Wallet)</span></label>
@@ -601,7 +804,7 @@ export default function ArbitrageManagePanel() {
               currentValue={polymarketWallet}
             />
           </div>
-          <div className={`arb-input-wrapper ${polyError && polyTouched ? "error" : ""}`}>
+          <div className={`arb-input-wrapper ${polyError && polyTouched ? "error" : ""}`} {...(isPredictFun ? {"data-pf": ""} : {})}>
             <SearchIcon />
             <input
               type="text"
@@ -634,16 +837,16 @@ export default function ArbitrageManagePanel() {
         {/* Divider */}
         <div className="arb-divider" />
         
-        {/* Opinion Wallet Section */}
+        {/* Exchange B Wallet Section */}
         <div className="arb-input-section">
-          <label className="arb-input-label">Opinion Wallet</label>
+          <label className="arb-input-label">{exchangeBLabel} Wallet</label>
           <div style={{ position: "relative" }}>
-            <SavedWalletsDropdown 
+            <SavedWalletsDropdown
               onSelect={(wallet) => setOpinionWallet(wallet)}
               currentValue={opinionWallet}
             />
           </div>
-          <div className={`arb-input-wrapper ${opinionError && opinionTouched ? "error" : ""}`}>
+          <div className={`arb-input-wrapper ${opinionError && opinionTouched ? "error" : ""}`} {...(isPredictFun ? {"data-pf": ""} : {})}>
             <SearchIcon />
             <input
               type="text"
@@ -656,17 +859,19 @@ export default function ArbitrageManagePanel() {
               autoComplete="off"
             />
           </div>
-          
-          <div style={{ marginTop: 12, borderRadius: 8, overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)" }}>
-            <img 
-              src="/wallet track/optuto.png" 
-              alt="Opinion Wallet Tutorial" 
-              style={{ width: "100%", display: "block" }} 
-            />
-          </div>
-          
+
+          {!isPredictFun && (
+            <div style={{ marginTop: 12, borderRadius: 8, overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <img
+                src="/wallet track/optuto.png"
+                alt="Opinion Wallet Tutorial"
+                style={{ width: "100%", display: "block" }}
+              />
+            </div>
+          )}
+
           <div className="arb-proxy-hint">
-            💡 Find your wallet by click on Profile icon → Your wallet address
+            💡 {isPredictFun ? "Find your Predict Smart Wallet at Portfolio → Predict Smart Wallet → Your wallet address" : "Find your wallet by click on Profile icon → Your wallet address"}
           </div>
 
           {opinionError && opinionTouched && (
@@ -680,6 +885,7 @@ export default function ArbitrageManagePanel() {
           onClick={handleTrackWallet}
           disabled={!isFormValid()}
           className="arb-track-btn"
+          style={{ background: accentGradient }}
         >
           Track Wallet
         </button>
@@ -711,7 +917,7 @@ export default function ArbitrageManagePanel() {
         /* Card */
         .arb-card {
           background: rgba(255, 255, 255, 0.03);
-          border: 1px solid #f97316;
+          border: 1px solid;
           border-radius: 16px;
           padding: 24px;
         }
@@ -738,14 +944,11 @@ export default function ArbitrageManagePanel() {
           align-items: center;
           gap: 12px;
           background: rgba(0, 0, 0, 0.2);
-          border: 1px solid #f97316;
+          border: 1px solid;
+          border-color: #f97316;
           border-radius: 12px;
           padding: 14px 16px;
           transition: border-color 0.15s, opacity 0.15s, box-shadow 0.15s;
-        }
-        
-        .arb-input-wrapper:focus-within {
-          box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
         }
         
         .arb-input-wrapper.error {
@@ -830,7 +1033,6 @@ export default function ArbitrageManagePanel() {
         /* Track Wallet Button */
         .arb-track-btn {
           width: 100%;
-          background: linear-gradient(90deg, #ffaf89 0%, #f97316 100%);
           border: none;
           border-radius: 12px;
           padding: 16px 24px;
@@ -847,7 +1049,7 @@ export default function ArbitrageManagePanel() {
         
         .arb-track-btn:hover:not(:disabled) {
           transform: translateY(-1px);
-          box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+          box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
           filter: brightness(1.1);
         }
         
@@ -877,6 +1079,11 @@ export default function ArbitrageManagePanel() {
           .arb-input-wrapper {
             padding: 12px 14px;
           }
+        }
+      `}</style>
+      <style jsx global>{`
+        .arb-input-wrapper[data-pf] {
+          border-color: #8b5cf6 !important;
         }
       `}</style>
     </div>
