@@ -423,7 +423,7 @@ function computePnLByPeriod(trades, realizedPnlTotal) {
 }
 
 /* ─── PredictFun Wallet Header ─── */
-function PFWalletHeader({ wallet, account, stats, trades, isLoading }) {
+function PFWalletHeader({ wallet, account, stats, trades, isLoading, feeStatsLoading }) {
   const [selectedPeriod, setSelectedPeriod] = useState("1W");
   const displayName = account?.name || shortenAddress(wallet);
   const avatarUrl = account?.imageUrl || null;
@@ -431,7 +431,11 @@ function PFWalletHeader({ wallet, account, stats, trades, isLoading }) {
   const pfProfileUrl = `https://predict.fun/portfolio/${wallet}`;
 
   const weeklyVolume = useMemo(() => computeWeeklyVolume(trades), [trades]);
-  const totalFeesPaid = useMemo(() => computeTotalFees(trades), [trades]);
+  // Use server-side fee total if available, fallback to client-side (partial) sum
+  const totalFeesPaid = stats?.totalFeesPaid != null
+    ? stats.totalFeesPaid
+    : computeTotalFees(trades);
+  const isFeeLoading = isLoading || (feeStatsLoading && stats?.totalFeesPaid == null);
   const pnlByPeriod = useMemo(() => computePnLByPeriod(trades, stats?.realizedPnl), [trades, stats?.realizedPnl]);
   const currentPnLData = useMemo(() => pnlByPeriod[selectedPeriod] || [], [pnlByPeriod, selectedPeriod]);
   const chartPnL = useMemo(() => {
@@ -538,7 +542,7 @@ function PFWalletHeader({ wallet, account, stats, trades, isLoading }) {
           <div className="pf-hstat-3 pf-hstat-feepaid pf-hstat-right">
             <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 4 }}>Fee Paid</div>
             <div style={{ fontSize: 20, fontWeight: 700, color: "#fff" }}>
-              {isLoading ? <Skeleton width={70} height={24} /> : formatUSD(totalFeesPaid)}
+              {isFeeLoading ? <Skeleton width={70} height={24} /> : formatUSD(totalFeesPaid)}
             </div>
           </div>
           <div className="pf-hstat-totvol">
@@ -1013,6 +1017,10 @@ export default function PredictFunWalletPage() {
   // Account info from PredictFun
   const [account, setAccount] = useState(null);
 
+  // Fee stats from dedicated endpoint (accurate server-side calculation)
+  const [feeStats, setFeeStats] = useState(null);
+  const [feeStatsLoading, setFeeStatsLoading] = useState(true);
+
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth <= 900);
     checkMobile();
@@ -1110,13 +1118,31 @@ export default function PredictFunWalletPage() {
     }
   }, [wallet]);
 
+  // Fetch fee stats (server-side full pagination)
+  const fetchFeeStats = useCallback(async () => {
+    if (!isValidWalletAddress(wallet)) return;
+    setFeeStatsLoading(true);
+    try {
+      const res = await fetch(`/api/predictfun/wallet/${wallet}/fees`);
+      const data = await res.json();
+      if (data.success) {
+        setFeeStats(data);
+      }
+    } catch (err) {
+      console.error("[PFWallet] Fee stats error:", err);
+    } finally {
+      setFeeStatsLoading(false);
+    }
+  }, [wallet]);
+
   // Initial load
   useEffect(() => {
     if (isValidWalletAddress(wallet)) {
       fetchPositions();
       fetchTrades();
+      fetchFeeStats();
     }
-  }, [wallet, fetchPositions, fetchTrades]);
+  }, [wallet, fetchPositions, fetchTrades, fetchFeeStats]);
 
   // Fetch points when tab is first opened
   useEffect(() => {
@@ -1140,10 +1166,11 @@ export default function PredictFunWalletPage() {
       realizedPnl: gql.pnlUsd ?? null,
       volume: gql.volumeUsd ?? null,
       positionsCount: positions.length,
-      tradesCount: trades.length,
+      tradesCount: feeStats?.totalTradesCount ?? trades.length,
+      totalFeesPaid: feeStats?.totalFeesPaid ?? null,
       points: Number(account?.points ?? account?.leaderboard?.totalPoints ?? 0),
     };
-  }, [positions, trades, account]);
+  }, [positions, trades, account, feeStats]);
 
   // Filtered positions
   const displayPositions = useMemo(() => {
@@ -1207,7 +1234,7 @@ export default function PredictFunWalletPage() {
     if (isRefreshing) return;
     setIsRefreshing(true);
     try {
-      const tasks = [fetchPositions(), fetchTrades()];
+      const tasks = [fetchPositions(), fetchTrades(), fetchFeeStats()];
       if (pointsFetched) {
         setPointsFetched(false);
         tasks.push(fetchPoints());
@@ -1216,7 +1243,7 @@ export default function PredictFunWalletPage() {
     } finally {
       setIsRefreshing(false);
     }
-  }, [isRefreshing, fetchPositions, fetchTrades, fetchPoints, pointsFetched]);
+  }, [isRefreshing, fetchPositions, fetchTrades, fetchFeeStats, fetchPoints, pointsFetched]);
 
   if (!isValidWalletAddress(wallet)) {
     return (
@@ -1244,6 +1271,7 @@ export default function PredictFunWalletPage() {
           stats={stats}
           trades={trades}
           isLoading={isDataLoading}
+          feeStatsLoading={feeStatsLoading}
         />
 
         {/* Main Tabs */}

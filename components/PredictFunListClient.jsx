@@ -7,7 +7,7 @@ import { getPredictFunDisplayTitleText } from "@/lib/predictfunDisplay";
 import { clientGet, clientSet } from "@/lib/clientCache";
 
 const SCROLL_BATCH = 20;
-const TRENDING_COUNT = 10;
+const TRENDING_COUNT = 30;
 const NEW_LIMIT = 100;
 const INITIAL_ROW_METRICS_BATCH = 12;
 
@@ -45,7 +45,7 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
   const [isLoadingFull, setIsLoadingFull] = useState(needsFullFetch);
   const markets = fullMarkets ?? (initialMarkets || []);
 
-  const [activeTab, setActiveTab] = useState("marchmadness");
+  const [activeTab, setActiveTab] = useState("trending");
   const [volMode, setVolMode] = useState("24h");
   const [visibleCount, setVisibleCount] = useState(SCROLL_BATCH);
   const [sortConfig, setSortConfig] = useState({ key: "volume", direction: "desc" });
@@ -712,7 +712,7 @@ export default function PredictFunListClient({ initialMarkets, needsFullFetch = 
       {/* Footer: market count */}
       <div style={{ textAlign: "center", padding: "4px 0", fontSize: 12, color: "rgba(255,255,255,0.7)" }}>
         {activeTab === "new" && "Top 100 newest active markets"}
-        {activeTab === "trending" && "Top 10 markets by 24h volume"}
+        {activeTab === "trending" && "Top 30 markets by 24h volume"}
         {activeTab === "boost" && `${sortedMarkets.length} Boost Point market${sortedMarkets.length !== 1 ? "s" : ""}`}
         {activeTab === "marchmadness" && `${sortedMarkets.length} March Madness market${sortedMarkets.length !== 1 ? "s" : ""}`}
         {activeTab === "all" && sortedMarkets.length > 0 && `${sortedMarkets.length} markets total`}
