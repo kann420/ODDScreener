@@ -14,7 +14,7 @@
  * - Closed positions history with P&L results
  */
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 
 // ============================================================================
 // Icon Components
@@ -828,6 +828,8 @@ const TAB_CLOSED = "closed";
 export default function ArbitrageManageResults({ polyWallet, opinionWallet, exchangeB = "opinion" }) {
   const exchangeBLabel = exchangeB === "predictfun" ? "Predict.fun" : "Opinion";
   const exchangeBPlatform = exchangeB === "predictfun" ? "predictfun" : "opinion";
+  const activeRequestRef = useRef(0);
+  const closedRequestRef = useRef(0);
   // Tab state
   const [activeTab, setActiveTab] = useState(TAB_ACTIVE);
   
@@ -850,6 +852,10 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet, exch
 
   // Fetch active positions from API
   useEffect(() => {
+    const controller = new AbortController();
+    const requestId = activeRequestRef.current + 1;
+    activeRequestRef.current = requestId;
+
     async function fetchPositions() {
       setLoading(true);
       setError(null);
@@ -859,20 +865,31 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet, exch
         if (polyWallet) params.set("polyWallet", polyWallet);
         if (opinionWallet) params.set("opinionWallet", opinionWallet);
         if (exchangeB !== "opinion") params.set("exchangeB", exchangeB);
+        params.set("_ts", String(Date.now()));
 
-        const response = await fetch(`/api/arbitage/wallet-positions?${params}`);
+        const response = await fetch(`/api/arbitage/wallet-positions?${params}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
         const data = await response.json();
 
         if (!response.ok) {
           throw new Error(data.error || "Failed to fetch positions");
         }
 
+        if (controller.signal.aborted || activeRequestRef.current !== requestId) {
+          return;
+        }
+
         setArbRows(data.matched || []);
       } catch (err) {
+        if (err?.name === "AbortError") return;
         console.error("Error fetching arb positions:", err);
+        if (activeRequestRef.current !== requestId) return;
         setError(err.message);
         setArbRows([]);
       } finally {
+        if (activeRequestRef.current !== requestId) return;
         setLoading(false);
       }
     }
@@ -883,6 +900,8 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet, exch
       setLoading(false);
       setArbRows([]);
     }
+
+    return () => controller.abort();
   }, [polyWallet, opinionWallet, exchangeB]);
 
   // Fetch closed positions when tab changes to closed
@@ -891,6 +910,10 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet, exch
       setClosedRows([]);
       return;
     }
+
+    const controller = new AbortController();
+    const requestId = closedRequestRef.current + 1;
+    closedRequestRef.current = requestId;
     
     setClosedLoading(true);
     setClosedError(null);
@@ -901,20 +924,31 @@ export default function ArbitrageManageResults({ polyWallet, opinionWallet, exch
       if (opinionWallet) params.set("opinionWallet", opinionWallet);
       if (exchangeB !== "opinion") params.set("exchangeB", exchangeB);
       params.set("type", "closed");
+      params.set("_ts", String(Date.now()));
 
-      const response = await fetch(`/api/arbitage/wallet-positions?${params}`);
+      const response = await fetch(`/api/arbitage/wallet-positions?${params}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      });
       const data = await response.json();
       
       if (!response.ok) {
         throw new Error(data.error || "Failed to fetch closed positions");
       }
+
+      if (controller.signal.aborted || closedRequestRef.current !== requestId) {
+        return;
+      }
       
       setClosedRows(data.closedArb || []);
     } catch (err) {
+      if (err?.name === "AbortError") return;
       console.error("Error fetching closed arb positions:", err);
+      if (closedRequestRef.current !== requestId) return;
       setClosedError(err.message);
       setClosedRows([]);
     } finally {
+      if (closedRequestRef.current !== requestId) return;
       setClosedLoading(false);
     }
   }, [polyWallet, opinionWallet, exchangeB]);

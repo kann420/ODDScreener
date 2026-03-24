@@ -19,6 +19,9 @@
 import { NextResponse } from "next/server";
 import { polyFetch } from "@/lib/polyFetch";
 import { clearArbitrageSessionCookie, requireArbitrageAccess } from "@/lib/arbitrageAccessSession";
+import { getPredictFunCategory, predictFunFetch } from "@/lib/predictfun";
+import { fetchPredictFunAccountPositions } from "@/lib/predictfunHiddenGraphql";
+import { normalizePredictFunWalletGraphqlPosition, buildPredictFunDisplayTitle } from "@/lib/utils/predictfunAccountPosition";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -35,6 +38,11 @@ const CLOSED_NET_SHARES_EPSILON = 0.01;
 const OPINION_PRACTICAL_CLOSE_SHARES = 3;
 const OPINION_PRACTICAL_CLOSE_VALUE_USD = 1;
 const CLOSED_ROUND_MAX_TIME_GAP_MS = 14 * 24 * 60 * 60 * 1000;
+const NO_STORE_HEADERS = {
+  "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate",
+  Pragma: "no-cache",
+  Expires: "0",
+};
 
 // ============================================================================
 // Helper Functions
@@ -82,6 +90,14 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function jsonNoStore(payload, init = {}) {
+  const response = NextResponse.json(payload, init);
+  for (const [key, value] of Object.entries(NO_STORE_HEADERS)) {
+    response.headers.set(key, value);
+  }
+  return response;
 }
 
 // ============================================================================
@@ -297,6 +313,508 @@ async function fetchOpinionPositions(wallet) {
     console.error("[Opinion] Fetch error:", error.message);
     return [];
   }
+}
+
+// ============================================================================
+// Predict.fun API Functions
+// ============================================================================
+
+/**
+ * Fetch positions from Predict.fun via GraphQL
+ * Returns normalized positions compatible with matching logic
+ *
+ * @param {string} wallet - User wallet address
+ * @returns {Array} - Array of positions (same shape as Opinion positions for matching)
+ */
+async function fetchPredictFunPositions(wallet) {
+  let graphQlPositions = [];
+  let graphQlError = null;
+
+  try {
+    console.log("[PredictFun] Fetching positions for:", wallet);
+
+    const { positions: rawPositions } = await fetchPredictFunAccountPositions({
+      walletAddress: wallet,
+      maxPositions: 200,
+      pageSize: 100,
+      timeoutMs: 20000,
+      retries: 2,
+    });
+
+    if (!rawPositions || rawPositions.length === 0) {
+      console.log("[PredictFun] No positions found");
+      return [];
+    }
+
+    console.log("[PredictFun] Found", rawPositions.length, "raw position nodes");
+
+    const positions = [];
+    for (const node of rawPositions) {
+      const normalized = normalizePredictFunWalletGraphqlPosition(node);
+      if (!normalized) continue;
+
+      // Map to the same shape as Opinion positions for matching logic reuse
+      const side = normalized.outcomeSideEnum; // "Yes" or "No"
+      const sideUpper = side.toUpperCase();
+      const avgPriceCents = Math.round(normalized.avgEntryPrice * 1000) / 10;
+      const currentPriceCents = Math.round(normalized.currentPrice * 1000) / 10;
+
+      positions.push({
+        platform: "predictfun",
+
+        // IDs
+        marketId: normalized.marketId,
+        rootMarketId: normalized.categorySlug || normalized.marketId,
+
+        // Market info
+        marketTitle: normalized.displayTitle || normalized.marketTitle || "",
+        outcomeName: normalized.outcomeName || "",
+
+        // Position data
+        side: sideUpper,
+        shares: normalized.sharesOwned,
+
+        // Prices
+        avgPriceCents,
+        currentPriceCents,
+
+        // Values
+        initialValueUsd: normalized.avgEntryPrice * normalized.sharesOwned,
+        currentValueUsd: normalized.currentValueInQuoteToken,
+        pnlUsd: normalized.unrealizedPnl,
+        pnlPercent: normalized.unrealizedPnlPercent,
+
+        // URLs
+        thumbnailUrl: normalized.thumbnailUrl || null,
+        marketUrl: normalized.marketUrl || null,
+
+        // Raw for debugging
+        _raw: normalized,
+      });
+    }
+
+    console.log("[PredictFun] Normalized", positions.length, "positions");
+    for (const pos of positions) {
+      console.log(`[PredictFun] Position: "${pos.marketTitle}" outcome="${pos.outcomeName}" side="${pos.side}" shares=${pos.shares.toFixed(2)}`);
+    }
+
+    graphQlPositions = positions;
+
+    if (positions.length > 0) {
+      return positions;
+    }
+
+    console.warn("[PredictFun] GraphQL returned no active positions, trying REST fallback");
+  } catch (error) {
+    graphQlError = error;
+    console.warn("[PredictFun] GraphQL position fetch failed, trying REST fallback:", error.message);
+  }
+
+  try {
+    const response = await predictFunFetch(`/v1/positions/${wallet}`, {
+      timeoutMs: 20000,
+      retries: 2,
+    });
+
+    if (!response?.success || !Array.isArray(response.data)) {
+      console.warn("[PredictFun] REST fallback returned unexpected payload");
+      return graphQlPositions;
+    }
+
+    const rawPositions = response.data.filter((pos) => Number(pos?.amount) / 1e18 > 0);
+    const categorySlugs = [...new Set(rawPositions.map((pos) => pos?.market?.categorySlug).filter(Boolean))];
+    const categoryMap = new Map();
+    const BATCH_SIZE = 10;
+
+    for (let i = 0; i < categorySlugs.length; i += BATCH_SIZE) {
+      const batch = categorySlugs.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(batch.map((slug) => getPredictFunCategory(slug)));
+      for (let j = 0; j < batch.length; j += 1) {
+        categoryMap.set(
+          batch[j],
+          results[j].status === "fulfilled" ? results[j].value : null
+        );
+      }
+    }
+
+    const positions = rawPositions.map((pos) => {
+      const market = pos.market || {};
+      const outcome = pos.outcome || {};
+      const sharesOwned = Number(pos.amount) / 1e18;
+      const avgEntryPrice = Number(pos.averageBuyPriceUsd || 0);
+      const currentValueInQuoteToken = Number(pos.valueUsd || 0);
+      const unrealizedPnl = Number(pos.pnlUsd || 0);
+      const currentPrice = sharesOwned > 0 ? currentValueInQuoteToken / sharesOwned : avgEntryPrice;
+      const categorySlug = market.categorySlug || "";
+      const category = categoryMap.get(categorySlug) || null;
+      const categoryTitle = category?.title || category?.name || null;
+      const marketTitle = market.title || market.question || "";
+      const outcomeName = outcome.name || (Number(outcome.index) === 2 ? "No" : "Yes");
+      const sideUpper = String(outcomeName).trim().toUpperCase() === "NO" ? "NO" : "YES";
+
+      return {
+        platform: "predictfun",
+        marketId: market.id || pos.marketId || "",
+        rootMarketId: categorySlug || market.id || pos.marketId || "",
+        marketTitle: buildPredictFunDisplayTitle(categoryTitle, marketTitle),
+        categoryTitle,
+        outcomeName,
+        side: sideUpper,
+        shares: sharesOwned,
+        avgPriceCents: Math.round(avgEntryPrice * 1000) / 10,
+        currentPriceCents: Math.round(currentPrice * 1000) / 10,
+        initialValueUsd: avgEntryPrice * sharesOwned,
+        currentValueUsd: currentValueInQuoteToken,
+        pnlUsd: unrealizedPnl,
+        pnlPercent:
+          avgEntryPrice * sharesOwned > 0
+            ? (unrealizedPnl / (avgEntryPrice * sharesOwned)) * 100
+            : 0,
+        thumbnailUrl: market.imageUrl || category?.imageUrl || null,
+        marketUrl: categorySlug ? `https://predict.fun/market/${categorySlug}` : null,
+        _raw: pos,
+      };
+    });
+
+    console.log("[PredictFun] REST fallback normalized", positions.length, "positions");
+    for (const pos of positions) {
+      console.log(`[PredictFun] REST Position: "${pos.marketTitle}" outcome="${pos.outcomeName}" side="${pos.side}" shares=${pos.shares.toFixed(2)}`);
+    }
+
+    return positions;
+  } catch (error) {
+    console.error(
+      "[PredictFun] Fetch error:",
+      graphQlError ? `${graphQlError.message} | REST fallback: ${error.message}` : error.message
+    );
+    return graphQlPositions;
+  }
+}
+
+/**
+ * Match Polymarket positions with Predict.fun positions for arbitrage
+ * Reuses similar logic to matchArbPositions but adapted for Predict.fun
+ */
+function matchPolyPredictFunPositions(polyPositions, pfPositions) {
+  const arbPairs = [];
+  const usedPfIds = new Set();
+  const SIMILARITY_THRESHOLD = 0.3;
+
+  console.log("[PF-Matching] Starting to match", polyPositions.length, "poly positions with", pfPositions.length, "predictfun positions");
+
+  // Log positions for debugging
+  console.log("[PF-Matching] Poly positions:");
+  for (const p of polyPositions) {
+    console.log(`  - "${p.marketTitle}" outcome="${p.outcome}" side="${p.side}" isCategorical=${p.isCategorical}`);
+  }
+  console.log("[PF-Matching] PredictFun positions:");
+  for (const pf of pfPositions) {
+    console.log(`  - "${pf.marketTitle}" outcomeName="${pf.outcomeName}" side="${pf.side}"`);
+  }
+
+  for (const polyPos of polyPositions) {
+    let bestMatch = null;
+    let bestScore = 0;
+    let matchType = "standard";
+
+    console.log(`\n[PF-Matching] Looking for match for Poly: "${polyPos.marketTitle}" outcome="${polyPos.outcome}" side="${polyPos.side}"`);
+
+    for (const pfPos of pfPositions) {
+      if (usedPfIds.has(pfPos.marketId)) continue;
+
+      console.log(`  [Check] PF: "${pfPos.marketTitle}" outcomeName="${pfPos.outcomeName}" side="${pfPos.side}"`);
+
+      // For standard binary matching, need opposite sides for arb
+      const isOppositeSide = polyPos.side !== pfPos.side;
+      if (!isOppositeSide) {
+        console.log(`    -> Skipped: same side (${polyPos.side} == ${pfPos.side})`);
+        continue;
+      }
+
+      // Calculate title similarity
+      const pfComparableTitle = pfPos.marketTitle;
+      const score = titleSimilarity(polyPos.marketTitle, pfComparableTitle);
+
+      if (score > 0.1) {
+        console.log(`    -> Score: ${score.toFixed(3)} (threshold: ${SIMILARITY_THRESHOLD})`);
+      }
+
+      if (score > bestScore && score >= SIMILARITY_THRESHOLD) {
+        bestScore = score;
+        bestMatch = pfPos;
+      }
+    }
+
+    if (bestMatch) {
+      console.log(`[PF-Matching] ✓ Matched: "${polyPos.marketTitle}" <-> "${bestMatch.marketTitle}" (score: ${bestScore.toFixed(3)})`);
+      usedPfIds.add(bestMatch.marketId);
+
+      const pair = createArbPairGeneric(polyPos, bestMatch, bestScore, matchType);
+      arbPairs.push(pair);
+    } else {
+      console.log(`[PF-Matching] ✗ No match found for: "${polyPos.marketTitle}"`);
+    }
+  }
+
+  return arbPairs;
+}
+
+/**
+ * Create an arbitrage pair object for Poly-PredictFun
+ * Similar to createArbPair but uses generic platform names
+ */
+function createArbPairGeneric(polyPos, bPos, matchScore, matchType = "standard") {
+  // Standard binary: use side field directly
+  const yesPos = polyPos.side === "YES" ? polyPos : bPos;
+  const noPos = polyPos.side === "NO" ? polyPos : bPos;
+
+  // Entry prices
+  const entryYesCents = yesPos.avgPriceCents;
+  const entryNoCents = noPos.avgPriceCents;
+  const entryTotalCents = entryYesCents + entryNoCents;
+
+  // Current prices
+  const currentYesCents = yesPos.currentPriceCents;
+  const currentNoCents = noPos.currentPriceCents;
+  const currentTotalCents = currentYesCents + currentNoCents;
+
+  // Calculate arbitrage percentage at entry
+  const arbitragePct = entryTotalCents < 100
+    ? ((100 - entryTotalCents) / entryTotalCents) * 100
+    : 0;
+
+  // Calculate PnL
+  const matchedShares = Math.min(polyPos.shares, bPos.shares);
+  const currentPnlUsd = polyPos.pnlUsd + bPos.pnlUsd;
+  const potentialPnlUsd = (matchedShares * (100 - entryTotalCents)) / 100;
+
+  // Exit status
+  const canSellNow = currentTotalCents >= 100;
+  const needsPctToClose = canSellNow ? 0 : ((100 - currentTotalCents) / currentTotalCents) * 100;
+
+  const outcomeDisplay = (bPos.outcomeName && bPos.outcomeName !== bPos.marketTitle)
+    ? bPos.outcomeName
+    : "";
+
+  return {
+    id: `${polyPos.marketId}_${bPos.marketId}`,
+
+    // Market info
+    marketTitle: outcomeDisplay
+      ? `${bPos.marketTitle} - ${outcomeDisplay}`
+      : bPos.marketTitle,
+    marketTitleBase: bPos.marketTitle,
+    outcomeDisplay,
+    thumbnailUrl: polyPos.thumbnailUrl || bPos.thumbnailUrl,
+    matchScore,
+    matchType,
+
+    // Legs
+    legs: [
+      {
+        platform: "polymarket",
+        side: polyPos.side,
+        sideLabel: null,
+        shares: polyPos.shares,
+        entryPriceCents: polyPos.avgPriceCents,
+        currentPriceCents: polyPos.currentPriceCents,
+        valueUsd: polyPos.currentValueUsd,
+        link: polyPos.marketUrl,
+      },
+      {
+        platform: bPos.platform,
+        side: bPos.side,
+        sideLabel: null,
+        shares: bPos.shares,
+        entryPriceCents: bPos.avgPriceCents,
+        currentPriceCents: bPos.currentPriceCents,
+        valueUsd: bPos.currentValueUsd,
+        link: bPos.marketUrl,
+      },
+    ],
+
+    // Computed values
+    entryTotalCents,
+    currentTotalCents,
+    arbitragePct: Math.round(arbitragePct * 10) / 10,
+    currentPnlUsd: Math.round(currentPnlUsd * 100) / 100,
+    potentialPnlUsd: Math.round(potentialPnlUsd * 100) / 100,
+
+    // Exit status
+    canSellNow,
+    needsPctToClose: Math.round(needsPctToClose * 10) / 10,
+  };
+}
+
+// ============================================================================
+// PredictFun Closed Positions (inferred from Polymarket trade history)
+// ============================================================================
+
+/**
+ * Match Poly closed rounds to create PredictFun arb pairs.
+ * PredictFun has no trade history API, so we infer from Poly's closed data:
+ * - For each Poly closed round, verify the market exists on PredictFun using
+ *   titleSimilarity against known PF market titles.
+ * - Verifies PF wallet actually traded using matchEventLog data.
+ * - Uses actual PF trade prices for accurate P&L.
+ *
+ * @param {Array} polyClosedPositions - Aggregated Poly closed rounds (pre-filtered to confirmed PF markets)
+ * @param {Map} pfTradesByMarketId - Map of pfMarketId → array of PF wallet trade nodes from matchEventLog
+ * @param {Map} polyToPfMap - Map of polyRoundKey → { pfMarketId, pfTitle, score }
+ */
+function matchPolyPredictFunClosedPositions(polyClosedPositions, pfTradesByMarketId = new Map(), polyToPfMap = new Map()) {
+  const closedArbPairs = [];
+
+  console.log("[PF-Closed] Processing", polyClosedPositions.length, "confirmed poly closed rounds");
+
+  for (const polyPos of polyClosedPositions) {
+    const polySide = (polyPos.side || "").toUpperCase();
+    if (polySide !== "YES" && polySide !== "NO") continue;
+
+    const polyKey = polyPos.roundKey || polyPos.conditionId || "";
+    const pfMatch = polyToPfMap.get(polyKey);
+    if (!pfMatch) continue;
+
+    const pfTrades = pfTradesByMarketId.get(pfMatch.pfMarketId) || [];
+    if (pfTrades.length === 0) continue;
+
+    // Aggregate PF trades for this wallet
+    // NOTE: amountFilled and priceExecuted are in wei (18 decimals) from GraphQL
+    let pfTotalBought = 0, pfTotalSold = 0;
+    let pfSharesBought = 0, pfSharesSold = 0;
+    let pfSide = null;
+    const WEI = 1e18;
+
+    for (const t of pfTrades) {
+      let rawAmount = Number(t.amountFilled) || 0;
+      let rawPrice = Number(t.priceExecuted) || 0;
+      // Detect wei values (> 1e15 is clearly wei, not normal numbers)
+      const amount = rawAmount > 1e15 ? rawAmount / WEI : rawAmount;
+      const price = rawPrice > 1e15 ? rawPrice / WEI : (rawPrice > 1.5 ? rawPrice / 100 : rawPrice);
+      const outcomeName = (t.outcome?.name || "").toUpperCase();
+      if (!pfSide && outcomeName) pfSide = outcomeName;
+
+      const qt = (t.quoteType || "").toUpperCase();
+      if (qt === "BUY" || qt === "BID") {
+        pfSharesBought += amount;
+        pfTotalBought += amount * price;
+      } else if (qt === "SELL" || qt === "ASK") {
+        pfSharesSold += amount;
+        pfTotalSold += amount * price;
+      }
+    }
+
+    // If we couldn't determine PF side, infer from Poly side (arb = opposite)
+    if (!pfSide) pfSide = polySide === "YES" ? "NO" : "YES";
+
+    const pfAvgEntry = pfSharesBought > 0 ? pfTotalBought / pfSharesBought : 0;
+    const pfAvgExit = pfSharesSold > 0 ? pfTotalSold / pfSharesSold : 0;
+    const pfEntryPriceCents = Math.round(pfAvgEntry * 10000) / 100; // 0.231 → 23.1
+    const pfExitPriceCents = pfSharesSold > 0 ? Math.round(pfAvgExit * 10000) / 100 : null;
+    const pfPnl = pfTotalSold - pfTotalBought;
+
+    // Poly data
+    const polyEntryPriceCents = polyPos.avgPriceCents || polyPos.entryPriceCents || 0;
+    const polyExitCents = polyPos.exitPriceCents ?? polyPos.avgExitPriceCents ?? null;
+    const polyShares = polyPos.shares || 0;
+    const polyBet = polyPos.initialValueUsd || 0;
+    const polyDebug = polyPos._debug || {};
+    const polyTotalBought = polyDebug.totalBought || polyBet;
+    const polyTotalSold = polyDebug.totalSold || 0;
+    const polyPnl = polyTotalSold - polyTotalBought;
+
+    const pfBet = pfTotalBought;
+    const totalBet = polyBet + pfBet;
+    const entryTotalCents = polyEntryPriceCents + pfEntryPriceCents;
+
+    // Total P&L = Poly cash flow + PF cash flow
+    const finalClosedPnl = polyPnl + pfPnl;
+    const finalPnlPercent = totalBet > 0 ? (finalClosedPnl / totalBet) * 100 : 0;
+    const finalResult = finalClosedPnl > 0.01 ? "won" : finalClosedPnl < -0.01 ? "lost" : "even";
+
+    const safePolyKey = String(polyPos.roundKey || polyPos.conditionId || polyPos.marketId || "poly").replace(/[^a-zA-Z0-9_-]/g, "_");
+
+    closedArbPairs.push({
+      id: `closed_pf_${safePolyKey}`,
+
+      marketTitle: polyPos.marketTitle,
+      marketTitleBase: polyPos.marketTitle,
+      outcomeDisplay: "",
+      thumbnailUrl: polyPos.thumbnailUrl || null,
+      matchScore: pfMatch.score,
+      matchType: "predictfun-verified",
+
+      legs: [
+        {
+          platform: "polymarket",
+          side: polySide,
+          sideLabel: null,
+          shares: polyShares,
+          entryPriceCents: polyEntryPriceCents,
+          exitPriceCents: polyExitCents,
+          currentPriceCents: polyPos.currentPriceCents,
+          valueUsd: polyBet,
+          pnlUsd: Math.round(polyPnl * 100) / 100,
+          link: polyPos.marketUrl,
+        },
+        {
+          platform: "predictfun",
+          side: pfSide,
+          sideLabel: null,
+          shares: Math.round(pfSharesBought * 100) / 100,
+          entryPriceCents: pfEntryPriceCents,
+          exitPriceCents: pfExitPriceCents,
+          currentPriceCents: null,
+          valueUsd: Math.round(pfBet * 100) / 100,
+          pnlUsd: Math.round(pfPnl * 100) / 100,
+          link: null,
+        },
+      ],
+
+      entryTotalCents: Math.round(entryTotalCents * 100) / 100,
+      entryYesCents: polySide === "YES" ? polyEntryPriceCents : pfEntryPriceCents,
+      entryNoCents: polySide === "NO" ? polyEntryPriceCents : pfEntryPriceCents,
+      arbitragePct: Math.round((100 - entryTotalCents) * 100) / 100,
+      entryArbPct: Math.round((100 - entryTotalCents) * 100) / 100,
+
+      polyBet: Math.round(polyBet * 100) / 100,
+      opinionBet: Math.round(pfBet * 100) / 100,
+      totalBet: Math.round(totalBet * 100) / 100,
+      totalCost: Math.round(totalBet * 100) / 100,
+
+      polyPnl: Math.round(polyPnl * 100) / 100,
+      opinionPnl: Math.round(pfPnl * 100) / 100,
+      closedPnl: Math.round(finalClosedPnl * 100) / 100,
+      realizedPnl: Math.round(finalClosedPnl * 100) / 100,
+      closedPnlPercent: Math.round(finalPnlPercent * 100) / 100,
+      realizedPnlPercent: Math.round(finalPnlPercent * 100) / 100,
+
+      _cashFlow: {
+        polyBought: Math.round(polyTotalBought * 100) / 100,
+        polySold: Math.round(polyTotalSold * 100) / 100,
+        pfBought: Math.round(pfTotalBought * 100) / 100,
+        pfSold: Math.round(pfTotalSold * 100) / 100,
+        calculationMethod: "actual-trades",
+      },
+
+      closedAt: polyPos.closedAt || Date.now(),
+      result: finalResult,
+      usedArbCalculation: false,
+
+      roundMeta: {
+        polyRoundKey: polyPos.roundKey || null,
+        predictfunRoundKey: pfMatch.pfMarketId || null,
+        polyClosedAt: polyPos.closedAt || null,
+        predictfunClosedAt: null,
+        note: "PredictFun leg verified via matchEventLog trade history",
+      },
+    });
+
+    console.log(`[PF-Closed] Created pair: "${polyPos.marketTitle}" Poly=${polySide}@${polyEntryPriceCents}¢→${polyExitCents ?? "?"}¢ PF=${pfSide}@${pfEntryPriceCents}¢→${pfExitPriceCents ?? "?"}¢ PnL=$${finalClosedPnl.toFixed(2)} (actual-trades)`);
+  }
+
+  console.log("[PF-Closed] Created", closedArbPairs.length, "closed arb pairs");
+  return closedArbPairs;
 }
 
 // ============================================================================
@@ -2235,7 +2753,7 @@ export async function GET(request) {
   try {
     const auth = await requireArbitrageAccess(request);
     if (!auth.ok) {
-      const response = NextResponse.json(
+      const response = jsonNoStore(
         { success: false, error: auth.error, reason: auth.reason },
         { status: auth.status }
       );
@@ -2244,60 +2762,242 @@ export async function GET(request) {
     }
 
     const { searchParams } = new URL(request.url);
-    
-    // Get wallet addresses
+
+    // Get wallet addresses and exchange mode
     const polyWallet = searchParams.get("polyWallet")?.trim();
     const opinionWallet = searchParams.get("opinionWallet")?.trim() || polyWallet;
     const requestType = searchParams.get("type")?.trim() || "active"; // "active" or "closed"
-    
+    const exchangeB = searchParams.get("exchangeB")?.trim() || "opinion"; // "opinion" or "predictfun"
+    const isPredictFunMode = exchangeB === "predictfun";
+
     // Validate wallets
     if (!polyWallet) {
-      return NextResponse.json(
+      return jsonNoStore(
         { error: "polyWallet parameter is required" },
         { status: 400 }
       );
     }
-    
+
     if (!isValidWallet(polyWallet)) {
-      return NextResponse.json(
+      return jsonNoStore(
         { error: "Invalid polyWallet address format" },
         { status: 400 }
       );
     }
-    
+
     if (!isValidWallet(opinionWallet)) {
-      return NextResponse.json(
-        { error: "Invalid opinionWallet address format" },
+      return jsonNoStore(
+        { error: "Invalid opinionWallet/predictfunWallet address format" },
         { status: 400 }
       );
     }
-    
-    console.log("[wallet-positions] Fetching for poly:", polyWallet, "opinion:", opinionWallet, "type:", requestType);
-    
+
+    console.log("[wallet-positions] Fetching for poly:", polyWallet, "exchangeB:", exchangeB, "wallet:", opinionWallet, "type:", requestType);
+
+    let arbPositions = [];
+    let closedArbPositions = [];
+    let exchangeBPositions = [];
+
+    if (isPredictFunMode) {
+      // ====== Polymarket + Predict.fun mode ======
+      const [polyPositions, pfPositions] = await Promise.all([
+        fetchPolymarketPositions(polyWallet),
+        fetchPredictFunPositions(opinionWallet),
+      ]);
+
+      exchangeBPositions = pfPositions;
+
+      // Match active positions
+      arbPositions = matchPolyPredictFunPositions(polyPositions, pfPositions);
+      arbPositions.sort((a, b) => b.arbitragePct - a.arbitragePct);
+
+      console.log("[wallet-positions] Found", arbPositions.length, "active Poly-PredictFun arb pairs");
+
+      // Closed positions: verify PF wallet actually traded via matchEventLog
+      if (requestType === "closed") {
+        try {
+          const polyTrades = await fetchPolymarketTrades(polyWallet);
+          const activePolyConditionIds = new Set(polyPositions.map(p => p.conditionId));
+          const polyClosedPositions = aggregatePolymarketTrades(polyTrades, activePolyConditionIds);
+
+          console.log("[wallet-positions] PredictFun closed: found", polyClosedPositions.length, "poly closed rounds");
+
+          // Load PF catalog with market IDs for title matching
+          let pfCatalog = [];
+          try {
+            const { fetchAllPredictFunMarkets } = await import("@/lib/predictfun");
+            const pfMarkets = await fetchAllPredictFunMarkets({ maxMarkets: 300, pageSize: 100 });
+            pfCatalog = pfMarkets.map(m => ({
+              id: m.id,
+              title: m.category?.title || m._categoryTitle || m.title || m.question || "",
+              marketTitle: m.title || m.question || "",
+            }));
+            console.log("[wallet-positions] PredictFun catalog (REST): loaded", pfCatalog.length, "markets");
+          } catch (catErr) {
+            console.warn("[wallet-positions] PredictFun catalog REST failed, trying GraphQL:", catErr.message);
+            // Fallback: use GraphQL markets query (public, no auth needed)
+            try {
+              const { predictFunGraphqlFetch } = await import("@/lib/predictfunHiddenGraphql");
+              const gqlQuery = `query($pagination: ForwardPaginationInput) {
+                markets(pagination: $pagination) {
+                  edges { node { id title question category { id title } } }
+                  pageInfo { hasNextPage endCursor }
+                }
+              }`;
+              let cursor = null;
+              for (let page = 0; page < 5; page++) {
+                const data = await predictFunGraphqlFetch(gqlQuery, {
+                  pagination: { first: 100, ...(cursor ? { after: cursor } : {}) },
+                });
+                const edges = data?.markets?.edges || [];
+                if (!edges.length) break;
+                for (const e of edges) {
+                  const m = e.node;
+                  pfCatalog.push({
+                    id: m.id,
+                    title: m.category?.title || m.title || m.question || "",
+                    marketTitle: m.title || m.question || "",
+                  });
+                }
+                if (!data?.markets?.pageInfo?.hasNextPage) break;
+                cursor = data?.markets?.pageInfo?.endCursor;
+                if (!cursor) break;
+              }
+              console.log("[wallet-positions] PredictFun catalog (GraphQL): loaded", pfCatalog.length, "markets");
+            } catch (gqlErr) {
+              console.warn("[wallet-positions] PredictFun catalog GraphQL also failed:", gqlErr.message);
+            }
+          }
+
+          // Also add active PF positions as known markets
+          for (const pf of pfPositions) {
+            if (pf.marketId) {
+              pfCatalog.push({
+                id: pf.marketId,
+                title: pf.marketTitle || pf.categoryTitle || "",
+                marketTitle: pf.marketTitle || "",
+              });
+            }
+          }
+
+          // Title-match poly closed positions → PF market IDs
+          const TITLE_THRESHOLD = 0.5; // Lower threshold OK — we verify via matchEventLog
+          const polyToPfMap = new Map();
+          const uniquePfMarketIds = new Set();
+
+          for (const polyPos of polyClosedPositions) {
+            const polySide = (polyPos.side || "").toUpperCase();
+            if (polySide !== "YES" && polySide !== "NO") continue;
+
+            const polyTitle = polyPos.marketTitle || "";
+            let bestScore = 0, bestPf = null;
+
+            for (const pf of pfCatalog) {
+              for (const t of [pf.title, pf.marketTitle].filter(Boolean)) {
+                const score = titleSimilarity(polyTitle, t);
+                if (score > bestScore) { bestScore = score; bestPf = pf; }
+                if (score >= 0.95) break;
+              }
+              if (bestScore >= 0.95) break;
+            }
+
+            const polyKey = polyPos.roundKey || polyPos.conditionId || "";
+            if (bestScore >= TITLE_THRESHOLD && bestPf) {
+              polyToPfMap.set(polyKey, { pfMarketId: bestPf.id, pfTitle: bestPf.title, score: bestScore });
+              uniquePfMarketIds.add(bestPf.id);
+            }
+          }
+
+          console.log("[wallet-positions] PF title matches:", polyToPfMap.size, "poly rounds →", uniquePfMarketIds.size, "unique PF markets");
+
+          // Verify each PF market using matchEventLog — check if PF wallet actually traded
+          const { fetchPredictFunAllMatchEvents } = await import("@/lib/predictfunHiddenGraphql");
+          const pfWalletLower = opinionWallet.toLowerCase();
+          const pfTradesByMarketId = new Map();
+
+          const pfMarketIds = [...uniquePfMarketIds];
+          const BATCH = 5;
+          for (let i = 0; i < pfMarketIds.length; i += BATCH) {
+            const batch = pfMarketIds.slice(i, i + BATCH);
+            const results = await Promise.allSettled(
+              batch.map(id => fetchPredictFunAllMatchEvents({ marketId: id, maxEvents: 500, pageSize: 100 }))
+            );
+            for (let j = 0; j < batch.length; j++) {
+              if (results[j].status !== "fulfilled") continue;
+              const edges = results[j].value || [];
+              const walletTrades = edges
+                .map(e => e?.node)
+                .filter(n => n?.account?.address?.toLowerCase() === pfWalletLower);
+              if (walletTrades.length > 0) {
+                pfTradesByMarketId.set(batch[j], walletTrades);
+                console.log(`[wallet-positions] PF wallet confirmed: market ${batch[j]} has ${walletTrades.length} trades`);
+              }
+            }
+          }
+
+          console.log("[wallet-positions] PF wallet verified on", pfTradesByMarketId.size, "of", uniquePfMarketIds.size, "candidate markets");
+
+          // Only keep poly positions confirmed via matchEventLog
+          const confirmedPolyPositions = polyClosedPositions.filter(p => {
+            const polyKey = p.roundKey || p.conditionId || "";
+            const match = polyToPfMap.get(polyKey);
+            if (!match) return false;
+            return pfTradesByMarketId.has(match.pfMarketId);
+          });
+
+          console.log("[wallet-positions] Confirmed poly positions:", confirmedPolyPositions.length);
+
+          closedArbPositions = matchPolyPredictFunClosedPositions(confirmedPolyPositions, pfTradesByMarketId, polyToPfMap);
+          closedArbPositions.sort((a, b) => (b.closedPnl || 0) - (a.closedPnl || 0));
+
+          console.log("[wallet-positions] Found", closedArbPositions.length, "closed Poly-PredictFun arb pairs");
+        } catch (err) {
+          console.error("[wallet-positions] Error fetching PredictFun closed positions:", err.message);
+        }
+      }
+
+      // Strip internal debug fields before sending to client
+      const stripInternal = (arr) => arr.map(({ _raw, _debug, _cashFlow, ...rest }) => rest);
+
+      return jsonNoStore({
+        success: true,
+        matched: stripInternal(arbPositions),
+        arbPositions: stripInternal(arbPositions),
+        closedArb: stripInternal(closedArbPositions),
+        polyPositions: stripInternal(polyPositions),
+        exchangeBPositions: stripInternal(pfPositions),
+        summary: {
+          polyCount: polyPositions.length,
+          exchangeBCount: pfPositions.length,
+          arbCount: arbPositions.length,
+          closedArbCount: closedArbPositions.length,
+        },
+      });
+    }
+
+    // ====== Original Polymarket + Opinion mode ======
     // Fetch active positions from both platforms in parallel
     const [polyPositions, opinionPositions] = await Promise.all([
       fetchPolymarketPositions(polyWallet),
       fetchOpinionPositions(opinionWallet),
     ]);
-    
+
     // Match active positions to find arb pairs
-    const arbPositions = matchArbPositions(polyPositions, opinionPositions);
-    
+    arbPositions = matchArbPositions(polyPositions, opinionPositions);
+
     // Sort by arbitrage percentage (highest first)
     arbPositions.sort((a, b) => b.arbitragePct - a.arbitragePct);
-    
+
     console.log("[wallet-positions] Found", arbPositions.length, "active arb pairs");
-    
+
     // If requesting closed positions, fetch and match them
-    let closedArbPositions = [];
-    
     if (requestType === "closed") {
       // Fetch raw trades from both platforms
       const [polyTrades, opinionTrades] = await Promise.all([
         fetchPolymarketTrades(polyWallet),
         fetchOpinionTrades(opinionWallet),
       ]);
-      
+
       // Get active position IDs to exclude
       const activePolyConditionIds = new Set(polyPositions.map(p => p.conditionId));
       const activeOpinionPositionsByKey = new Map();
@@ -2305,24 +3005,24 @@ export async function GET(request) {
         const outcomeSide = pos.side === "YES" ? 1 : 2;
         activeOpinionPositionsByKey.set(`${String(pos.marketId)}:${outcomeSide}`, pos);
       }
-      
+
       // Aggregate trades into closed positions
       const polyClosedPositions = aggregatePolymarketTrades(polyTrades, activePolyConditionIds);
       const opinionClosedPositions = aggregateOpinionTrades(opinionTrades, activeOpinionPositionsByKey);
-      
+
       // Match closed positions to find completed arb trades
       closedArbPositions = matchClosedArbPositions(polyClosedPositions, opinionClosedPositions);
-      
+
       // Sort by P&L (highest first)
       closedArbPositions.sort((a, b) => (b.closedPnl || 0) - (a.closedPnl || 0));
-      
+
       console.log("[wallet-positions] Found", closedArbPositions.length, "closed arb pairs");
     }
     
     // Strip internal debug fields before sending to client
     const stripInternal = (arr) => arr.map(({ _raw, _debug, _cashFlow, ...rest }) => rest);
 
-    return NextResponse.json({
+    return jsonNoStore({
       success: true,
       matched: stripInternal(arbPositions),
       arbPositions: stripInternal(arbPositions),
@@ -2339,7 +3039,7 @@ export async function GET(request) {
     
   } catch (error) {
     console.error("[wallet-positions] Error:", error);
-    return NextResponse.json(
+    return jsonNoStore(
       { error: "Internal server error" },
       { status: 500 }
     );

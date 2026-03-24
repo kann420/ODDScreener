@@ -42,6 +42,10 @@ nff_check.txt
 *_result.txt
 trending_test.json
 warm_test.txt
+.tmp/
+.tmp-*.html
+*.out
+*.err
 
 # Generated reports - local only
 reports/
