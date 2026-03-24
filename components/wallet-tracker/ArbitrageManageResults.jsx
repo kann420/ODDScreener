@@ -718,7 +718,7 @@ function ClosedArbRow({ row }) {
             {row.legs?.map((leg, i) => (
               <span key={i} className="closed-leg-mini">
                 {getPlatformIcon(leg.platform)}
-                <span>{leg.shares?.toFixed(0) || 0} <SideBadge side={leg.side} sideLabel={leg.sideLabel} /> @{formatCents(leg.exitPriceCents ?? leg.entryPriceCents ?? 0)}</span>
+                <span>{leg.shares?.toFixed(0) || 0} <SideBadge side={leg.side} sideLabel={leg.sideLabel} /> @{formatCents(leg.entryPriceCents ?? 0)}{leg.exitPriceCents != null ? ` → ${formatCents(leg.exitPriceCents)}` : ""}</span>
               </span>
             ))}
           </div>
@@ -793,7 +793,7 @@ function ClosedArbCardMobile({ row }) {
         {row.legs?.map((leg, i) => (
           <div key={i} className="closed-leg-mini">
             {getPlatformIcon(leg.platform)}
-            <span>{leg.shares?.toFixed(0) || 0} shares <SideBadge side={leg.side} sideLabel={leg.sideLabel} /> @{formatCents(leg.exitPriceCents ?? leg.entryPriceCents ?? 0)}</span>
+            <span>{leg.shares?.toFixed(0) || 0} shares <SideBadge side={leg.side} sideLabel={leg.sideLabel} /> @{formatCents(leg.entryPriceCents ?? 0)}{leg.exitPriceCents != null ? ` → ${formatCents(leg.exitPriceCents)}` : ""}</span>
           </div>
         ))}
       </div>

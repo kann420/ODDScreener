@@ -547,9 +547,7 @@ export default function ArbitrageManagePanel() {
     // Save wallets to localStorage for future use
     saveWalletAddress(finalPoly);
     saveWalletAddress(finalOpinion);
-    
-    // For now, just show a placeholder message
-    // (Real scanning logic will be implemented next)
+
     setSubmitted(true);
   };
   
@@ -878,7 +876,7 @@ export default function ArbitrageManagePanel() {
             <div className="arb-error">{opinionError}</div>
           )}
         </div>
-        
+
         {/* Track Wallet Button */}
         <button
           type="button"
