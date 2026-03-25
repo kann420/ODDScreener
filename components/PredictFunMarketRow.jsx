@@ -216,7 +216,9 @@ function PredictFunMarketRow({
     return market.isBoosted === true;
   })();
   const boostStartsAtText =
-    showBoostTime && market?.isBoosted ? fmtBoostStartsAtUtc(market?.boostStartsAt) : "";
+    showBoostTime && market?.isBoosted && !boostActive
+      ? fmtBoostStartsAtUtc(market?.boostStartsAt)
+      : "";
   const showBoostBadge = isBoost || market?.isBoosted || boostActive;
 
   const detailUrl = market?.id ? `/predictfun/market/${market.id}` : "/predictfun";
