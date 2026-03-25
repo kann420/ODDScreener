@@ -33,7 +33,7 @@ export async function GET(req) {
     // Fetch from both exchanges
     const [opinionMarkets, polyEvents] = await Promise.all([
       fetchAllOpinionMarkets({ limit: 20, maxPages, maxTotalMarkets }),
-      fetchAllPolymarketEvents({ limit: 100, maxPages: mode === "full" ? 30 : 10 }),
+      fetchAllPolymarketEvents({ limit: 200, maxPages: mode === "full" ? 30 : 10 }),
     ]);
 
     console.log(`Opinion markets: ${opinionMarkets.length}`);

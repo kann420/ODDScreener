@@ -9,6 +9,7 @@ import {
   getProbableBoostedCache,
   setProbableBoostedCache,
 } from "@/lib/clientCache";
+import { complementYesPrice } from "@/lib/utils/predictfunOrderbook";
 
 // ── Platform definitions (logos + labels) ──────────────────────────────────
 const PLATFORMS = [
@@ -266,9 +267,86 @@ function isMarchMadnessRow(row) {
   );
 }
 
+function computeBinaryArbClient({ opYes, opNo, polyYes, polyNo, labels, priceMode = "asks" }) {
+  const dirs = [];
+  const isAsks = priceMode === "asks";
+  const actionWord = isAsks ? "Buy" : "Sell";
+
+  const polyYesLabel = labels?.polyYesLabel || "YES";
+  const polyNoLabel = labels?.polyNoLabel || "NO";
+  const opYesLabel = labels?.opYesLabel || "YES";
+  const opNoLabel = labels?.opNoLabel || "NO";
+  const polyTag = labels?.polyTag || "Poly";
+  const opTag = labels?.opTag || "Opinion";
+
+  const toCents = (value) => (Number.isFinite(value) ? value * 100 : null);
+  const allPrices = {
+    polyYes: toCents(polyYes),
+    polyNo: toCents(polyNo),
+    opYes: toCents(opYes),
+    opNo: toCents(opNo),
+    polyYesLabel,
+    polyNoLabel,
+    opYesLabel,
+    opNoLabel,
+    polyTag,
+    opTag,
+  };
+
+  if (Number.isFinite(polyYes) && Number.isFinite(opNo)) {
+    const total = polyYes + opNo;
+    const arb = isAsks ? 1 - total : total - 1;
+    dirs.push({
+      cost: total,
+      arb,
+      strategy: [`${actionWord} ${polyYesLabel} (${polyTag})`, `${actionWord} ${opNoLabel} (${opTag})`],
+      prices: allPrices,
+    });
+  }
+
+  if (Number.isFinite(polyNo) && Number.isFinite(opYes)) {
+    const total = polyNo + opYes;
+    const arb = isAsks ? 1 - total : total - 1;
+    dirs.push({
+      cost: total,
+      arb,
+      strategy: [`${actionWord} ${polyNoLabel} (${polyTag})`, `${actionWord} ${opYesLabel} (${opTag})`],
+      prices: allPrices,
+    });
+  }
+
+  dirs.sort((a, b) => b.arb - a.arb);
+  const best = dirs[0] || null;
+  if (!best) return null;
+
+  return {
+    ...best,
+    strategyMode: isAsks ? "buy" : "sell",
+  };
+}
+
+function mapOrderbookSnapshot(payload) {
+  const bestBid = Array.isArray(payload?.bids) ? payload.bids[0] : null;
+  const bestAsk = Array.isArray(payload?.asks) ? payload.asks[0] : null;
+  const bidPrice = Number(bestBid?.price);
+  const askPrice = Number(bestAsk?.price);
+  const bidSize = Number(bestBid?.shares);
+  const askSize = Number(bestAsk?.shares);
+  const parsedPrecision = Number(payload?.decimalPrecision);
+  return {
+    bestBid: Number.isFinite(bidPrice) ? bidPrice : null,
+    bestBidSize: Number.isFinite(bidSize) ? bidSize : 0,
+    bestAsk: Number.isFinite(askPrice) ? askPrice : null,
+    bestAskSize: Number.isFinite(askSize) ? askSize : 0,
+    decimalPrecision: Number.isInteger(parsedPrecision) && parsedPrecision >= 0
+      ? parsedPrecision
+      : null,
+  };
+}
+
 function isLiveRow(row) {
   // A market is "live" when:
-  // 1. Category status is OPEN and visible
+  // 1. Category status is OPEN, visible, and a sports/esports live-supported variant
   // 2. now >= startsAt && now < endsAt
   // 3. Market is visible, tradingStatus OPEN, not resolved
   const now = Date.now();
@@ -277,6 +355,8 @@ function isLiveRow(row) {
   const catStatus = String(row?.pfCategoryStatus || "").toUpperCase();
   if (catStatus !== "OPEN") return false;
   if (row?.pfCategoryIsVisible === false) return false;
+  const categoryVariant = String(row?.pfCategoryMarketVariant || row?.pfMarketVariant || "").toUpperCase();
+  if (!PREDICTFUN_LIVE_UI_MARKET_VARIANTS.has(categoryVariant)) return false;
 
   // Time window: must have started and not ended
   const startMs = row?.startDate ? Date.parse(row.startDate) : null;
@@ -410,6 +490,91 @@ function ArbSortIcon({ active, direction }) {
   );
 }
 
+function InfoTooltip({ text }) {
+  const [show, setShow] = useState(false);
+
+  return (
+    <span
+      style={{
+        position: "relative",
+        display: "inline-flex",
+        alignItems: "center",
+        cursor: "help",
+      }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      title={text}
+    >
+      <svg
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true"
+        style={{
+          color: "rgba(233,238,245,0.45)",
+          transition: "color 0.15s",
+          flexShrink: 0,
+        }}
+      >
+        <circle cx="12" cy="12" r="10" fill="currentColor" opacity="0.12" />
+        <circle cx="12" cy="12" r="9.25" stroke="currentColor" strokeWidth="1.5" />
+        <circle cx="12" cy="8" r="1.25" fill="currentColor" />
+        <path
+          d="M12 11v5"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+      </svg>
+      {show && (
+        <div
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: "calc(100% + 8px)",
+            transform: "translateX(-50%)",
+            zIndex: 50,
+            width: 220,
+            padding: "10px 11px",
+            borderRadius: 8,
+            background: "rgba(15,18,25,0.98)",
+            border: "1px solid rgba(255,255,255,0.12)",
+            boxShadow: "0 10px 28px rgba(0,0,0,0.45)",
+            color: "rgba(233,238,245,0.92)",
+            fontSize: 12,
+            fontWeight: 600,
+            lineHeight: 1.45,
+            whiteSpace: "normal",
+            pointerEvents: "none",
+          }}
+        >
+          {text}
+        </div>
+      )}
+    </span>
+  );
+}
+
+function FilterLabel({ text, tooltip }) {
+  return (
+    <label
+      style={{
+        fontSize: 11,
+        fontWeight: 800,
+        color: "rgba(233,238,245,0.6)",
+        minHeight: 13,
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+      }}
+    >
+      <span>{text}</span>
+      <InfoTooltip text={tooltip} />
+    </label>
+  );
+}
+
 const PREDICTFUN_LOGO_SRC = "/predictfun_logo.svg?v=20260306";
 
 // Platform display maps
@@ -449,6 +614,10 @@ const platformVolBgColor = {
   probable: "rgba(168,85,247,0.1)",
   predictfun: "rgba(99,102,241,0.1)",
 };
+const PREDICTFUN_LIVE_UI_MARKET_VARIANTS = new Set([
+  "SPORTS_MATCH",
+  "SPORTS_TEAM_MATCH",
+]);
 
 export default function ArbitageBoard() {
   const [rows, setRows] = useState([]);
@@ -464,7 +633,8 @@ export default function ArbitageBoard() {
 
   // Filter settings
   const [minArbPct, setMinArbPct] = useState(0.1); // Min arb percentage
-  const [minShares, setMinShares] = useState(0); // Min shares on orderbook
+  const [minShares, setMinShares] = useState(0); // Min shares based on profit column max size
+  const [maxSharesFilter, setMaxSharesFilter] = useState(0); // Max shares based on profit column max size
   const [minPolyVol, setMinPolyVol] = useState(0); // Min Poly 24h volume
   const [minOpnVol, setMinOpnVol] = useState(0); // Min OPN 24h volume
   const [showFilters, setShowFilters] = useState(true); // Toggle filter panel - default open
@@ -492,6 +662,8 @@ export default function ArbitageBoard() {
   const [progress, setProgress] = useState(null); // { phase, current, total, message }
   const [streamingRows, setStreamingRows] = useState([]); // Rows received while streaming
   const eventSourceRef = useRef(null);
+  const rowsRef = useRef(rows);
+  const liveRefreshInFlightRef = useRef(false);
 
   // Bonus markets filter
   const [bonusIds, setBonusIds] = useState([]);
@@ -520,7 +692,12 @@ export default function ArbitageBoard() {
   const [boostedPredictFunOnly, setBoostedPredictFunOnly] = useState(false);
   const [marchMadnessOnly, setMarchMadnessOnly] = useState(false);
   const [liveOnly, setLiveOnly] = useState(false);
+  const loadingRef = useRef(false);
   const ignoreMinArbPct = marchMadnessOnly || liveOnly;
+
+  useEffect(() => {
+    rowsRef.current = rows;
+  }, [rows]);
 
   // Update "X ago" display every 30 seconds
   useEffect(() => {
@@ -799,12 +976,14 @@ export default function ArbitageBoard() {
       try {
         const match = JSON.parse(e.data);
         setStreamingRows((prev) => {
-          // Dedupe by id
-          if (prev.some((r) => r.id === match.id)) return prev;
-          const newRows = [...prev, match];
-          // Sort by arbPct descending
-          newRows.sort((a, b) => (b.arbPct ?? 0) - (a.arbPct ?? 0));
-          return newRows;
+          // Upsert by id so Auto Scan refreshes arbPct/strategy in real-time.
+          const idx = prev.findIndex((r) => r.id === match.id);
+          const next = idx >= 0 ? [...prev] : [...prev, match];
+          if (idx >= 0) {
+            next[idx] = { ...prev[idx], ...match };
+          }
+          next.sort((a, b) => (b.arbPct ?? 0) - (a.arbPct ?? 0));
+          return next;
         });
       } catch {}
     });
@@ -814,12 +993,26 @@ export default function ArbitageBoard() {
         const { rows: batchRows } = JSON.parse(e.data);
         if (Array.isArray(batchRows) && batchRows.length > 0) {
           setStreamingRows((prev) => {
-            const ids = new Set(prev.map((r) => r.id));
-            const newOnes = batchRows.filter((r) => !ids.has(r.id));
-            if (newOnes.length === 0) return prev;
-            const combined = [...prev, ...newOnes];
-            combined.sort((a, b) => (b.arbPct ?? 0) - (a.arbPct ?? 0));
-            return combined;
+            const next = [...prev];
+            const byId = new Map(next.map((r, i) => [r.id, i]));
+            let changed = false;
+
+            for (const r of batchRows) {
+              if (!r?.id) continue;
+              const idx = byId.get(r.id);
+              if (idx == null) {
+                byId.set(r.id, next.length);
+                next.push(r);
+                changed = true;
+                continue;
+              }
+              next[idx] = { ...next[idx], ...r };
+              changed = true;
+            }
+
+            if (!changed) return prev;
+            next.sort((a, b) => (b.arbPct ?? 0) - (a.arbPct ?? 0));
+            return next;
           });
         }
       } catch {}
@@ -896,6 +1089,10 @@ export default function ArbitageBoard() {
     };
   }, [priceMode, minArbPct, scanMode, platformA, platformB, liveOnly, marchMadnessOnly]);
 
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
+
   // Fallback: use regular fetch if SSE fails
   const loadDataFallback = useCallback(async () => {
     try {
@@ -903,7 +1100,8 @@ export default function ArbitageBoard() {
       setErr("");
       setProgress({ phase: "loading", message: "Loading..." });
 
-      const url = `/api/arbitage/opportunities?mode=auto&priceMode=${encodeURIComponent(priceMode)}&minArbPct=${encodeURIComponent(minArbPct)}&platformA=${encodeURIComponent(platformA)}&platformB=${encodeURIComponent(platformB)}&limit=50&t=${Date.now()}`;
+      const eventFilter = liveOnly ? "live" : marchMadnessOnly ? "march-madness" : "";
+      const url = `/api/arbitage/opportunities?mode=auto&priceMode=${encodeURIComponent(priceMode)}&minArbPct=${encodeURIComponent(minArbPct)}&platformA=${encodeURIComponent(platformA)}&platformB=${encodeURIComponent(platformB)}&limit=50${eventFilter ? `&predictFunEvent=${encodeURIComponent(eventFilter)}` : ""}&t=${Date.now()}`;
 
       const res = await fetch(url, { cache: "no-store" });
       const json = await res.json();
@@ -939,6 +1137,148 @@ export default function ArbitageBoard() {
       setProgress(null);
     }
   }, [priceMode, minArbPct, platformA, platformB]);
+
+  const refreshLiveRows = useCallback(async () => {
+    if (!liveOnly) return;
+    if (liveRefreshInFlightRef.current) return;
+
+    const sourceRows = (rowsRef.current || []).filter((row) => isLiveRow(row));
+    if (sourceRows.length === 0) return;
+
+    liveRefreshInFlightRef.current = true;
+    try {
+      const refreshStartMs = Date.now();
+      const now = Date.now();
+
+      const refreshed = await Promise.all(
+        sourceRows.map(async (row) => {
+          const tokenIds = row?.tokenIds || {};
+          const sideAPlatform = row?.platformA || row?.sideA?.platform || "polymarket";
+          const sideBPlatform = row?.platformB || row?.sideB?.platform || "opinion";
+          const isPredictFunSideB = sideBPlatform === "predictfun";
+
+          const fetchTop = async (platform, tokenId) => {
+            if (!platform || !tokenId) return null;
+            const apiPlatform = platform === "polymarket" ? "poly" : platform;
+            try {
+              const res = await fetch(
+                `/api/arbitage/orderbook?platform=${encodeURIComponent(apiPlatform)}&token_id=${encodeURIComponent(tokenId)}&fresh=1&t=${now}`,
+                { cache: "no-store" },
+              );
+              const json = await res.json();
+              if (!res.ok || !json?.ok) return null;
+              return mapOrderbookSnapshot(json);
+            } catch {
+              return null;
+            }
+          };
+
+          const [opYesBook, opNoBook, polyYesBook, polyNoBook] = await Promise.all([
+            fetchTop(sideAPlatform, tokenIds.opYes),
+            fetchTop(sideAPlatform, tokenIds.opNo),
+            fetchTop(sideBPlatform, tokenIds.polyYes),
+            isPredictFunSideB ? Promise.resolve(null) : fetchTop(sideBPlatform, tokenIds.polyNo),
+          ]);
+
+          const pickPrice = (book) =>
+            priceMode === "bids" ? book?.bestBid ?? null : book?.bestAsk ?? null;
+          const pickSize = (book) =>
+            priceMode === "bids" ? book?.bestBidSize ?? 0 : book?.bestAskSize ?? 0;
+
+          const pickPredictFunPairSide = (book, side) => {
+            if (!book) return { price: null, size: 0 };
+            const bestBidPrice = Number(book.bestBid);
+            const bestAskPrice = Number(book.bestAsk);
+            const bestBidSize = Number(book.bestBidSize ?? 0);
+            const bestAskSize = Number(book.bestAskSize ?? 0);
+            const precision = Number.isInteger(book.decimalPrecision) ? book.decimalPrecision : 2;
+
+            if (side === "yes") {
+              return {
+                price: priceMode === "bids" ? bestBidPrice : bestAskPrice,
+                size: priceMode === "bids" ? bestBidSize : bestAskSize,
+              };
+            }
+
+            const rawPrice = priceMode === "bids" ? bestAskPrice : bestBidPrice;
+            const price = Number.isFinite(rawPrice) ? complementYesPrice(rawPrice, precision) : null;
+            return {
+              price,
+              size: priceMode === "bids" ? bestAskSize : bestBidSize,
+            };
+          };
+
+          const opYes = pickPrice(opYesBook);
+          const opNo = pickPrice(opNoBook);
+          const polyYesInfo = isPredictFunSideB
+            ? pickPredictFunPairSide(polyYesBook, "yes")
+            : { price: pickPrice(polyYesBook), size: pickSize(polyYesBook) };
+          const polyNoInfo = isPredictFunSideB
+            ? pickPredictFunPairSide(polyYesBook, "no")
+            : { price: pickPrice(polyNoBook), size: pickSize(polyNoBook) };
+          const polyYes = polyYesInfo.price;
+          const polyNo = polyNoInfo.price;
+
+          if (
+            !Number.isFinite(opYes) ||
+            !Number.isFinite(opNo) ||
+            !Number.isFinite(polyYes) ||
+            !Number.isFinite(polyNo)
+          ) {
+            return row;
+          }
+
+          const best = computeBinaryArbClient({
+            opYes,
+            opNo,
+            polyYes,
+            polyNo,
+            labels: row?.prices || {},
+            priceMode,
+          });
+          if (!best || !Number.isFinite(best.arb)) {
+            return row;
+          }
+
+          return {
+            ...row,
+            strategy: best.strategy,
+            strategyMode: best.strategyMode || row.strategyMode || (priceMode === "asks" ? "buy" : "sell"),
+            prices: {
+              ...(row.prices || {}),
+              polyYes: Number.isFinite(polyYes) ? polyYes * 100 : row.prices?.polyYes,
+              polyNo: Number.isFinite(polyNo) ? polyNo * 100 : row.prices?.polyNo,
+              opYes: Number.isFinite(opYes) ? opYes * 100 : row.prices?.opYes,
+              opNo: Number.isFinite(opNo) ? opNo * 100 : row.prices?.opNo,
+            },
+            sizes: {
+              polyYes: polyYesInfo.size,
+              polyNo: polyNoInfo.size,
+              opYes: pickSize(opYesBook),
+              opNo: pickSize(opNoBook),
+            },
+            arbPct: best.arb * 100,
+            priceMode,
+            label: priceMode === "asks" ? "Asks" : "Bids",
+          };
+        }),
+      );
+
+      const nextById = new Map(refreshed.filter(Boolean).map((row) => [row.id, row]));
+      if (nextById.size === 0) return;
+
+      const nextRows = (rowsRef.current || []).map((row) => nextById.get(row.id) || row);
+      rowsRef.current = nextRows;
+      setRows(nextRows);
+      setLastScanTime(now);
+      saveCache(priceMode, nextRows, now, matchedMarketCount ?? nextRows.length, platformA, platformB);
+      console.log(
+        `[Auto-Refresh] updated ${nextById.size}/${sourceRows.length} live rows in ${Date.now() - refreshStartMs}ms`,
+      );
+    } finally {
+      liveRefreshInFlightRef.current = false;
+    }
+  }, [liveOnly, matchedMarketCount, platformA, platformB, priceMode]);
 
   function handleRefresh() {
     // Use streaming by default
@@ -1001,6 +1341,10 @@ export default function ArbitageBoard() {
         const volA = sA.statsB?.volume ?? 0;
         const volB = sB.statsB?.volume ?? 0;
         return sortAsc ? volA - volB : volB - volA;
+      } else if (sortField === "profit") {
+        const pA = a.maxProfitUsd ?? -Infinity;
+        const pB = b.maxProfitUsd ?? -Infinity;
+        return sortAsc ? pA - pB : pB - pA;
       } else {
         return sortAsc
           ? (a.arbPct ?? 0) - (b.arbPct ?? 0)
@@ -1012,7 +1356,7 @@ export default function ArbitageBoard() {
       if (liveOnly && !isLiveRow(r)) return false;
 
       // Filter by min arb %
-      if (!ignoreMinArbPct && (r.arbPct ?? 0) < minArbPct) return false;
+      if (!ignoreMinArbPct && (r.arbPct ?? 0) < minArbPct && !isLiveRow(r)) return false;
 
       // Filter by min Poly volume (column A = platformA)
       const mapped = getStatsForDisplay(r, platformA, platformB);
@@ -1023,34 +1367,15 @@ export default function ArbitageBoard() {
       if (minOpnVol > 0 && (mapped.statsB?.volume ?? 0) < minOpnVol)
         return false;
 
-      // Filter by min shares at best bid/ask level
-      // Both sides of the arbitrage trade must have at least minShares
-      if (minShares > 0 && r.sizes) {
-        const relevantSizes = [];
-        const polyLine = Array.isArray(r.strategy) ? r.strategy[0] || "" : "";
-        const opLine = Array.isArray(r.strategy) ? r.strategy[1] || "" : "";
-
-        // Determine which side is bought on each platform using the labels from prices
-        const polyYesLabel = r.prices?.polyYesLabel || "YES";
-        const opYesLabel = r.prices?.opYesLabel || "YES";
-
-        // Poly side: if strategy line contains the "yes" label â†’ polyYes size, else polyNo size
-        if (polyLine.includes(polyYesLabel))
-          relevantSizes.push(r.sizes.polyYes);
-        else relevantSizes.push(r.sizes.polyNo);
-
-        // Opinion side: if strategy line contains the "yes" label â†’ opYes size, else opNo size
-        if (opLine.includes(opYesLabel)) relevantSizes.push(r.sizes.opYes);
-        else relevantSizes.push(r.sizes.opNo);
-
-        // Filter out if we have no size data or any relevant side has less than minShares
-        const validSizes = relevantSizes.filter(
-          (s) => Number.isFinite(s) && s > 0,
-        );
-        if (validSizes.length === 0) return false; // No valid size data
-
-        const minAvailable = Math.min(...validSizes);
-        if (minAvailable < minShares) return false;
+      // Filter by the profit column's max executable size.
+      // This uses the computed trade size in the Profit column, not raw orderbook depth.
+      if (minShares > 0 || maxSharesFilter > 0) {
+        const maxExecutableShares = Number(r.maxShares);
+        if (!Number.isFinite(maxExecutableShares) || maxExecutableShares <= 0)
+          return false;
+        if (minShares > 0 && maxExecutableShares < minShares) return false;
+        if (maxSharesFilter > 0 && maxExecutableShares > maxSharesFilter)
+          return false;
       }
       return true;
     });
@@ -1060,6 +1385,7 @@ export default function ArbitageBoard() {
     sortField,
     minArbPct,
     minShares,
+    maxSharesFilter,
     minPolyVol,
     minOpnVol,
     platformA,
@@ -1159,6 +1485,7 @@ export default function ArbitageBoard() {
     searchQuery,
     minArbPct,
     minShares,
+    maxSharesFilter,
     minPolyVol,
     minOpnVol,
     bonusOnly,
@@ -1733,23 +2060,46 @@ export default function ArbitageBoard() {
                 />
               </div>
 
-              {/* Min Shares */}
+              {/* Min / Max Shares */}
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <label
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 800,
-                    color: "rgba(233,238,245,0.6)",
-                    height: 13,
-                  }}
-                >
-                  MIN SHARES
-                </label>
+                <FilterLabel
+                  text="MIN SHARES"
+                  tooltip="Keeps rows whose Profit column Max size is at least this amount."
+                />
                 <input
                   type="number"
                   value={minShares}
                   onChange={(e) =>
                     setMinShares(Math.max(0, parseInt(e.target.value) || 0))
+                  }
+                  step="100"
+                  min="0"
+                  placeholder="0"
+                  style={{
+                    width: 90,
+                    height: 38,
+                    padding: "0 10px",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    background: "rgba(0,0,0,0.3)",
+                    border: "1px solid rgba(255,255,255,0.15)",
+                    borderRadius: 6,
+                    color: "#e9eef5",
+                    outline: "none",
+                  }}
+                />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <FilterLabel
+                  text="MAX SHARES"
+                  tooltip="Keeps rows whose Profit column Max size is at or below this amount."
+                />
+                <input
+                  type="number"
+                  value={maxSharesFilter}
+                  onChange={(e) =>
+                    setMaxSharesFilter(Math.max(0, parseInt(e.target.value) || 0))
                   }
                   step="100"
                   min="0"
@@ -2423,8 +2773,7 @@ export default function ArbitageBoard() {
                   marginTop: 6,
                 }}
               >
-                March Madness scan includes negative spread rows and ignores Min
-                Arb %.
+                Live (sports/esports) and March Madness scans include negative spread rows and ignore Min Arb %.
               </div>
             )}
           </div>
@@ -2566,9 +2915,9 @@ export default function ArbitageBoard() {
             <button
               type="button"
               onClick={() => {
-                if (!loading) loadDataStreaming();
+                if (!loading && !liveRefreshInFlightRef.current) refreshLiveRows();
               }}
-              disabled={loading}
+              disabled={loading || liveRefreshInFlightRef.current}
               style={{
                 height: 38,
                 padding: "0 16px",
@@ -2621,7 +2970,7 @@ export default function ArbitageBoard() {
             padding: "10px 14px",
             display: "grid",
             gridTemplateColumns:
-              "var(--arbitrage-desktop-grid-columns, 1.1fr 0.45fr 0.42fr 0.42fr 0.55fr 0.32fr 0.24fr)",
+              "var(--arbitrage-desktop-grid-columns, 1.1fr 0.45fr 0.42fr 0.42fr 0.55fr 0.26fr 0.18fr 0.22fr)",
             gap: 10,
             alignItems: "center",
             borderBottom: "1px solid rgba(255,255,255,0.08)",
@@ -2814,6 +3163,44 @@ export default function ArbitageBoard() {
               textTransform: "uppercase",
               letterSpacing: 0.5,
               color:
+                sortField === "profit"
+                  ? "rgba(255,180,50,1)"
+                  : "rgba(233,238,245,0.9)",
+              textAlign: "right",
+              cursor: "pointer",
+              userSelect: "none",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-end",
+              gap: 4,
+              borderLeft: "1px solid rgba(255,255,255,0.10)",
+              paddingLeft: 10,
+            }}
+            onClick={() => {
+              if (sortField === "profit") {
+                setSortAsc((v) => !v);
+              } else {
+                setSortField("profit");
+                setSortAsc(false);
+              }
+            }}
+            title="Click to sort by EV profit per share"
+          >
+            <span style={{ display: "flex", alignItems: "center" }}>
+              Profit
+              <ArbSortIcon
+                active={sortField === "profit"}
+                direction={sortAsc}
+              />
+            </span>
+          </div>
+          <div
+            style={{
+              fontWeight: 900,
+              fontSize: 13,
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+              color:
                 sortField === "arbPct"
                   ? "rgba(255,180,50,1)"
                   : "rgba(233,238,245,0.9)",
@@ -2894,9 +3281,11 @@ export default function ArbitageBoard() {
                 : bonusOnly
                   ? `No bonus markets with arbitrage ≥ ${minArbPct.toFixed(2)}% found.`
                   : boostedProbableOnly
-                    ? `No boosted Probable markets with arbitrage ≥ ${minArbPct.toFixed(2)}% found.`
-                    : boostedPredictFunOnly
+                  ? `No boosted Probable markets with arbitrage ≥ ${minArbPct.toFixed(2)}% found.`
+                  : boostedPredictFunOnly
                       ? `No boosted Predict.fun markets with arbitrage ≥ ${minArbPct.toFixed(2)}% found.`
+                      : liveOnly
+                        ? "No live arbitrage matches found."
                       : ignoreMinArbPct
                         ? "No March Madness arbitrage matches found."
                         : `No arbitrage opportunities ≥ ${minArbPct.toFixed(2)}% found.`}
@@ -3230,7 +3619,7 @@ function MiniOrderbook({ row, priceMode }) {
     setLoading(true);
 
     fetch(
-      `/api/arbitage/orderbook?platform=${platform}&token_id=${encodeURIComponent(activeTokenId)}&t=${refreshKey}`,
+      `/api/arbitage/orderbook?platform=${platform}&token_id=${encodeURIComponent(activeTokenId)}&fresh=${refreshKey > 0 ? 1 : 0}&t=${refreshKey}`,
     )
       .then((res) => res.json())
       .then((data) => {
@@ -3623,7 +4012,7 @@ function Row({
         padding: "10px 14px",
         display: "grid",
         gridTemplateColumns:
-          "var(--arbitrage-desktop-grid-columns, 1.1fr 0.45fr 0.42fr 0.42fr 0.55fr 0.32fr 0.24fr)",
+          "var(--arbitrage-desktop-grid-columns, 1.1fr 0.45fr 0.42fr 0.42fr 0.55fr 0.26fr 0.18fr 0.22fr)",
         gap: 10,
         alignItems: "stretch",
         borderTop: "1px solid rgba(255,255,255,0.06)",
@@ -3891,34 +4280,6 @@ function Row({
                   </div>
                 );
               })}
-              {total != null && edge != null && (
-                <div style={{ marginTop: 2 }}>
-                  <div
-                    className="muted"
-                    style={{ fontSize: 12, fontWeight: 700 }}
-                  >
-                    {strategyMode === "sell"
-                      ? `${fmtC(price1)} + ${fmtC(price2)} = ${fmtC(total)} (${total > 100 ? ">" : "\u2264"}100\u00a2)`
-                      : `${fmtC(price1)} + ${fmtC(price2)} = ${fmtC(total)} (${total < 100 ? "<" : "\u2265"}100\u00a2)`}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 800,
-                      color:
-                        edge >= 0
-                          ? "rgba(80,200,120,0.95)"
-                          : "rgba(239,68,68,0.92)",
-                    }}
-                  >
-                    {strategyMode === "sell"
-                      ? `${fmtC(total)} - 100\u00a2 = ${fmtC(edge)}`
-                      : `100\u00a2 - ${fmtC(total)} = ${fmtC(edge)}`}{" "}
-                    (${(edge / 100).toFixed(3)}) per share (
-                    {edge.toFixed(1).replace(/\.0$/, "")}%)
-                  </div>
-                </div>
-              )}
               {(r.strategy ?? []).length > 2 && (
                 <div
                   className="muted"
@@ -4091,6 +4452,83 @@ function Row({
         >
           {formatExpires(r.endDate)}
         </div>
+      </div>
+
+      {/* Profit (EV) col */}
+      <div
+        className="arb-row-profit"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-end",
+          justifyContent: "center",
+          margin: 0,
+          borderLeft: "1px solid rgba(255,255,255,0.10)",
+          paddingLeft: 10,
+        }}
+      >
+        {(() => {
+          const maxProfit = r.maxProfitUsd;
+          const maxShares = r.maxShares ?? 0;
+          const evPerShare = r.evPerShareUsd;
+
+          if (evPerShare == null || maxShares <= 0 || maxProfit == null || maxProfit <= 0) {
+            return (
+              <>
+                <div className="muted" style={{ fontSize: 11, fontWeight: 700 }}>
+                  No exec. profit
+                </div>
+                <div className="muted" style={{ fontSize: 10, fontWeight: 600, marginTop: 2 }}>
+                  Max size: 0 shares
+                </div>
+                <div className="muted" style={{ fontSize: 10, fontWeight: 600, marginTop: 1 }}>
+                  Total cost: $0.00
+                </div>
+              </>
+            );
+          }
+
+          const fmtProfit = maxProfit >= 1000
+            ? `$${(maxProfit / 1000).toFixed(1)}k`
+            : maxProfit >= 100
+              ? `$${maxProfit.toFixed(0)}`
+              : `$${maxProfit.toFixed(2)}`;
+          const fmtShares = maxShares >= 1000
+            ? `${(maxShares / 1000).toFixed(1)}k`
+            : String(Math.round(maxShares));
+          const totalCost = maxShares - maxProfit;
+          const fmtCost = totalCost >= 1000
+            ? `$${(totalCost / 1000).toFixed(1)}k`
+            : totalCost >= 100
+              ? `$${totalCost.toFixed(0)}`
+              : `$${totalCost.toFixed(2)}`;
+
+          return (
+            <>
+              <div
+                style={{
+                  fontSize: 15,
+                  fontWeight: 1000,
+                  color: "rgba(80,200,120,1)",
+                }}
+              >
+                +{fmtProfit}
+              </div>
+              <div
+                className="muted"
+                style={{ fontSize: 10, fontWeight: 700, marginTop: 2 }}
+              >
+                Max size: {fmtShares} shares
+              </div>
+              <div
+                className="muted"
+                style={{ fontSize: 10, fontWeight: 600, marginTop: 1 }}
+              >
+                Total cost: {fmtCost}
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       {/* Arb col */}
@@ -4444,7 +4882,7 @@ function SkeletonRows() {
             padding: "10px 14px",
             display: "grid",
             gridTemplateColumns:
-              "var(--arbitrage-desktop-grid-columns, 1.1fr 0.45fr 0.42fr 0.42fr 0.55fr 0.32fr 0.24fr)",
+              "var(--arbitrage-desktop-grid-columns, 1.1fr 0.45fr 0.42fr 0.42fr 0.55fr 0.26fr 0.18fr 0.22fr)",
             gap: 10,
             alignItems: "stretch",
             borderTop: "1px solid rgba(255,255,255,0.06)",
@@ -4522,6 +4960,23 @@ function SkeletonRows() {
             <div
               className="skeleton skeleton-text"
               style={{ width: "70%", height: 12, marginTop: 6 }}
+            />
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
+              justifyContent: "center",
+            }}
+          >
+            <div
+              className="skeleton skeleton-text"
+              style={{ width: 40, height: 14 }}
+            />
+            <div
+              className="skeleton skeleton-text"
+              style={{ width: 55, height: 10, marginTop: 4 }}
             />
           </div>
           <div

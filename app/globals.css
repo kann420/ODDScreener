@@ -37,7 +37,7 @@
   --market-desktop-grid-columns: minmax(280px, 1.8fr) 140px 100px 120px 100px 120px;
   --market-desktop-grid-gap: 12px;
   --smart-money-desktop-grid-columns: 120px 140px minmax(0, 1fr) 140px 90px;
-  --arbitrage-desktop-grid-columns: 1.1fr 0.45fr 0.42fr 0.42fr 0.55fr 0.26fr 0.22fr;
+  --arbitrage-desktop-grid-columns: 1.1fr 0.45fr 0.42fr 0.42fr 0.55fr 0.26fr 0.18fr 0.22fr;
 }
 
 /* ===== LIGHT MODE ===== */
@@ -585,19 +585,107 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
     --market-desktop-grid-columns: minmax(480px, 2.2fr) 160px 130px 170px 140px 150px;
     --market-desktop-grid-gap: 14px;
     --smart-money-desktop-grid-columns: 150px 190px minmax(0, 1fr) 190px 122px;
-    --arbitrage-desktop-grid-columns: 1.2fr 0.52fr 0.48fr 0.48fr 0.65fr 0.28fr 0.24fr;
+    --arbitrage-desktop-grid-columns: 1.2fr 0.52fr 0.48fr 0.48fr 0.65fr 0.28fr 0.22fr 0.24fr;
   }
 }
 
-/* 1080p–1799px: tighter stats fonts to reduce clutter */
-@media (min-width: 1280px) and (max-width: 1799px) {
+/* 1080p / small FHD: compact arbitrage columns without touching 2K+ */
+@media (min-width: 1280px) and (max-width: 1920px) {
+  :root {
+    --arbitrage-desktop-grid-columns: 1.05fr 0.4fr 0.36fr 0.36fr 0.48fr 0.22fr 0.17fr 0.19fr;
+  }
+
+  .arb-table-header,
+  .arb-row {
+    gap: 8px !important;
+  }
+
+  .arb-row {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  .arb-row-title {
+    gap: 10px !important;
+  }
+
+  .arb-row-img,
+  .arb-row-img-inner {
+    width: 108px !important;
+  }
+
+  .arb-row-img-inner {
+    height: 70px !important;
+  }
+
+  .arb-row-strategy {
+    padding-left: 8px !important;
+  }
+
+  .arb-row-strategy > div {
+    font-size: 12px !important;
+    gap: 2px !important;
+  }
+
+  .arb-row-poly-stats,
+  .arb-row-opinion-stats {
+    padding-left: 8px !important;
+  }
+
+  .arb-row-poly-stats > div,
+  .arb-row-opinion-stats > div {
+    gap: 20px !important;
+  }
+
   .arb-row-poly-stats div > div > div:first-child,
   .arb-row-opinion-stats div > div > div:first-child {
     font-size: 10px !important;
+    margin-bottom: 2px !important;
   }
+
   .arb-row-poly-stats div > div > div:last-child,
   .arb-row-opinion-stats div > div > div:last-child {
-    font-size: 14px !important;
+    font-size: 13px !important;
+  }
+
+  .arb-row-orderbook {
+    padding-left: 8px !important;
+  }
+
+  .arb-row-expires {
+    padding-left: 8px !important;
+  }
+
+  .arb-row-expires div {
+    font-size: 11px !important;
+  }
+
+  .arb-row-profit {
+    padding-left: 8px !important;
+  }
+
+  .arb-row-profit > div:first-child {
+    font-size: 12px !important;
+  }
+
+  .arb-row-profit .muted {
+    font-size: 9px !important;
+  }
+
+  .arb-row-arb {
+    padding-left: 8px !important;
+  }
+
+  .arb-row-pct {
+    font-size: 20px !important;
+  }
+
+  .arb-row-pct-wrapper .muted {
+    font-size: 10px !important;
+  }
+
+  .arb-table-header > div {
+    font-size: 12px !important;
   }
 }
 
@@ -621,7 +709,7 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
 /* 2K+ monitors (27" 2560px): larger fonts for arbitrage columns */
 @media (min-width: 2400px) {
   :root {
-    --arbitrage-desktop-grid-columns: 1.2fr 0.52fr 0.5fr 0.5fr 0.7fr 0.38fr 0.3fr;
+    --arbitrage-desktop-grid-columns: 1.2fr 0.52fr 0.5fr 0.5fr 0.7fr 0.38fr 0.26fr 0.3fr;
   }
   .arb-row-strategy > div {
     font-size: 15px !important;

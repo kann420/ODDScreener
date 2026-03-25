@@ -77,26 +77,29 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const platform = searchParams.get("platform");
     const tokenId = searchParams.get("token_id");
+    const forceFresh = searchParams.get("fresh") === "1";
 
     if (!platform || !tokenId) {
       return NextResponse.json({ ok: false, error: "missing params" }, { status: 400 });
     }
 
     const key = `arb-ob:${platform}:${tokenId}`;
-    const cached = cacheGet(key);
-    if (cached) {
-      return NextResponse.json(cached, {
-        headers: { "Cache-Control": "public, s-maxage=15", "x-cache": "HIT" },
-      });
+    if (!forceFresh) {
+      const cached = cacheGet(key);
+      if (cached) {
+        return NextResponse.json(cached, {
+          headers: { "Cache-Control": "public, s-maxage=15", "x-cache": "HIT" },
+        });
+      }
     }
 
     let result = null;
 
     if (platform === "poly") {
-      let ob = await getPolyOrderbook(tokenId);
+      let ob = await getPolyOrderbook(tokenId, { forceFresh });
       if (ob && (ob.bids || []).length === 0 && (ob.asks || []).length === 0) {
         await new Promise((resolve) => setTimeout(resolve, 400));
-        ob = await getPolyOrderbook(tokenId);
+        ob = await getPolyOrderbook(tokenId, { forceFresh });
       }
 
       if (!ob) {
@@ -147,7 +150,7 @@ export async function GET(req) {
           .sort((a, b) => a.price - b.price),
       };
     } else if (platform === "predictfun") {
-      const ob = await getPredictFunDisplayOrderbook(String(tokenId));
+      const ob = await getPredictFunDisplayOrderbook(String(tokenId), { forceFresh });
       if (!ob) {
         return NextResponse.json({ ok: false, error: "predictfun_orderbook_failed" }, { status: 200 });
       }
@@ -156,14 +159,17 @@ export async function GET(req) {
         ok: true,
         bids: ob.bids,
         asks: ob.asks,
+        decimalPrecision: ob.decimalPrecision ?? null,
       };
     } else {
       return NextResponse.json({ ok: false, error: "invalid platform" }, { status: 400 });
     }
 
-    cacheSet(key, result);
+    if (!forceFresh) {
+      cacheSet(key, result);
+    }
     return NextResponse.json(result, {
-      headers: { "Cache-Control": "public, s-maxage=15", "x-cache": "MISS" },
+      headers: { "Cache-Control": forceFresh ? "no-store" : "public, s-maxage=15", "x-cache": forceFresh ? "BYPASS" : "MISS" },
     });
   } catch (error) {
     return NextResponse.json(

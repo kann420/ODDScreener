@@ -308,7 +308,6 @@ export default function ArbCalculatorModal({ row, onClose }) {
 
   const footerNotes = [
     hasOpinion ? "* Min Opinion fee is $0.25 if Market Price matched. Fees range: 0% - 1%." : null,
-    hasOpinion ? "* Opinion 50% Fee Discount Event: Mar 1 - Mar 15, 2026" : null,
     platformA === "probable" || platformB === "probable" ? "* Probable fee applies to taker orders only. Makers trade free." : null,
     hasPredictFun ? "* Min Predict.fun fee is $0.0002 if Market Price matched. Fees range: 0.018% - 2%." : null,
   ].filter(Boolean);
@@ -682,8 +681,8 @@ export default function ArbCalculatorModal({ row, onClose }) {
             <div
               key={note}
               style={{
-                color: note.includes("Opinion 50% Fee Discount Event") ? "#FFD700" : "rgb(253, 253, 253)",
-                fontWeight: note.includes("Opinion 50% Fee Discount Event") ? 600 : 400,
+                color: "rgb(253, 253, 253)",
+                fontWeight: 400,
                 marginTop: index === 0 ? 0 : 16,
               }}
             >

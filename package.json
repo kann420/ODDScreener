@@ -10,7 +10,9 @@
     "lint": "next lint",
     "analyze": "cross-env ANALYZE=true next build",
     "analyze:server": "cross-env BUNDLE_ANALYZE=server next build",
-    "analyze:browser": "cross-env BUNDLE_ANALYZE=browser next build"
+    "analyze:browser": "cross-env BUNDLE_ANALYZE=browser next build",
+    "probe:polymarket": "node scripts/probe-polymarket-rate-limit.mjs",
+    "probe:opinion": "node scripts/probe-opinion-rate-limit.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.17.0",
