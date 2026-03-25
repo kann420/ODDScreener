@@ -520,8 +520,6 @@ export default function ArbitageBoard() {
   const [boostedPredictFunOnly, setBoostedPredictFunOnly] = useState(false);
   const [marchMadnessOnly, setMarchMadnessOnly] = useState(false);
   const [liveOnly, setLiveOnly] = useState(false);
-  const [autoScanEnabled, setAutoScanEnabled] = useState(false);
-  const autoScanIntervalRef = useRef(null);
   const ignoreMinArbPct = marchMadnessOnly || liveOnly;
 
   // Update "X ago" display every 30 seconds
@@ -897,39 +895,6 @@ export default function ArbitageBoard() {
       setProgress(null);
     };
   }, [priceMode, minArbPct, scanMode, platformA, platformB, liveOnly, marchMadnessOnly]);
-
-  // Auto Scan: continuously re-scan when Live filter + autoScan enabled
-  useEffect(() => {
-    // Clear any existing interval
-    if (autoScanIntervalRef.current) {
-      clearInterval(autoScanIntervalRef.current);
-      autoScanIntervalRef.current = null;
-    }
-
-    if (!autoScanEnabled || !liveOnly) return;
-
-    // Auto scan every 15 seconds
-    autoScanIntervalRef.current = setInterval(() => {
-      if (!loading) {
-        console.log("[Auto-Scan] Re-scanning live markets...");
-        loadDataStreaming();
-      }
-    }, 15000);
-
-    return () => {
-      if (autoScanIntervalRef.current) {
-        clearInterval(autoScanIntervalRef.current);
-        autoScanIntervalRef.current = null;
-      }
-    };
-  }, [autoScanEnabled, liveOnly, loading, loadDataStreaming]);
-
-  // Disable auto scan when live filter is turned off
-  useEffect(() => {
-    if (!liveOnly) {
-      setAutoScanEnabled(false);
-    }
-  }, [liveOnly]);
 
   // Fallback: use regular fetch if SSE fails
   const loadDataFallback = useCallback(async () => {
@@ -2596,11 +2561,14 @@ export default function ArbitageBoard() {
               }}
             />
           </div>
-          {/* Auto Scan toggle - only visible when Live filter is active */}
+          {/* Refresh button - only visible when Live filter is active */}
           {liveOnly && (
             <button
               type="button"
-              onClick={() => setAutoScanEnabled((v) => !v)}
+              onClick={() => {
+                if (!loading) loadDataStreaming();
+              }}
+              disabled={loading}
               style={{
                 height: 38,
                 padding: "0 16px",
@@ -2608,24 +2576,18 @@ export default function ArbitageBoard() {
                 alignItems: "center",
                 gap: 8,
                 borderRadius: 8,
-                cursor: "pointer",
-                background: autoScanEnabled
-                  ? "rgba(9,24,18,0.96)"
-                  : "rgba(0,0,0,0.2)",
-                border: autoScanEnabled
-                  ? "1px solid rgba(52,211,153,0.8)"
-                  : "1px solid rgba(255,255,255,0.12)",
-                boxShadow: autoScanEnabled
-                  ? "0 0 8px rgba(52,211,153,0.25)"
-                  : "none",
-                color: autoScanEnabled
-                  ? "rgba(52,211,153,1)"
-                  : "rgba(233,238,245,0.7)",
+                cursor: loading ? "not-allowed" : "pointer",
+                background: "rgba(0,0,0,0.2)",
+                border: "1px solid rgba(52,211,153,0.5)",
+                color: loading
+                  ? "rgba(52,211,153,0.5)"
+                  : "rgba(52,211,153,1)",
                 fontSize: 13,
                 fontWeight: 700,
                 whiteSpace: "nowrap",
                 transition: "all 0.2s",
                 flexShrink: 0,
+                opacity: loading ? 0.6 : 1,
               }}
             >
               <svg
@@ -2637,24 +2599,14 @@ export default function ArbitageBoard() {
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                style={{ opacity: autoScanEnabled ? 1 : 0.55 }}
+                style={{
+                  animation: loading ? "spin 1s linear infinite" : "none",
+                }}
               >
                 <path d="M21 12a9 9 0 1 1-6.2-8.6" />
                 <polyline points="21 3 21 9 15 9" />
               </svg>
-              <span>Auto Scan</span>
-              {autoScanEnabled && (
-                <span
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: "50%",
-                    background: "rgba(52,211,153,1)",
-                    boxShadow: "0 0 6px rgba(52,211,153,0.6)",
-                    animation: "pulse 1.5s ease-in-out infinite",
-                  }}
-                />
-              )}
+              <span>Refresh</span>
             </button>
           )}
         </div>
