@@ -34,7 +34,14 @@ debug-*.txt
 test-*.js
 poly_*.json
 poly_*.txt
+probable_*.json
+probable_*.txt
 *.log
+
+# Local debug/check scripts with potential secrets
+check-wallet-fees.mjs
+check-rebate.mjs
+check*.mjs
 
 # Temp test/debug output files
 check*.txt
@@ -44,6 +51,7 @@ trending_test.json
 warm_test.txt
 .tmp/
 .tmp-*.html
+.tmp_*.txt
 *.out
 *.err
 
