@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { computeArbitageOpportunities, scanArbitageOpportunities } from "@/lib/arbitageEngine";
-import { clearArbitrageSessionCookie, requireArbitrageAccess } from "@/lib/arbitrageAccessSession";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -12,7 +11,7 @@ function toNum(v, fallback) {
 
 /**
  * GET /api/arbitage/opportunities
- * 
+ *
  * Query params:
  * - mode: "manual" (default) uses arbitagePairs.json, "auto" uses fuzzy matching
  * - priceMode: "bids" (default) or "asks" - which price to use for comparison
@@ -23,30 +22,30 @@ function toNum(v, fallback) {
  */
 export async function GET(req) {
   try {
-    const auth = await requireArbitrageAccess(req);
-    if (!auth.ok) {
-      const response = NextResponse.json(
-        { ok: false, rows: [], error: auth.error, reason: auth.reason },
-        { status: auth.status }
-      );
-      clearArbitrageSessionCookie(response);
-      return response;
-    }
-
     const { searchParams } = new URL(req.url);
 
     // Query params
     const mode = searchParams.get("mode") || "manual";
     const priceMode = searchParams.get("priceMode") || "bids"; // "bids" or "asks"
-    const minArbPct = toNum(searchParams.get("minArbPct"), 0.1);
+    const minArbPct = toNum(searchParams.get("minArbPct"), 1);
     const minSimilarity = Math.max(0.1, Math.min(1, toNum(searchParams.get("minSimilarity"), 0.35)));
     const limit = Math.max(1, Math.min(200, Math.floor(toNum(searchParams.get("limit"), 50))));
     const wantDebug = process.env.NODE_ENV === "development" && (searchParams.get("debug") === "1" || searchParams.get("debug") === "true");
     const predictFunEvent = searchParams.get("predictFunEvent") || "";
+    const platformA = searchParams.get("platformA") || "polymarket";
+    const platformB = searchParams.get("platformB") || "opinion";
 
     let result;
     if (mode === "auto") {
-      result = await scanArbitageOpportunities({ minArbPct, minSimilarity, limit, priceMode, predictFunEvent });
+      result = await scanArbitageOpportunities({
+        minArbPct,
+        minSimilarity,
+        limit,
+        priceMode,
+        predictFunEvent,
+        platformA,
+        platformB,
+      });
       // Debug log
       if (result?.rows?.length) {
         console.log(`[AUTO-SCAN] Found ${result.rows.length} rows (${priceMode} mode). Top 3:`);

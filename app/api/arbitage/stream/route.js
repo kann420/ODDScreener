@@ -29,7 +29,7 @@ export async function GET(req) {
 
   const { searchParams } = new URL(req.url);
   
-  const minArbPct = toNum(searchParams.get("minArbPct"), 0.1);
+  const minArbPct = toNum(searchParams.get("minArbPct"), 1);
   const minSimilarity = Math.max(0.1, Math.min(1, toNum(searchParams.get("minSimilarity"), 0.35)));
   const priceMode = searchParams.get("priceMode") || "bids";
   const limit = Math.max(1, Math.min(500, Math.floor(toNum(searchParams.get("limit"), 100))));

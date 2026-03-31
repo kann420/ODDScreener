@@ -1,13 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   OPINION_REFERRAL_CODE,
   calculateArbPnlByShares,
   appendReferralCode,
   buildReferralDiscounts,
+  resolveFeeMarketTitle,
 } from "@/lib/utils/arbCalculator";
+import { calculateArbDepthPnlByShares } from "@/lib/utils/arbDepthCalculator";
 import { PREDICTFUN_REFERRAL_CODE } from "@/lib/utils/predictfunFee";
+import { buildPredictFunSideSnapshot } from "@/lib/utils/predictfunOrderbook";
 
 const PLATFORM_CONFIG = {
   polymarket: {
@@ -118,6 +121,18 @@ function getStrategyLine(strategy, tag, fallbackIndex) {
   return strategy.find((line) => line.includes(`(${tag})`)) || strategy[fallbackIndex] || "";
 }
 
+function getStrategyAvgPrice(strategyLegs, targetLine, fallbackIndex) {
+  if (!Array.isArray(strategyLegs) || strategyLegs.length === 0) return null;
+
+  const matchedLeg =
+    strategyLegs.find((leg) => String(leg?.label || "") === String(targetLine || "")) ||
+    strategyLegs[fallbackIndex] ||
+    null;
+  const avgPriceCents = Number(matchedLeg?.avgPriceCents);
+
+  return Number.isFinite(avgPriceCents) ? avgPriceCents / 100 : null;
+}
+
 function getPriceForSide(prices, buyYes, side) {
   if (side === "A") {
     return (buyYes ? prices.opYes : prices.opNo) || 0;
@@ -130,6 +145,11 @@ function getLabelForSide(prices, buyYes, side) {
     return buyYes ? (prices.opYesLabel || "YES") : (prices.opNoLabel || "NO");
   }
   return buyYes ? (prices.polyYesLabel || "YES") : (prices.polyNoLabel || "NO");
+}
+
+function buildFeeRowLabel(labelPct, categoryLabel) {
+  const baseLabel = labelPct ? `EST. FEE (${labelPct})` : "EST. FEE";
+  return categoryLabel ? `${baseLabel} - ${categoryLabel}` : baseLabel;
 }
 
 function RowItem({ label, value, copyValue, highlight, bold }) {
@@ -253,6 +273,12 @@ export default function ArbCalculatorModal({ row, onClose }) {
   const [useOpinionReferral, setUseOpinionReferral] = useState(true);
   const [usePredictFunReferral, setUsePredictFunReferral] = useState(true);
   const [copiedCode, setCopiedCode] = useState("");
+  const [depthBooks, setDepthBooks] = useState({
+    loading: false,
+    sideABook: null,
+    sideBBook: null,
+    error: null,
+  });
 
   const platformA = row?.platformA || row?.sideA?.platform || "opinion";
   const platformB = row?.platformB || row?.sideB?.platform || "polymarket";
@@ -260,6 +286,8 @@ export default function ArbCalculatorModal({ row, onClose }) {
   const configB = PLATFORM_CONFIG[platformB] || PLATFORM_CONFIG.polymarket;
   const prices = row?.prices || {};
   const strategy = Array.isArray(row?.strategy) ? row.strategy : [];
+  const strategyLegs = Array.isArray(row?.strategyLegs) ? row.strategyLegs : [];
+  const tokenIds = row?.tokenIds || {};
   const tagA = prices.opTag || configA.label;
   const tagB = prices.polyTag || configB.label;
 
@@ -273,6 +301,28 @@ export default function ArbCalculatorModal({ row, onClose }) {
   const priceB = getPriceForSide(prices, sideBBuysYes, "B") / 100;
   const hasOpinion = platformA === "opinion" || platformB === "opinion";
   const hasPredictFun = platformA === "predictfun" || platformB === "predictfun";
+  const sideAMarketCategory = row?.sideA?.marketCategory ?? null;
+  const sideBMarketCategory = row?.sideB?.marketCategory ?? null;
+  const sideAFeesEnabled = row?.sideA?.feesEnabled ?? null;
+  const sideBFeesEnabled = row?.sideB?.feesEnabled ?? null;
+  const sideASportsMarketType = row?.sideA?.sportsMarketType ?? null;
+  const sideBSportsMarketType = row?.sideB?.sportsMarketType ?? null;
+  const fallbackMarketTitle = row?.parentTitle || row?.title || null;
+  const displayMarketTitle = getDisplayMarketTitle(row);
+  const sideAMarketTitle = resolveFeeMarketTitle(
+    row?.sideA?.marketTitle,
+    row?.sideA?.title,
+    platformA === "polymarket" ? displayMarketTitle : null,
+    fallbackMarketTitle,
+    row?.outcome,
+  );
+  const sideBMarketTitle = resolveFeeMarketTitle(
+    row?.sideB?.marketTitle,
+    row?.sideB?.title,
+    platformB === "polymarket" ? displayMarketTitle : null,
+    fallbackMarketTitle,
+    row?.outcome,
+  );
 
   const referralDiscounts = buildReferralDiscounts({
     useOpinionReferral,
@@ -283,7 +333,99 @@ export default function ArbCalculatorModal({ row, onClose }) {
     predictfun: usePredictFunReferral,
   };
 
-  const result = useMemo(() => {
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchBook = async (platform, tokenId) => {
+      if (!platform || !tokenId) return null;
+
+      const apiPlatform = platform === "polymarket" ? "poly" : platform;
+      const response = await fetch(
+        `/api/arbitage/orderbook?platform=${encodeURIComponent(apiPlatform)}&token_id=${encodeURIComponent(tokenId)}`,
+        { cache: "no-store" }
+      );
+      const payload = await response.json();
+
+      if (!response.ok || !payload?.ok) return null;
+      return payload;
+    };
+
+    const fetchSelectedBook = async ({ platform, yesTokenId, noTokenId, useYes }) => {
+      if (platform === "predictfun") {
+        const rawBook = await fetchBook(platform, yesTokenId || noTokenId);
+        if (!rawBook) return null;
+        return buildPredictFunSideSnapshot(rawBook, {
+          side: useYes ? "yes" : "no",
+          decimalPrecision: rawBook.decimalPrecision ?? 2,
+        });
+      }
+
+      const tokenId = useYes ? yesTokenId : noTokenId;
+      return fetchBook(platform, tokenId);
+    };
+
+    async function loadDepthBooks() {
+      setDepthBooks({
+        loading: true,
+        sideABook: null,
+        sideBBook: null,
+        error: null,
+      });
+
+      try {
+        const [sideABook, sideBBook] = await Promise.all([
+          fetchSelectedBook({
+            platform: platformA,
+            yesTokenId: tokenIds?.opYes || null,
+            noTokenId: tokenIds?.opNo || null,
+            useYes: sideABuysYes,
+          }),
+          fetchSelectedBook({
+            platform: platformB,
+            yesTokenId: tokenIds?.polyYes || null,
+            noTokenId: tokenIds?.polyNo || null,
+            useYes: sideBBuysYes,
+          }),
+        ]);
+
+        if (cancelled) return;
+
+        setDepthBooks({
+          loading: false,
+          sideABook,
+          sideBBook,
+          error: sideABook && sideBBook ? null : "depth_unavailable",
+        });
+      } catch (error) {
+        if (cancelled) return;
+        console.error("[ArbCalculator] depth fetch failed:", error?.message || error);
+        setDepthBooks({
+          loading: false,
+          sideABook: null,
+          sideBBook: null,
+          error: "depth_unavailable",
+        });
+      }
+    }
+
+    loadDepthBooks();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    row?.id,
+    platformA,
+    platformB,
+    tokenIds?.opYes,
+    tokenIds?.opNo,
+    tokenIds?.polyYes,
+    tokenIds?.polyNo,
+    sideABuysYes,
+    sideBBuysYes,
+  ]);
+
+  const fallbackResult = useMemo(() => {
     return calculateArbPnlByShares({
       shares: shareSize,
       sideAPrice: priceA,
@@ -291,8 +433,83 @@ export default function ArbCalculatorModal({ row, onClose }) {
       platformA,
       platformB,
       referralDiscounts,
+      sideAMarketCategory,
+      sideBMarketCategory,
+      sideAFeesEnabled,
+      sideBFeesEnabled,
+      sideASportsMarketType,
+      sideBSportsMarketType,
+      sideAMarketTitle,
+      sideBMarketTitle,
     });
-  }, [shareSize, priceA, priceB, platformA, platformB, referralDiscounts]);
+  }, [
+    shareSize,
+    priceA,
+    priceB,
+    platformA,
+    platformB,
+    referralDiscounts,
+    sideAMarketCategory,
+    sideBMarketCategory,
+    sideAFeesEnabled,
+    sideBFeesEnabled,
+    sideASportsMarketType,
+    sideBSportsMarketType,
+    sideAMarketTitle,
+    sideBMarketTitle,
+  ]);
+
+  const depthResult = useMemo(() => {
+    if (!depthBooks.sideABook || !depthBooks.sideBBook) return null;
+
+    return calculateArbDepthPnlByShares({
+      shares: shareSize,
+      sideABook: depthBooks.sideABook,
+      sideBBook: depthBooks.sideBBook,
+      platformA,
+      platformB,
+      mode: row?.strategyMode === "sell" ? "sell" : "buy",
+      feeMetaA: {
+        marketCategory: sideAMarketCategory,
+        feesEnabled: sideAFeesEnabled,
+        sportsMarketType: sideASportsMarketType,
+        marketTitle: sideAMarketTitle,
+      },
+      feeMetaB: {
+        marketCategory: sideBMarketCategory,
+        feesEnabled: sideBFeesEnabled,
+        sportsMarketType: sideBSportsMarketType,
+        marketTitle: sideBMarketTitle,
+      },
+      referralDiscounts,
+    });
+  }, [
+    depthBooks.sideABook,
+    depthBooks.sideBBook,
+    shareSize,
+    platformA,
+    platformB,
+    row?.strategyMode,
+    sideAMarketCategory,
+    sideBMarketCategory,
+    sideAFeesEnabled,
+    sideBFeesEnabled,
+    sideASportsMarketType,
+    sideBSportsMarketType,
+    sideAMarketTitle,
+    sideBMarketTitle,
+    referralDiscounts,
+  ]);
+
+  const result = depthResult || fallbackResult;
+  const displayPriceA =
+    depthResult?.sideAAvgPrice ??
+    getStrategyAvgPrice(strategyLegs, sideALine, 1) ??
+    priceA;
+  const displayPriceB =
+    depthResult?.sideBAvgPrice ??
+    getStrategyAvgPrice(strategyLegs, sideBLine, 0) ??
+    priceB;
 
   const sideAUrl = appendReferralCode(row?.sideA?.url || row?.opinion?.url || "#", platformA, enabledReferral);
   const sideBUrl = appendReferralCode(row?.sideB?.url || row?.poly?.url || "#", platformB, enabledReferral);
@@ -454,6 +671,36 @@ export default function ArbCalculatorModal({ row, onClose }) {
               ))}
             </div>
           </div>
+          {depthResult && !depthResult.fullyFilled && (
+            <div style={{
+              marginTop: 8,
+              fontSize: 12,
+              fontWeight: 700,
+              color: "rgba(255,180,120,0.95)",
+            }}>
+              Filled {Math.round(depthResult.sharesExecuted).toLocaleString("en-US")} / {shareSize.toLocaleString("en-US")} profitable shares at current depth.
+            </div>
+          )}
+          {!depthResult && depthBooks.loading && (
+            <div style={{
+              marginTop: 8,
+              fontSize: 12,
+              fontWeight: 700,
+              color: "rgba(255,255,255,0.55)",
+            }}>
+              Syncing depth and fees...
+            </div>
+          )}
+          {!depthResult && !depthBooks.loading && depthBooks.error && (
+            <div style={{
+              marginTop: 8,
+              fontSize: 12,
+              fontWeight: 700,
+              color: "rgba(255,180,120,0.95)",
+            }}>
+              Depth data unavailable. Showing top-of-book estimate.
+            </div>
+          )}
         </div>
 
         {result && (
@@ -486,9 +733,13 @@ export default function ArbCalculatorModal({ row, onClose }) {
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <RowItem label="AVG SHARE PRICE" value={formatCents(priceA)} />
+                <RowItem label="AVG SHARE PRICE" value={formatCents(displayPriceA)} />
                 <RowItem label="TOTAL COST" value={formatUsd(result.sideACost)} copyValue={result.sideACost.toFixed(2)} />
-                <RowItem label={result.sideAFeeLabelPct ? `EST. FEE (${result.sideAFeeLabelPct})` : "EST. FEE"} value={result.sideAFeeLabel} highlight={result.sideAFee === 0 ? "green" : "orange"} />
+                <RowItem
+                  label={buildFeeRowLabel(result.sideAFeeLabelPct, result.sideAFeeCategoryLabel)}
+                  value={result.sideAFeeLabel}
+                  highlight={result.sideAFee === 0 ? "green" : "orange"}
+                />
                 <RowItem label="TOTAL COST (INC. FEES)" value={formatUsd(result.sideATotal)} bold />
                 <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 10, marginTop: 4 }}>
                   <RowItem
@@ -556,9 +807,13 @@ export default function ArbCalculatorModal({ row, onClose }) {
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <RowItem label="AVG SHARE PRICE" value={formatCents(priceB)} />
+                <RowItem label="AVG SHARE PRICE" value={formatCents(displayPriceB)} />
                 <RowItem label="TOTAL COST" value={formatUsd(result.sideBCost)} copyValue={result.sideBCost.toFixed(2)} />
-                <RowItem label={result.sideBFeeLabelPct ? `EST. FEE (${result.sideBFeeLabelPct})` : "EST. FEE"} value={result.sideBFeeLabel} highlight={result.sideBFee === 0 ? "green" : "orange"} />
+                <RowItem
+                  label={buildFeeRowLabel(result.sideBFeeLabelPct, result.sideBFeeCategoryLabel)}
+                  value={result.sideBFeeLabel}
+                  highlight={result.sideBFee === 0 ? "green" : "orange"}
+                />
                 <RowItem label="TOTAL COST (INC. FEES)" value={formatUsd(result.sideBTotal)} bold />
                 <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 10, marginTop: 4 }}>
                   <RowItem

@@ -38,7 +38,7 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
 
     // Query params
-    const minArbPct = toNum(searchParams.get("minArbPct"), 0.1);
+    const minArbPct = toNum(searchParams.get("minArbPct"), 1);
     const minSimilarity = Math.max(0.1, Math.min(1, toNum(searchParams.get("minSimilarity"), 0.35)));
     const limit = Math.max(1, Math.min(200, Math.floor(toNum(searchParams.get("limit"), 50))));
     const scanMode = searchParams.get("mode") === "full" ? "full" : "quick";
