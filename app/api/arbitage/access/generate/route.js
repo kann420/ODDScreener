@@ -1,4 +1,5 @@
 // API: Generate access codes (Admin only)
+// GET  /api/arbitage/access/generate?secret=...&action=...
 // POST /api/arbitage/access/generate  (x-admin-secret header + JSON body)
 
 import { NextResponse } from "next/server";
@@ -113,12 +114,34 @@ async function handleAction(action, input) {
 }
 
 export async function GET(request) {
-  return NextResponse.json(
-    {
-      error: "Method not allowed. Use POST with x-admin-secret.",
-    },
-    { status: 405 }
-  );
+  try {
+    const { searchParams } = new URL(request.url);
+    if (!checkAdminSecret(searchParams.get("secret"))) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const action = searchParams.get("action");
+    const durationHours = parseInteger(searchParams.get("hours"), 24);
+    const count = parseInteger(searchParams.get("count"), 1);
+    const limit = parseInteger(searchParams.get("limit"), 100);
+    const offset = parseInteger(searchParams.get("offset"), 0);
+    const includeExpired = parseBoolean(searchParams.get("includeExpired"), true);
+    const note = searchParams.get("note") || "";
+    const code = searchParams.get("code") || "";
+
+    return await handleAction(action, {
+      durationHours,
+      count,
+      limit,
+      offset,
+      includeExpired,
+      note,
+      code,
+    });
+  } catch (error) {
+    console.error("[Access Generate GET] Error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
 }
 
 // POST handler (programmatic, uses x-admin-secret header)
