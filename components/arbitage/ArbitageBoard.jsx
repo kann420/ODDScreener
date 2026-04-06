@@ -9,6 +9,7 @@ import {
   getProbableBoostedCache,
   setProbableBoostedCache,
 } from "@/lib/clientCache";
+import { calculateArbDepthPnlByShares } from "@/lib/utils/arbDepthCalculator";
 import { complementYesPrice } from "@/lib/utils/predictfunOrderbook";
 
 // ── Platform definitions (logos + labels) ──────────────────────────────────
@@ -17,6 +18,7 @@ const PLATFORMS = [
   { value: "opinion", label: "Opinion", logo: "/logo-opinion.svg" },
   { value: "probable", label: "Probable", logo: "/proable.svg" },
   { value: "predictfun", label: "Predict.fun", logo: "/predictfun_logo.svg" },
+  { value: "limitless", label: "Limitless", logo: "/limitless.jpg" },
 ];
 
 /** Custom exchange dropdown with logo — shared by desktop and mobile header */
@@ -216,57 +218,6 @@ function getStatsForDisplay(row, displayPlatformA, displayPlatformB) {
   return { statsA: row.polyStats, statsB: row.opinionStats };
 }
 
-function isMarchMadnessRow(row) {
-  if (row?.marchMadnessPair === true) return true;
-
-  const categorySlugs = [
-    row?.predictfunCategorySlug,
-    row?.predictfunCategorySlugA,
-    row?.predictfunCategorySlugB,
-    row?._predictfunMarketA?.categorySlug,
-    row?._predictfunMarketB?.categorySlug,
-    row?._predictfunMarketA?._categorySlug,
-    row?._predictfunMarketB?._categorySlug,
-    row?._predictfunMarketA?._predictfunRaw?.categorySlug,
-    row?._predictfunMarketB?._predictfunRaw?.categorySlug,
-  ]
-    .filter(Boolean)
-    .map((v) => String(v).toLowerCase());
-
-  if (
-    categorySlugs.some(
-      (slug) =>
-        slug.includes("march") ||
-        slug.includes("ncaam") ||
-        slug.includes("ncaa") ||
-        slug.includes("cbb"),
-    )
-  ) {
-    return true;
-  }
-
-  const haystack = [
-    row?.title,
-    row?.opinionTitle,
-    row?.polyTitle,
-    row?.parentTitle,
-    row?.outcome,
-    row?.sideA?.title,
-    row?.sideB?.title,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  return (
-    haystack.includes("march madness") ||
-    haystack.includes("ncaam") ||
-    haystack.includes("ncaa tournament") ||
-    haystack.includes("ncaa basketball") ||
-    haystack.includes("college basketball")
-  );
-}
-
 function computeBinaryArbClient({ opYes, opNo, polyYes, polyNo, labels, priceMode = "asks" }) {
   const dirs = [];
   const isAsks = priceMode === "asks";
@@ -325,15 +276,204 @@ function computeBinaryArbClient({ opYes, opNo, polyYes, polyNo, labels, priceMod
   };
 }
 
+function normalizeOrderbookLevels(levels, sortDirection) {
+  const mapped = (Array.isArray(levels) ? levels : [])
+    .map((level) => ({
+      price: Number(level?.price ?? 0),
+      shares: Number(level?.shares ?? level?.size ?? 0),
+    }))
+    .filter((level) => Number.isFinite(level.price) && level.shares > 0);
+
+  if (sortDirection === "desc") {
+    mapped.sort((a, b) => b.price - a.price);
+  } else {
+    mapped.sort((a, b) => a.price - b.price);
+  }
+  return mapped;
+}
+
+function buildPredictFunNoBook(book) {
+  const precision = Number.isInteger(book?.decimalPrecision) ? book.decimalPrecision : 2;
+  return {
+    bids: normalizeOrderbookLevels(
+      (book?.asks || []).map((level) => ({
+        price: complementYesPrice(Number(level?.price), precision),
+        shares: Number(level?.shares ?? level?.size ?? 0),
+      })),
+      "desc",
+    ),
+    asks: normalizeOrderbookLevels(
+      (book?.bids || []).map((level) => ({
+        price: complementYesPrice(Number(level?.price), precision),
+        shares: Number(level?.shares ?? level?.size ?? 0),
+      })),
+      "asc",
+    ),
+  };
+}
+
+function simulateArbProfitClient(bookA, bookB, { mode = "buy" } = {}) {
+  const isBuy = mode === "buy";
+  const levelsA = normalizeOrderbookLevels(bookA, isBuy ? "asc" : "desc");
+  const levelsB = normalizeOrderbookLevels(bookB, isBuy ? "asc" : "desc");
+  if (!levelsA.length || !levelsB.length) return null;
+
+  let totalShares = 0;
+  let totalProfit = 0;
+  let totalCostA = 0;
+  let totalCostB = 0;
+  let idxA = 0;
+  let idxB = 0;
+  let remA = levelsA[0].shares;
+  let remB = levelsB[0].shares;
+
+  while (idxA < levelsA.length && idxB < levelsB.length) {
+    const pA = levelsA[idxA].price;
+    const pB = levelsB[idxB].price;
+    const marginalEv = isBuy ? 1 - pA - pB : pA + pB - 1;
+    if (marginalEv <= 0) break;
+
+    const chunk = Math.min(remA, remB);
+    totalShares += chunk;
+    totalProfit += marginalEv * chunk;
+    totalCostA += pA * chunk;
+    totalCostB += pB * chunk;
+
+    remA -= chunk;
+    remB -= chunk;
+
+    if (remA <= 0) {
+      idxA++;
+      if (idxA < levelsA.length) remA = levelsA[idxA].shares;
+    }
+    if (remB <= 0) {
+      idxB++;
+      if (idxB < levelsB.length) remB = levelsB[idxB].shares;
+    }
+  }
+
+  const totalCostUsd = totalShares > 0 ? totalCostA + totalCostB : null;
+  return {
+    evPerShareUsd: totalShares > 0 ? totalProfit / totalShares : 0,
+    maxShares: totalShares,
+    maxProfitUsd: totalProfit,
+    totalCostUsd,
+    avgPriceAUsd: totalShares > 0 ? totalCostA / totalShares : null,
+    avgPriceBUsd: totalShares > 0 ? totalCostB / totalShares : null,
+    effectiveArbPct: totalShares > 0 ? (totalProfit / totalShares) * 100 : 0,
+  };
+}
+
+function computeArbProfitClient({
+  best,
+  aYesBook,
+  aNoBook,
+  bYesBook,
+  bNoBook,
+  priceMode = "asks",
+  labels = {},
+  platformA = null,
+  platformB = null,
+  feeMetaA = {},
+  feeMetaB = {},
+}) {
+  if (!best || !Array.isArray(best.strategy) || best.strategy.length < 2) return null;
+
+  const isAsks = priceMode === "asks";
+  const mode = isAsks ? "buy" : "sell";
+  const polyTag = labels?.polyTag || "Poly";
+  const polyYesLabel = String(labels?.polyYesLabel || "YES").toLowerCase();
+  const polyNoLabel = String(labels?.polyNoLabel || "NO").toLowerCase();
+  const opYesLabel = String(labels?.opYesLabel || "YES").toLowerCase();
+  const opNoLabel = String(labels?.opNoLabel || "NO").toLowerCase();
+
+  function resolveBook(line) {
+    const rawLine = String(line || "");
+    const text = rawLine.toLowerCase();
+    const isSideB = rawLine.includes(`(${polyTag})`);
+
+    if (isSideB) {
+      const useYes = text.includes(polyYesLabel) && (!text.includes(polyNoLabel) || polyYesLabel === polyNoLabel);
+      return {
+        book: useYes ? bYesBook : bNoBook,
+        platform: platformB,
+        feeMeta: feeMetaB,
+      };
+    }
+
+    const useYes = text.includes(opYesLabel) && (!text.includes(opNoLabel) || opYesLabel === opNoLabel);
+    return {
+      book: useYes ? aYesBook : aNoBook,
+      platform: platformA,
+      feeMeta: feeMetaA,
+    };
+  }
+
+  const legA = resolveBook(best.strategy[0]);
+  const legB = resolveBook(best.strategy[1]);
+
+  const result = calculateArbDepthPnlByShares({
+    shares: Number.MAX_SAFE_INTEGER,
+    sideABook: legA.book,
+    sideBBook: legB.book,
+    platformA: legA.platform,
+    platformB: legB.platform,
+    mode,
+    feeMetaA: legA.feeMeta,
+    feeMetaB: legB.feeMeta,
+  });
+
+  if (!result) return null;
+
+  return {
+    evPerShareUsd: result.shares > 0 ? result.netPnl / result.shares : 0,
+    maxShares: result.shares,
+    maxProfitUsd: result.netPnl,
+    totalCostUsd: result.totalCost,
+    avgPriceAUsd: result.sideAAvgPrice,
+    avgPriceBUsd: result.sideBAvgPrice,
+    effectiveArbPct: result.shares > 0 ? (result.netPnl / result.shares) * 100 : 0,
+    evCalcMode: "depth_simulated",
+  };
+}
+
+function buildExecutionSummaryClient(best, profitResult, fallbackArbPct) {
+  const strategy = Array.isArray(best?.strategy) ? best.strategy : [];
+  const maxShares = Number(profitResult?.maxShares ?? 0);
+  const effectiveArbPct = Number.isFinite(profitResult?.effectiveArbPct) && maxShares > 0
+    ? profitResult.effectiveArbPct
+    : fallbackArbPct;
+
+  const avgPrices = [
+    Number.isFinite(profitResult?.avgPriceAUsd) ? profitResult.avgPriceAUsd : null,
+    Number.isFinite(profitResult?.avgPriceBUsd) ? profitResult.avgPriceBUsd : null,
+  ];
+
+  return {
+    effectiveArbPct,
+    totalCostUsd: Number.isFinite(profitResult?.totalCostUsd) && maxShares > 0 ? profitResult.totalCostUsd : null,
+    strategyLegs: strategy.map((label, index) => ({
+      label,
+      avgPriceUsd: avgPrices[index],
+      avgPriceCents: Number.isFinite(avgPrices[index]) ? avgPrices[index] * 100 : null,
+      shares: maxShares,
+    })),
+  };
+}
+
 function mapOrderbookSnapshot(payload) {
-  const bestBid = Array.isArray(payload?.bids) ? payload.bids[0] : null;
-  const bestAsk = Array.isArray(payload?.asks) ? payload.asks[0] : null;
+  const bids = normalizeOrderbookLevels(payload?.bids, "desc");
+  const asks = normalizeOrderbookLevels(payload?.asks, "asc");
+  const bestBid = bids[0] || null;
+  const bestAsk = asks[0] || null;
   const bidPrice = Number(bestBid?.price);
   const askPrice = Number(bestAsk?.price);
   const bidSize = Number(bestBid?.shares);
   const askSize = Number(bestAsk?.shares);
   const parsedPrecision = Number(payload?.decimalPrecision);
   return {
+    bids,
+    asks,
     bestBid: Number.isFinite(bidPrice) ? bidPrice : null,
     bestBidSize: Number.isFinite(bidSize) ? bidSize : 0,
     bestAsk: Number.isFinite(askPrice) ? askPrice : null,
@@ -583,36 +723,42 @@ const platformLogoMap = {
   opinion: "/2logo-opinion.webp",
   probable: "/proable.svg",
   predictfun: PREDICTFUN_LOGO_SRC,
+  limitless: "/limitless.jpg",
 };
 const platformDisplayMap = {
   polymarket: "Polymarket",
   opinion: "Opinion",
   probable: "Probable",
   predictfun: "Predict.fun",
+  limitless: "Limitless",
 };
 const platformColorMap = {
   polymarket: "rgba(96,165,250,0.95)",
   opinion: "rgba(249,115,22,1)",
   probable: "rgba(168,85,247,1)",
   predictfun: "rgba(99,102,241,1)",
+  limitless: "rgba(34,197,94,1)",
 };
 const platformShortNameMap = {
   polymarket: "POLY",
   opinion: "OPN",
   probable: "PROB",
   predictfun: "PF",
+  limitless: "LMT",
 };
 const platformVolBorderColor = {
   polymarket: "rgba(96,165,250,0.5)",
   opinion: "rgba(249,115,22,0.5)",
   probable: "rgba(168,85,247,0.5)",
   predictfun: "rgba(99,102,241,0.5)",
+  limitless: "rgba(34,197,94,0.5)",
 };
 const platformVolBgColor = {
   polymarket: "rgba(96,165,250,0.1)",
   opinion: "rgba(249,115,22,0.1)",
   probable: "rgba(168,85,247,0.1)",
   predictfun: "rgba(99,102,241,0.1)",
+  limitless: "rgba(34,197,94,0.1)",
 };
 const PREDICTFUN_LIVE_UI_MARKET_VARIANTS = new Set([
   "SPORTS_MATCH",
@@ -690,10 +836,9 @@ export default function ArbitageBoard() {
 
   // Predict.fun boosted filter
   const [boostedPredictFunOnly, setBoostedPredictFunOnly] = useState(false);
-  const [marchMadnessOnly, setMarchMadnessOnly] = useState(false);
   const [liveOnly, setLiveOnly] = useState(false);
   const loadingRef = useRef(false);
-  const ignoreMinArbPct = marchMadnessOnly || liveOnly;
+  const ignoreMinArbPct = liveOnly;
 
   useEffect(() => {
     rowsRef.current = rows;
@@ -868,9 +1013,6 @@ export default function ArbitageBoard() {
     if (platformA !== "predictfun" && platformB !== "predictfun") {
       setBoostedPredictFunOnly(false);
     }
-    if (!isPolyPredictFunPair) {
-      setMarchMadnessOnly(false);
-    }
   }, [platformA, platformB, isPolyPredictFunPair]);
 
   // Load from sessionStorage cache when switching modes or on mount
@@ -933,10 +1075,8 @@ export default function ArbitageBoard() {
     setStreamingRows([]);
     let latestMatchedPairs = 0;
 
-    const streamLimit =
-      scanMode === "full" ? 500 : scanMode === "med" ? 140 : 80;
-    const eventFilter = liveOnly ? "live" : marchMadnessOnly ? "march-madness" : "";
-    const url = `/api/arbitage/stream?priceMode=${encodeURIComponent(priceMode)}&minArbPct=${encodeURIComponent(minArbPct)}&limit=${streamLimit}&scanMode=${encodeURIComponent(scanMode)}&platformA=${encodeURIComponent(platformA)}&platformB=${encodeURIComponent(platformB)}${eventFilter ? `&predictFunEvent=${encodeURIComponent(eventFilter)}` : ""}`;
+    const eventFilter = liveOnly ? "live" : "";
+    const url = `/api/arbitage/stream?priceMode=${encodeURIComponent(priceMode)}&minArbPct=${encodeURIComponent(minArbPct)}&scanMode=${encodeURIComponent(scanMode)}&platformA=${encodeURIComponent(platformA)}&platformB=${encodeURIComponent(platformB)}${eventFilter ? `&predictFunEvent=${encodeURIComponent(eventFilter)}` : ""}`;
     const es = new EventSource(url);
     eventSourceRef.current = es;
 
@@ -1087,7 +1227,7 @@ export default function ArbitageBoard() {
       setLoading(false);
       setProgress(null);
     };
-  }, [priceMode, minArbPct, scanMode, platformA, platformB, liveOnly, marchMadnessOnly]);
+  }, [priceMode, minArbPct, scanMode, platformA, platformB, liveOnly]);
 
   useEffect(() => {
     loadingRef.current = loading;
@@ -1100,7 +1240,7 @@ export default function ArbitageBoard() {
       setErr("");
       setProgress({ phase: "loading", message: "Loading..." });
 
-      const eventFilter = liveOnly ? "live" : marchMadnessOnly ? "march-madness" : "";
+      const eventFilter = liveOnly ? "live" : "";
       const url = `/api/arbitage/opportunities?mode=auto&priceMode=${encodeURIComponent(priceMode)}&minArbPct=${encodeURIComponent(minArbPct)}&platformA=${encodeURIComponent(platformA)}&platformB=${encodeURIComponent(platformB)}&limit=50${eventFilter ? `&predictFunEvent=${encodeURIComponent(eventFilter)}` : ""}&t=${Date.now()}`;
 
       const res = await fetch(url, { cache: "no-store" });
@@ -1218,6 +1358,7 @@ export default function ArbitageBoard() {
             : { price: pickPrice(polyNoBook), size: pickSize(polyNoBook) };
           const polyYes = polyYesInfo.price;
           const polyNo = polyNoInfo.price;
+          const derivedPolyNoBook = isPredictFunSideB ? buildPredictFunNoBook(polyYesBook) : polyNoBook;
 
           if (
             !Number.isFinite(opYes) ||
@@ -1240,9 +1381,35 @@ export default function ArbitageBoard() {
             return row;
           }
 
+          const profitResult = computeArbProfitClient({
+            best,
+            aYesBook: opYesBook,
+            aNoBook: opNoBook,
+            bYesBook: polyYesBook,
+            bNoBook: derivedPolyNoBook,
+            priceMode,
+            labels: row?.prices || {},
+            platformA: sideAPlatform,
+            platformB: sideBPlatform,
+            feeMetaA: {
+              marketCategory: row?.sideA?.marketCategory ?? null,
+              feesEnabled: row?.sideA?.feesEnabled ?? null,
+              sportsMarketType: row?.sideA?.sportsMarketType ?? null,
+              marketTitle: row?.sideA?.marketTitle || row?.sideA?.title || row?.parentTitle || row?.title || null,
+            },
+            feeMetaB: {
+              marketCategory: row?.sideB?.marketCategory ?? null,
+              feesEnabled: row?.sideB?.feesEnabled ?? null,
+              sportsMarketType: row?.sideB?.sportsMarketType ?? null,
+              marketTitle: row?.sideB?.marketTitle || row?.sideB?.title || row?.parentTitle || row?.title || null,
+            },
+          });
+          const executionSummary = buildExecutionSummaryClient(best, profitResult, best.arb * 100);
+
           return {
             ...row,
             strategy: best.strategy,
+            strategyLegs: executionSummary.strategyLegs,
             strategyMode: best.strategyMode || row.strategyMode || (priceMode === "asks" ? "buy" : "sell"),
             prices: {
               ...(row.prices || {}),
@@ -1257,7 +1424,13 @@ export default function ArbitageBoard() {
               opYes: pickSize(opYesBook),
               opNo: pickSize(opNoBook),
             },
-            arbPct: best.arb * 100,
+            arbPct: executionSummary.effectiveArbPct,
+            topOfBookArbPct: best.arb * 100,
+            evPerShareUsd: profitResult?.evPerShareUsd ?? row.evPerShareUsd ?? null,
+            maxShares: profitResult?.maxShares ?? row.maxShares ?? 0,
+            maxProfitUsd: profitResult?.maxProfitUsd ?? row.maxProfitUsd ?? 0,
+            totalCostUsd: executionSummary.totalCostUsd,
+            evCalcMode: profitResult?.evCalcMode ?? row.evCalcMode ?? null,
             priceMode,
             label: priceMode === "asks" ? "Asks" : "Bids",
           };
@@ -1352,7 +1525,6 @@ export default function ArbitageBoard() {
       }
     });
     return arr.filter((r) => {
-      if (marchMadnessOnly && !isMarchMadnessRow(r)) return false;
       if (liveOnly && !isLiveRow(r)) return false;
 
       // Filter by min arb %
@@ -1391,7 +1563,6 @@ export default function ArbitageBoard() {
     platformA,
     platformB,
     ignoreMinArbPct,
-    marchMadnessOnly,
     liveOnly,
   ]);
 
@@ -1470,6 +1641,13 @@ export default function ArbitageBoard() {
     1,
     Math.ceil(searchFilteredRows.length / itemsPerPage),
   );
+
+  // DEBUG: pagination visibility
+  useEffect(() => {
+    if (searchFilteredRows.length > 0) {
+      console.log("[ArbPagination] searchFilteredRows:", searchFilteredRows.length, "itemsPerPage:", itemsPerPage, "totalPages:", totalPages, "isMobileView:", isMobileView, "displayRows:", displayRows.length, "sorted:", sorted?.length, "filteredSorted:", filteredSorted?.length);
+    }
+  }, [searchFilteredRows.length, itemsPerPage, totalPages]);
 
   // Keep page valid when result set changes
   useEffect(() => {
@@ -1550,10 +1728,10 @@ export default function ArbitageBoard() {
 
   // Count to display in TITLE badge: filtered count when searching, total when not
   const titleBadgeCount =
-    searchQuery.trim() || marchMadnessOnly || liveOnly
+    searchQuery.trim() || liveOnly
       ? searchFilteredRows.length
       : (matchedMarketCount ?? rows.length);
-  const headerMatchedCount = marchMadnessOnly || liveOnly
+  const headerMatchedCount = liveOnly
     ? searchFilteredRows.length
     : (matchedMarketCount ?? rows.length);
   // Show badge when searching (always), or when we have loaded rows (any scan mode)
@@ -2483,91 +2661,6 @@ export default function ArbitageBoard() {
                 </div>
               )}
 
-              {/* March Madness Filter - Poly + Predict.fun only */}
-              {isPolyPredictFunPair && (
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
-                >
-                  <label
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 800,
-                      color: "rgba(233,238,245,0.6)",
-                      height: 13,
-                    }}
-                  >
-                    MARCH MADNESS
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setMarchMadnessOnly((v) => !v)}
-                    style={{
-                      height: 38,
-                      padding: "0 14px",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      borderRadius: 6,
-                      cursor: "pointer",
-                      background: marchMadnessOnly
-                        ? "rgba(24,18,9,0.96)"
-                        : "rgba(0,0,0,0.2)",
-                      border: marchMadnessOnly
-                        ? "1px solid rgba(249,168,37,0.8)"
-                        : "1px solid rgba(255,255,255,0.1)",
-                      boxShadow: marchMadnessOnly
-                        ? "0 0 0 1px rgba(255,197,92,0.08) inset"
-                        : "0 0 0 1px rgba(0,0,0,0.18) inset",
-                      color: marchMadnessOnly
-                        ? "rgba(255,180,50,1)"
-                        : "rgba(233,238,245,0.7)",
-                      fontSize: 12,
-                      fontWeight: 700,
-                      transition: "all 0.2s",
-                    }}
-                  >
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      aria-hidden="true"
-                      style={{
-                        flexShrink: 0,
-                        opacity: marchMadnessOnly ? 1 : 0.55,
-                      }}
-                    >
-                      <circle cx="12" cy="12" r="9" fill="currentColor" />
-                      <path
-                        d="M4.1 8.2c3.2 1 5.3 3.2 6.2 6.6"
-                        stroke="rgba(37,23,7,0.92)"
-                        strokeWidth="1.25"
-                        strokeLinecap="round"
-                      />
-                      <path
-                        d="M19.9 8.2c-3.2 1-5.3 3.2-6.2 6.6"
-                        stroke="rgba(37,23,7,0.92)"
-                        strokeWidth="1.25"
-                        strokeLinecap="round"
-                      />
-                      <path
-                        d="M8.2 4.2c1.9 2 2.9 4.7 2.9 7.8s-1 5.8-2.9 7.8"
-                        stroke="rgba(37,23,7,0.92)"
-                        strokeWidth="1.25"
-                        strokeLinecap="round"
-                      />
-                      <path
-                        d="M15.8 4.2c-1.9 2-2.9 4.7-2.9 7.8s1 5.8 2.9 7.8"
-                        stroke="rgba(37,23,7,0.92)"
-                        strokeWidth="1.25"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    <span>March Madness</span>
-                  </button>
-                </div>
-              )}
-
               {/* Live Filter - Poly + Predict.fun only */}
               {isPolyPredictFunPair && (
                 <div
@@ -2773,7 +2866,7 @@ export default function ArbitageBoard() {
                   marginTop: 6,
                 }}
               >
-                Live (sports/esports) and March Madness scans include negative spread rows and ignore Min Arb %.
+                Live (sports/esports) scans include negative spread rows and ignore Min Arb %.
               </div>
             )}
           </div>
@@ -3286,8 +3379,6 @@ export default function ArbitageBoard() {
                       ? `No boosted Predict.fun markets with arbitrage ≥ ${minArbPct.toFixed(2)}% found.`
                       : liveOnly
                         ? "No live arbitrage matches found."
-                      : ignoreMinArbPct
-                        ? "No March Madness arbitrage matches found."
                         : `No arbitrage opportunities ≥ ${minArbPct.toFixed(2)}% found.`}
             </div>
             <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
@@ -3309,7 +3400,6 @@ export default function ArbitageBoard() {
                 key={r.id}
                 r={r}
                 priceMode={priceMode}
-                marchMadnessOnly={marchMadnessOnly}
                 liveOnly={liveOnly}
                 displayPlatformA={platformA}
                 displayPlatformB={platformB}
@@ -3347,102 +3437,57 @@ export default function ArbitageBoard() {
       </div>
       {/* end single panel wrapper */}
 
-      {searchFilteredRows.length > itemsPerPage && (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            marginTop: 8,
-            paddingBottom: 16,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              flexWrap: "wrap",
-              justifyContent: "center",
-            }}
+      {totalPages > 1 && (
+        <div className="market-pagination">
+          {/* Prev button */}
+          <button
+            className="market-pager-btn"
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            aria-label="Previous page"
           >
-            <PagerButton
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
-              <span style={{ marginLeft: 4 }}>Prev</span>
-            </PagerButton>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+            <span className="market-pager-label">Prev</span>
+          </button>
 
+          {/* Numbered page buttons (desktop only) */}
+          <div className="market-pager-numbers">
             {pageNums[0] > 1 && (
               <>
-                <PagerButton
-                  onClick={() => setCurrentPage(1)}
-                  active={currentPage === 1}
-                >
-                  1
-                </PagerButton>
-                {pageNums[0] > 2 && (
-                  <span style={{ opacity: 0.6, fontSize: 12 }}>...</span>
-                )}
+                <button className={`market-pager-btn${currentPage === 1 ? " active" : ""}`} onClick={() => setCurrentPage(1)}>1</button>
+                {pageNums[0] > 2 && <span className="market-pager-ellipsis">&hellip;</span>}
               </>
             )}
-
             {pageNums.map((p) => (
-              <PagerButton
-                key={p}
-                onClick={() => setCurrentPage(p)}
-                active={p === currentPage}
-              >
-                {p}
-              </PagerButton>
+              <button key={p} className={`market-pager-btn${p === currentPage ? " active" : ""}`} onClick={() => setCurrentPage(p)}>{p}</button>
             ))}
-
             {pageNums[pageNums.length - 1] < totalPages && (
               <>
-                {pageNums[pageNums.length - 1] < totalPages - 1 && (
-                  <span style={{ opacity: 0.6, fontSize: 12 }}>...</span>
-                )}
-                <PagerButton
-                  onClick={() => setCurrentPage(totalPages)}
-                  active={currentPage === totalPages}
-                >
-                  {totalPages}
-                </PagerButton>
+                {pageNums[pageNums.length - 1] < totalPages - 1 && <span className="market-pager-ellipsis">&hellip;</span>}
+                <button className={`market-pager-btn${currentPage === totalPages ? " active" : ""}`} onClick={() => setCurrentPage(totalPages)}>{totalPages}</button>
               </>
             )}
-
-            <PagerButton
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-            >
-              <span style={{ marginRight: 4 }}>Next</span>
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M9 18l6-6-6-6" />
-              </svg>
-            </PagerButton>
           </div>
+
+          {/* Simple "Page X / Y" for mobile only */}
+          <div className="market-pager-mobile-label muted">
+            Page {currentPage} / {totalPages}
+          </div>
+
+          {/* Next button */}
+          <button
+            className="market-pager-btn"
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            aria-label="Next page"
+          >
+            <span className="market-pager-label">Next</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </button>
         </div>
       )}
 
@@ -3457,32 +3502,6 @@ export default function ArbitageBoard() {
   );
 }
 
-function PagerButton({ children, onClick, disabled, active }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        height: 30,
-        padding: "0 10px",
-        borderRadius: 999,
-        border: "1px solid rgba(255,255,255,.12)",
-        background: active ? "rgba(255,255,255,.14)" : "rgba(0,0,0,.18)",
-        color: "#fff",
-        cursor: disabled ? "not-allowed" : "pointer",
-        fontWeight: active ? 900 : 800,
-        opacity: disabled ? 0.45 : 0.95,
-        userSelect: "none",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 2,
-      }}
-    >
-      {children}
-    </button>
-  );
-}
 
 /* ========================================
    MiniOrderbook — compact 3-ask + 3-bid view
@@ -3994,7 +4013,6 @@ function MiniOrderbook({ row, priceMode }) {
 function Row({
   r,
   priceMode,
-  marchMadnessOnly,
   liveOnly,
   displayPlatformA,
   displayPlatformB,
@@ -4171,7 +4189,13 @@ function Row({
               marginTop: 8,
             }}
           >
-            {(r.strategy ?? []).slice(0, 2).map((line, idx) => (
+            {(Array.isArray(r.strategyLegs) && r.strategyLegs.length > 0 ? r.strategyLegs.map((leg) => {
+              const avgPrice = Number(leg?.avgPriceCents);
+              const priceSuffix = Number.isFinite(avgPrice)
+                ? ` - ${avgPrice.toFixed(1).replace(/\.0$/, "")}\u00a2`
+                : "";
+              return `${leg?.label || "N/A"}${priceSuffix}`;
+            }) : (r.strategy ?? [])).slice(0, 2).map((line, idx) => (
               <div
                 key={idx}
                 style={{
@@ -4201,13 +4225,13 @@ function Row({
         }}
       >
         {(() => {
-          const lines = (r.strategy ?? []).slice(0, 2);
-          const strategyMode =
-            r.strategyMode ||
-            (lines.some((line) => /\bsell\b/i.test(line)) ? "sell" : "buy");
-          // Parse which price applies to each strategy line.
-          // prices.poly* = sideB prices, prices.op* = sideA prices.
-          // prices.polyTag = sideB tag (e.g. "Probable"), prices.opTag = sideA tag (e.g. "Poly")
+          const lines = (Array.isArray(r.strategyLegs) && r.strategyLegs.length > 0
+            ? r.strategyLegs.map((leg) => ({
+                label: leg?.label || "",
+                avgPriceCents: Number(leg?.avgPriceCents),
+              }))
+            : (r.strategy ?? []).map((line) => ({ label: line, avgPriceCents: null }))).slice(0, 2);
+          // Prefer depth-aware avg prices from strategyLegs; fall back to top-of-book labels/prices.
           const getPriceForLine = (line) => {
             if (!r.prices) return null;
             const text = String(line || "").toLowerCase();
@@ -4250,16 +4274,8 @@ function Row({
                 : r.prices.opNo;
             }
           };
-          const price1 = getPriceForLine(lines[0] || "");
-          const price2 = getPriceForLine(lines[1] || "");
-          const total =
-            price1 != null && price2 != null ? price1 + price2 : null;
-          const edge =
-            total != null
-              ? strategyMode === "sell"
-                ? total - 100
-                : 100 - total
-              : null;
+          const price1 = Number.isFinite(lines[0]?.avgPriceCents) ? lines[0].avgPriceCents : getPriceForLine(lines[0]?.label || "");
+          const price2 = Number.isFinite(lines[1]?.avgPriceCents) ? lines[1].avgPriceCents : getPriceForLine(lines[1]?.label || "");
           const fmtC = (v) =>
             v != null
               ? `${Number(v).toFixed(1).replace(/\.0$/, "")}\u00a2`
@@ -4270,7 +4286,7 @@ function Row({
                 const p = idx === 0 ? price1 : price2;
                 return (
                   <div key={idx} style={{ fontSize: 13, fontWeight: 900 }}>
-                    {line.replace(/\(Opinion\)/gi, "(OPN)")}
+                    {String(line?.label || "").replace(/\(Opinion\)/gi, "(OPN)")}
                     {p != null && (
                       <span className="muted" style={{ fontWeight: 700 }}>
                         {" "}
@@ -4280,12 +4296,12 @@ function Row({
                   </div>
                 );
               })}
-              {(r.strategy ?? []).length > 2 && (
+              {((Array.isArray(r.strategyLegs) && r.strategyLegs.length > 0 ? r.strategyLegs : (r.strategy ?? [])).length > 2) && (
                 <div
                   className="muted"
                   style={{ fontSize: 12, fontWeight: 800 }}
                 >
-                  +{(r.strategy ?? []).length - 2} more...
+                  +{(Array.isArray(r.strategyLegs) && r.strategyLegs.length > 0 ? r.strategyLegs.length : (r.strategy ?? []).length) - 2} more...
                 </div>
               )}
             </>
@@ -4496,7 +4512,9 @@ function Row({
           const fmtShares = maxShares >= 1000
             ? `${(maxShares / 1000).toFixed(1)}k`
             : String(Math.round(maxShares));
-          const totalCost = maxShares - maxProfit;
+          const totalCost = Number.isFinite(r.totalCostUsd) && r.totalCostUsd > 0
+            ? r.totalCostUsd
+            : maxShares - maxProfit;
           const fmtCost = totalCost >= 1000
             ? `$${(totalCost / 1000).toFixed(1)}k`
             : totalCost >= 100
@@ -4560,7 +4578,7 @@ function Row({
               color:
                 (r.arbPct ?? 0) > 0
                   ? "rgba(80,200,120,1)"
-                  : (r.arbPct ?? 0) < 0 && (marchMadnessOnly || liveOnly)
+                  : (r.arbPct ?? 0) < 0 && liveOnly
                     ? "rgba(248,113,113,1)"
                     : "rgba(233,238,245,0.85)",
             }}

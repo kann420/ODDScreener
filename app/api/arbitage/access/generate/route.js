@@ -40,11 +40,6 @@ function checkAdminAuth(request) {
   return checkAdminSecret(authHeader);
 }
 
-function checkAdminSecretFromQuery(request) {
-  const { searchParams } = new URL(request.url);
-  return checkAdminSecret(searchParams.get("secret"));
-}
-
 function parseInteger(value, fallback) {
   const n = Number.parseInt(String(value ?? ""), 10);
   return Number.isFinite(n) ? n : fallback;
@@ -118,14 +113,13 @@ async function handleAction(action, input) {
   }
 }
 
-// Browser-friendly GET handler for the old workflow.
 export async function GET(request) {
   try {
-    if (!checkAdminSecretFromQuery(request)) {
+    const { searchParams } = new URL(request.url);
+    if (!checkAdminSecret(searchParams.get("secret"))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { searchParams } = new URL(request.url);
     const action = searchParams.get("action");
     const durationHours = parseInteger(searchParams.get("hours"), 24);
     const count = parseInteger(searchParams.get("count"), 1);
