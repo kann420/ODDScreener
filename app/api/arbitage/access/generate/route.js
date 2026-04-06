@@ -1,5 +1,4 @@
 // API: Generate access codes (Admin only)
-// GET  /api/arbitage/access/generate?secret=...&action=...
 // POST /api/arbitage/access/generate  (x-admin-secret header + JSON body)
 
 import { NextResponse } from "next/server";
@@ -38,11 +37,6 @@ function checkAdminSecret(secret) {
 function checkAdminAuth(request) {
   const authHeader = request.headers.get("x-admin-secret");
   return checkAdminSecret(authHeader);
-}
-
-function checkAdminSecretFromQuery(request) {
-  const { searchParams } = new URL(request.url);
-  return checkAdminSecret(searchParams.get("secret"));
 }
 
 function parseInteger(value, fallback) {
@@ -118,36 +112,13 @@ async function handleAction(action, input) {
   }
 }
 
-// Browser-friendly GET handler for the old workflow.
 export async function GET(request) {
-  try {
-    if (!checkAdminSecretFromQuery(request)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const action = searchParams.get("action");
-    const durationHours = parseInteger(searchParams.get("hours"), 24);
-    const count = parseInteger(searchParams.get("count"), 1);
-    const limit = parseInteger(searchParams.get("limit"), 100);
-    const offset = parseInteger(searchParams.get("offset"), 0);
-    const includeExpired = parseBoolean(searchParams.get("includeExpired"), true);
-    const note = searchParams.get("note") || "";
-    const code = searchParams.get("code") || "";
-
-    return await handleAction(action, {
-      durationHours,
-      count,
-      limit,
-      offset,
-      includeExpired,
-      note,
-      code,
-    });
-  } catch (error) {
-    console.error("[Access Generate GET] Error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
+  return NextResponse.json(
+    {
+      error: "Method not allowed. Use POST with x-admin-secret.",
+    },
+    { status: 405 }
+  );
 }
 
 // POST handler (programmatic, uses x-admin-secret header)
